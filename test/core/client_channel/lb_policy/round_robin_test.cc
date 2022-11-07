@@ -73,8 +73,7 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
     it->second.SetConnectivityState(new_state, status);
   }
 
-  bool ConnectionRequested(size_t subchannel,
-                           SourceLocation location = SourceLocation()) {
+  bool ConnectionRequested(size_t subchannel) {
     auto it = subchannel_pool_.find(
         {MakeAddress(UriForSubchannel(subchannel)), ChannelArgs()});
     return it->second.ConnectionRequested();
