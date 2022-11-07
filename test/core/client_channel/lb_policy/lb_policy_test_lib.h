@@ -215,7 +215,7 @@ class LoadBalancingPolicyTest : public ::testing::Test {
       if (queue_.empty()) return absl::nullopt;
       Event event = std::move(queue_.front());
       queue_.pop_front();
-      return event;
+      return std::move(event);
     }
 
    private:
