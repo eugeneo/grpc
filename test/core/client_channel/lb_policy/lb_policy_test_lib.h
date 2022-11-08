@@ -448,10 +448,9 @@ class LoadBalancingPolicyTest : public ::testing::Test {
 
   // Requests a pick on picker and return the address from a Complete result.
   // Has to be void and use output argument so the assertions still work
-  void GetPickedAddress(LoadBalancingPolicy::SubchannelPicker* picker,
-                        absl::optional<std::string>& out_picked_uri,
-                        SourceLocation location = SourceLocation()) {
-    out_picked_uri.reset();
+  absl::optional<std::string> ExpectPickAddress(
+      LoadBalancingPolicy::SubchannelPicker* picker,
+      SourceLocation location = SourceLocation()) {
     ExecCtx exec_ctx;
     FakeMetadata metadata({});
     FakeCallState call_state;
@@ -459,13 +458,19 @@ class LoadBalancingPolicyTest : public ::testing::Test {
         picker->Pick({"/service/method", &metadata, &call_state});
     auto* complete = absl::get_if<LoadBalancingPolicy::PickResult::Complete>(
         &pick_result.result);
-    ASSERT_NE(complete, nullptr) << location.file() << ":" << location.line();
+    EXPECT_NE(complete, nullptr) << location.file() << ":" << location.line();
+    if (complete == nullptr) {
+      return absl::nullopt;
+    }
     auto* subchannel = static_cast<SubchannelState::FakeSubchannel*>(
         complete->subchannel.get());
     auto uri = grpc_sockaddr_to_uri(&subchannel->address());
-    ASSERT_TRUE(uri.ok()) << uri.status() << " at " << location.file() << ":"
+    EXPECT_TRUE(uri.ok()) << uri.status() << " at " << location.file() << ":"
                           << location.line();
-    out_picked_uri = *uri;
+    if (!uri.ok()) {
+      return absl::nullopt;
+    }
+    return *uri;
   }
 
   // Requests a pick on picker and expects a Complete result whose
@@ -473,8 +478,7 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   void ExpectPickComplete(LoadBalancingPolicy::SubchannelPicker* picker,
                           absl::string_view address_uri,
                           SourceLocation location = SourceLocation()) {
-    absl::optional<std::string> picked_uri;
-    GetPickedAddress(picker, picked_uri, location);
+    auto picked_uri = ExpectPickAddress(picker, location);
     EXPECT_EQ(*picked_uri, address_uri)
         << location.file() << ":" << location.line();
   }

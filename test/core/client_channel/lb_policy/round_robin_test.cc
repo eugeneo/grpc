@@ -153,8 +153,7 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   std::unordered_set<std::string> reportedUris;
   // Picker should return each address once, we do not care about the order.
   for (size_t i = 0; i < 20; ++i) {
-    absl::optional<std::string> address;
-    GetPickedAddress(picker.get(), address);
+    auto address = ExpectPickAddress(picker.get());
     EXPECT_TRUE(address.has_value());
     reportedUris.insert(*address);
   }
@@ -173,8 +172,7 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
 
   reportedUris.clear();
   for (size_t i = 0; i < 20; ++i) {
-    absl::optional<std::string> address;
-    GetPickedAddress(picker.get(), address);
+    absl::optional<std::string> address = ExpectPickAddress(picker.get());
     EXPECT_TRUE(address.has_value());
     reportedUris.insert(*address);
   }
