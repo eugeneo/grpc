@@ -9183,6 +9183,16 @@ targets:
   - test/core/client_channel/rls_lb_config_parser_test.cc
   deps:
   - grpc_test_util
+- name: round_robin_test
+  gtest: true
+  build: test
+  language: c++
+  headers:
+  - test/core/client_channel/lb_policy/lb_policy_test_lib.h
+  src:
+  - test/core/client_channel/lb_policy/round_robin_test.cc
+  deps:
+  - grpc_test_util
 - name: secure_auth_context_test
   gtest: true
   build: test
