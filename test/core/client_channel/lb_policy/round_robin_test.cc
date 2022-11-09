@@ -131,9 +131,9 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   }
   ExpectNoStateChange();
 
+  auto second_subchannel = FindSubchannel(uris[1]);
   // All subchannels ready
-  FindSubchannel(uris[1])->SetConnectivityState(GRPC_CHANNEL_READY,
-                                                absl::OkStatus());
+  second_subchannel->SetConnectivityState(GRPC_CHANNEL_READY, absl::OkStatus());
   FindSubchannel(uris[2])->SetConnectivityState(GRPC_CHANNEL_READY,
                                                 absl::OkStatus());
   ExpectState(GRPC_CHANNEL_READY);
@@ -152,8 +152,12 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
         << "Subchannel " << uri;
   }
   ExpectNoStateChange();
-  FindSubchannel(uris[1])->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                                                absl::OkStatus());
+  second_subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE, absl::OkStatus());
+  ExpectReresolutionRequest();
+  ExpectState(GRPC_CHANNEL_READY);
+  ExpectNoStateChange();
+  second_subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
+                                          absl::OkStatus());
   ExpectReresolutionRequest();
   picker = ExpectState(GRPC_CHANNEL_READY);
   ExpectNoStateChange();
