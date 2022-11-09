@@ -45,17 +45,16 @@ namespace {
 class RoundRobinTest : public LoadBalancingPolicyTest {
  public:
   OrphanablePtr<LoadBalancingPolicy> RoundRobinPolicy(
-      size_t channelsCount = 3) {
+      const std::vector<std::string> subchannel_addresses) {
     LoadBalancingPolicy::UpdateArgs update_args;
     update_args.addresses.emplace();
-    for (size_t i = 0; i < channelsCount; ++i) {
-      update_args.addresses->emplace_back(MakeAddress(UriForSubchannel(i)),
-                                          ChannelArgs());
+    for (const auto& addr : subchannel_addresses) {
+      update_args.addresses->emplace_back(MakeAddress(addr), ChannelArgs());
     }
     auto policy = MakeLbPolicy("round_robin");
     absl::Status status = ApplyUpdate(std::move(update_args), policy.get());
     EXPECT_TRUE(status.ok()) << status;
-    EXPECT_EQ(channelsCount, subchannel_pool_.size());
+    EXPECT_EQ(subchannel_addresses.size(), subchannel_pool_.size());
     for (size_t i = 0; i < subchannel_pool_.size(); ++i) {
       ExpectState(GRPC_CHANNEL_CONNECTING);
     }
@@ -87,7 +86,7 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
 };
 
 TEST_F(RoundRobinTest, SingleChannel) {
-  auto policy = RoundRobinPolicy(1);
+  auto policy = RoundRobinPolicy({UriForSubchannel(0)});
   // LB policy should have reported CONNECTING state.
   auto picker = ExpectState(GRPC_CHANNEL_CONNECTING);
   ExpectPickQueued(picker.get());
@@ -122,7 +121,8 @@ TEST_F(RoundRobinTest, SingleChannel) {
 }
 
 TEST_F(RoundRobinTest, ThreeSubchannels) {
-  auto policy = RoundRobinPolicy(3);
+  auto policy = RoundRobinPolicy(
+      {UriForSubchannel(0), UriForSubchannel(1), UriForSubchannel(2)});
   // LB policy should have reported CONNECTING state.
   auto picker = ExpectState(GRPC_CHANNEL_CONNECTING);
   ExpectPickQueued(picker.get());
@@ -183,7 +183,11 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
 }
 
 TEST_F(RoundRobinTest, OneChannelReady) {
-  auto policy = RoundRobinPolicy();
+  auto policy = RoundRobinPolicy({
+      UriForSubchannel(0),
+      UriForSubchannel(1),
+      UriForSubchannel(2),
+  });
   EXPECT_EQ(3, subchannel_pool_.size());
   ExpectState(GRPC_CHANNEL_CONNECTING);
 
@@ -194,7 +198,11 @@ TEST_F(RoundRobinTest, OneChannelReady) {
 }
 
 TEST_F(RoundRobinTest, OneChannelConnecting) {
-  auto policy = RoundRobinPolicy();
+  auto policy = RoundRobinPolicy({
+      UriForSubchannel(0),
+      UriForSubchannel(1),
+      UriForSubchannel(2),
+  });
   auto picker = ExpectState(GRPC_CHANNEL_CONNECTING);
   ExpectPickQueued(picker.get());
   EXPECT_EQ(3, subchannel_pool_.size());
@@ -202,7 +210,11 @@ TEST_F(RoundRobinTest, OneChannelConnecting) {
 }
 
 TEST_F(RoundRobinTest, OneChannelReadyToIdle) {
-  auto policy = RoundRobinPolicy();
+  auto policy = RoundRobinPolicy({
+      UriForSubchannel(0),
+      UriForSubchannel(1),
+      UriForSubchannel(2),
+  });
   ExpectState(GRPC_CHANNEL_CONNECTING);
   SetSubchannelConnectivityState(0, GRPC_CHANNEL_READY);
   ExpectState(GRPC_CHANNEL_READY);
@@ -213,7 +225,11 @@ TEST_F(RoundRobinTest, OneChannelReadyToIdle) {
 }
 
 TEST_F(RoundRobinTest, AllTransitFailure) {
-  auto policy = RoundRobinPolicy();
+  auto policy = RoundRobinPolicy({
+      UriForSubchannel(0),
+      UriForSubchannel(1),
+      UriForSubchannel(2),
+  });
   ExpectState(GRPC_CHANNEL_CONNECTING);
   for (size_t i = 0; i < subchannel_pool_.size() - i; ++i) {
     SetSubchannelConnectivityState(i, GRPC_CHANNEL_TRANSIENT_FAILURE);
