@@ -496,6 +496,18 @@ class LoadBalancingPolicyTest : public ::testing::Test {
         << location.file() << ":" << location.line();
   }
 
+  SubchannelState* FindSubchannel(absl::string_view address,
+                                  const ChannelArgs& args = ChannelArgs()) {
+    for (const auto& address_args : subchannel_pool_) {
+      auto& addr = address_args.first.address();
+      if (address_args.first.args() == args &&
+          address == *grpc_sockaddr_to_uri(&addr)) {
+        return &subchannel_pool_[address_args.first];
+      }
+    }
+    return nullptr;
+  }
+
   std::shared_ptr<WorkSerializer> work_serializer_;
   FakeHelper* helper_ = nullptr;
   std::map<SubchannelKey, SubchannelState> subchannel_pool_;
