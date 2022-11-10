@@ -69,7 +69,7 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
     std::unordered_map<std::string, int> reported_uris;
     for (size_t i = 0; i < iterations_per_uri * uris.size(); ++i) {
       auto address = ExpectPickAddress(picker);
-      EXPECT_TRUE(address.has_value())
+      ASSERT_TRUE(address.has_value())
           << location.file() << ":" << location.line();
       reported_uris[*address]++;
     }
@@ -103,6 +103,11 @@ TEST_F(RoundRobinTest, SingleChannel) {
   for (size_t i = 0; i < 3; ++i) {
     ExpectPickComplete(picker.get(), uri);
   }
+  ExpectNoStateChange();
+
+  subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE, absl::OkStatus());
+  ExpectReresolutionRequest();
+  ExpectState(GRPC_CHANNEL_CONNECTING);
   ExpectNoStateChange();
 
   // There's a failure
