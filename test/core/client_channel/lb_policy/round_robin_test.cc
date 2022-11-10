@@ -64,19 +64,19 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
   // Picker should return each address in any order.
   void ExpectPickAddresses(LoadBalancingPolicy::SubchannelPicker* picker,
                            absl::Span<const std::string> uris,
-                           size_t iterations,
+                           size_t iterations_per_uri = 3,
                            SourceLocation location = SourceLocation()) {
-    std::unordered_set<std::string> reportedUris;
-    for (size_t i = 0; i < iterations; ++i) {
+    std::unordered_map<std::string, int> reported_uris;
+    for (size_t i = 0; i < iterations_per_uri * uris.size(); ++i) {
       auto address = ExpectPickAddress(picker);
       EXPECT_TRUE(address.has_value())
           << location.file() << ":" << location.line();
-      reportedUris.insert(*address);
+      reported_uris[*address]++;
     }
-    EXPECT_EQ(reportedUris.size(), uris.size())
+    EXPECT_EQ(reported_uris.size(), uris.size())
         << location.file() << ":" << location.line();
     for (const std::string& uri : uris) {
-      EXPECT_NE(reportedUris.find(uri), reportedUris.end())
+      EXPECT_EQ(reported_uris[uri], iterations_per_uri)
           << "Subchannel " << uri << location.file() << ":" << location.line();
     }
   }
@@ -154,12 +154,15 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   auto second_subchannel = FindSubchannel(uris[1]);
   // All subchannels ready
   second_subchannel->SetConnectivityState(GRPC_CHANNEL_READY, absl::OkStatus());
+  picker = ExpectState(GRPC_CHANNEL_READY);
+  ExpectPickAddresses(picker.get(), {uris[0], uris[1]});
+  ExpectNoStateChange();
+
   FindSubchannel(uris[2])->SetConnectivityState(GRPC_CHANNEL_READY,
                                                 absl::OkStatus());
-  ExpectState(GRPC_CHANNEL_READY);
   picker = ExpectState(GRPC_CHANNEL_READY);
 
-  ExpectPickAddresses(picker.get(), uris, 20);
+  ExpectPickAddresses(picker.get(), uris);
 
   ExpectNoStateChange();
 
@@ -171,7 +174,7 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
                                           absl::OkStatus());
   ExpectReresolutionRequest();
   picker = ExpectState(GRPC_CHANNEL_READY);
-  ExpectPickAddresses(picker.get(), {uris[0], uris[2]}, 20);
+  ExpectPickAddresses(picker.get(), {uris[0], uris[2]});
 
   ExpectNoStateChange();
 }
