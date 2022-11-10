@@ -259,9 +259,12 @@ TEST_F(RoundRobinTest, AllTransientFailure) {
 TEST_F(RoundRobinTest, NoChannels) {
   auto policy = MakeLbPolicy("round_robin");
   LoadBalancingPolicy::UpdateArgs update_args;
+  update_args.resolution_note = "This is a test";
   update_args.addresses.emplace();
   absl::Status status = ApplyUpdate(std::move(update_args), policy.get());
   EXPECT_TRUE(absl::IsUnavailable(status));
+  ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE,
+              absl::UnavailableError("empty address list: This is a test"));
 }
 
 }  // namespace
