@@ -45,7 +45,7 @@ namespace {
 class RoundRobinTest : public LoadBalancingPolicyTest {
  public:
   OrphanablePtr<LoadBalancingPolicy> RoundRobinPolicy(
-      const std::vector<std::string> subchannel_addresses) {
+      const absl::Span<const std::string> subchannel_addresses) {
     LoadBalancingPolicy::UpdateArgs update_args;
     update_args.addresses.emplace();
     for (const auto& addr : subchannel_addresses) {
@@ -59,6 +59,26 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
       ExpectState(GRPC_CHANNEL_CONNECTING);
     }
     return policy;
+  }
+
+  // Picker should return each address in any order.
+  void ExpectPickAddresses(LoadBalancingPolicy::SubchannelPicker* picker,
+                           absl::Span<const std::string> uris,
+                           size_t iterations,
+                           SourceLocation location = SourceLocation()) {
+    std::unordered_set<std::string> reportedUris;
+    for (size_t i = 0; i < iterations; ++i) {
+      auto address = ExpectPickAddress(picker);
+      EXPECT_TRUE(address.has_value())
+          << location.file() << ":" << location.line();
+      reportedUris.insert(*address);
+    }
+    EXPECT_EQ(reportedUris.size(), uris.size())
+        << location.file() << ":" << location.line();
+    for (const std::string& uri : uris) {
+      EXPECT_NE(reportedUris.find(uri), reportedUris.end())
+          << "Subchannel " << uri << location.file() << ":" << location.line();
+    }
   }
 };
 
@@ -101,7 +121,7 @@ TEST_F(RoundRobinTest, SingleChannel) {
 }
 
 TEST_F(RoundRobinTest, ThreeSubchannels) {
-  std::vector<std::string> uris = {
+  std::array<std::string, 3> uris = {
       "ipv4:127.0.0.1:441",
       "ipv4:127.0.0.1:442",
       "ipv4:127.0.0.1:443",
@@ -139,19 +159,10 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   ExpectState(GRPC_CHANNEL_READY);
   picker = ExpectState(GRPC_CHANNEL_READY);
 
-  std::unordered_set<std::string> reportedUris;
-  // Picker should return each address once, we do not care about the order.
-  for (size_t i = 0; i < 20; ++i) {
-    auto address = ExpectPickAddress(picker.get());
-    EXPECT_TRUE(address.has_value());
-    reportedUris.insert(*address);
-  }
-  EXPECT_EQ(reportedUris.size(), 3);
-  for (const std::string& uri : uris) {
-    EXPECT_NE(reportedUris.find(uri), reportedUris.end())
-        << "Subchannel " << uri;
-  }
+  ExpectPickAddresses(picker.get(), uris, 20);
+
   ExpectNoStateChange();
+
   second_subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE, absl::OkStatus());
   ExpectReresolutionRequest();
   ExpectState(GRPC_CHANNEL_READY);
@@ -160,17 +171,8 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
                                           absl::OkStatus());
   ExpectReresolutionRequest();
   picker = ExpectState(GRPC_CHANNEL_READY);
-  ExpectNoStateChange();
+  ExpectPickAddresses(picker.get(), {uris[0], uris[2]}, 20);
 
-  reportedUris.clear();
-  for (size_t i = 0; i < 20; ++i) {
-    absl::optional<std::string> address = ExpectPickAddress(picker.get());
-    EXPECT_TRUE(address.has_value());
-    reportedUris.insert(*address);
-  }
-  EXPECT_EQ(reportedUris.size(), 2);
-  EXPECT_NE(reportedUris.find(uris[0]), reportedUris.end());
-  EXPECT_NE(reportedUris.find(uris[2]), reportedUris.end());
   ExpectNoStateChange();
 }
 
@@ -224,7 +226,7 @@ TEST_F(RoundRobinTest, OneChannelReadyToIdle) {
 }
 
 TEST_F(RoundRobinTest, AllTransientFailure) {
-  std::vector<std::string> uris = {
+  std::array<std::string, 3> uris = {
       "ipv4:127.0.0.1:441",
       "ipv4:127.0.0.1:442",
       "ipv4:127.0.0.1:443",
