@@ -433,14 +433,18 @@ class LoadBalancingPolicyTest : public ::testing::Test {
     return final_picker;
   }
 
-  // Requests a pick on picker and expects a Queue result.
-  void ExpectPickQueued(LoadBalancingPolicy::SubchannelPicker* picker,
-                        SourceLocation location = SourceLocation()) {
+  LoadBalancingPolicy::PickResult PerformPick(
+      LoadBalancingPolicy::SubchannelPicker* picker) {
     ExecCtx exec_ctx;
     FakeMetadata metadata({});
     FakeCallState call_state;
-    auto pick_result =
-        picker->Pick({"/service/method", &metadata, &call_state});
+    return picker->Pick({"/service/method", &metadata, &call_state});
+  }
+
+  // Requests a pick on picker and expects a Queue result.
+  void ExpectPickQueued(LoadBalancingPolicy::SubchannelPicker* picker,
+                        SourceLocation location = SourceLocation()) {
+    auto pick_result = PerformPick(picker);
     ASSERT_TRUE(absl::holds_alternative<LoadBalancingPolicy::PickResult::Queue>(
         pick_result.result))
         << location.file() << ":" << location.line();
@@ -451,11 +455,7 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   absl::optional<std::string> ExpectPickAddress(
       LoadBalancingPolicy::SubchannelPicker* picker,
       SourceLocation location = SourceLocation()) {
-    ExecCtx exec_ctx;
-    FakeMetadata metadata({});
-    FakeCallState call_state;
-    auto pick_result =
-        picker->Pick({"/service/method", &metadata, &call_state});
+    auto pick_result = PerformPick(picker);
     auto* complete = absl::get_if<LoadBalancingPolicy::PickResult::Complete>(
         &pick_result.result);
     EXPECT_NE(complete, nullptr) << location.file() << ":" << location.line();
@@ -480,19 +480,6 @@ class LoadBalancingPolicyTest : public ::testing::Test {
                           SourceLocation location = SourceLocation()) {
     auto picked_uri = ExpectPickAddress(picker, location);
     EXPECT_EQ(*picked_uri, address_uri)
-        << location.file() << ":" << location.line();
-  }
-
-  // Requests a pick on picker and expects a Fail result.
-  void ExpectPickFail(LoadBalancingPolicy::SubchannelPicker* picker,
-                      SourceLocation location = SourceLocation()) {
-    ExecCtx exec_ctx;
-    FakeMetadata metadata({});
-    FakeCallState call_state;
-    auto pick_result =
-        picker->Pick({"/service/method", &metadata, &call_state});
-    ASSERT_TRUE(absl::holds_alternative<LoadBalancingPolicy::PickResult::Fail>(
-        pick_result.result))
         << location.file() << ":" << location.line();
   }
 

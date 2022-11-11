@@ -118,10 +118,19 @@ TEST_F(RoundRobinTest, SingleChannel) {
 
   // There's a failure
   subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                                   absl::OkStatus());
+                                   absl::UnavailableError("a test"));
   ExpectReresolutionRequest();
-  picker = ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE);
-  ExpectPickFail(picker.get());
+  absl::Status expected_status = absl::UnavailableError(
+      "connections to all backends failing; last error: UNAVAILABLE: a test");
+  picker = ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE, expected_status);
+
+  auto pick_result = PerformPick(picker.get());
+  ASSERT_TRUE(absl::holds_alternative<LoadBalancingPolicy::PickResult::Fail>(
+      pick_result.result));
+
+  status = absl::get<LoadBalancingPolicy::PickResult::Fail>(pick_result.result)
+               .status;
+  EXPECT_EQ(status, expected_status);
 
   // ... and a recovery!
   subchannel->SetConnectivityState(GRPC_CHANNEL_READY, absl::OkStatus());
