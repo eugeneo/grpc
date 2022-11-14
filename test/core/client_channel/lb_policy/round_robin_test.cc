@@ -65,18 +65,20 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
                            absl::Span<const std::string> uris,
                            size_t iterations_per_uri = 3,
                            SourceLocation location = SourceLocation()) {
-    std::unordered_map<std::string, int> reported_uris;
+    int expected = -1;
     for (size_t i = 0; i < iterations_per_uri * uris.size(); ++i) {
       auto address = ExpectPickAddress(picker);
       ASSERT_TRUE(address.has_value())
           << location.file() << ":" << location.line();
-      reported_uris[*address]++;
-    }
-    EXPECT_EQ(reported_uris.size(), uris.size())
-        << location.file() << ":" << location.line();
-    for (const std::string& uri : uris) {
-      EXPECT_EQ(reported_uris[uri], iterations_per_uri)
-          << "Subchannel " << uri << location.file() << ":" << location.line();
+      int ind = std::find(uris.begin(), uris.end(), *address) - uris.begin();
+      ASSERT_LT(ind, uris.size()) << "Missing " << *address << "\n"
+                                  << location.file() << ":" << location.line();
+      if (expected >= 0) {
+        EXPECT_EQ(ind, expected)
+            << "Got " << *address << ", expected " << uris[ind] << "\n"
+            << location.file() << ":" << location.line();
+      }
+      expected = (ind + 1) % uris.size();
     }
   }
 };
