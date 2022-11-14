@@ -67,7 +67,7 @@ class RoundRobinTest : public LoadBalancingPolicyTest {
                            SourceLocation location = SourceLocation()) {
     int expected = -1;
     for (size_t i = 0; i < iterations_per_uri * uris.size(); ++i) {
-      auto address = ExpectPickAddress(picker);
+      auto address = ExpectPickComplete(picker);
       ASSERT_TRUE(address.has_value())
           << location.file() << ":" << location.line();
       int ind = std::find(uris.begin(), uris.end(), *address) - uris.begin();
@@ -109,7 +109,7 @@ TEST_F(RoundRobinTest, SingleChannel) {
   picker = ExpectState(GRPC_CHANNEL_READY);
   // Picker should return the same subchannel repeatedly.
   for (size_t i = 0; i < 3; ++i) {
-    ExpectPickComplete(picker.get(), uri);
+    EXPECT_EQ(ExpectPickComplete(picker.get()), uri);
   }
   ExpectNoStateChange();
 
@@ -126,7 +126,7 @@ TEST_F(RoundRobinTest, SingleChannel) {
       "connections to all backends failing; last error: UNAVAILABLE: a test");
   picker = ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE, expected_status);
 
-  auto pick_result = PerformPick(picker.get());
+  auto pick_result = DoPick(picker.get());
   ASSERT_TRUE(absl::holds_alternative<LoadBalancingPolicy::PickResult::Fail>(
       pick_result.result));
 
@@ -137,7 +137,7 @@ TEST_F(RoundRobinTest, SingleChannel) {
   // ... and a recovery!
   subchannel->SetConnectivityState(GRPC_CHANNEL_READY, absl::OkStatus());
   picker = ExpectState(GRPC_CHANNEL_READY);
-  ExpectPickComplete(picker.get(), uri);
+  EXPECT_EQ(ExpectPickComplete(picker.get()), uri);
 
   ExpectNoStateChange();
 }
@@ -177,7 +177,7 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   picker = ExpectState(GRPC_CHANNEL_READY);
   // Picker should return the same subchannel repeatedly.
   for (size_t i = 0; i < 3; ++i) {
-    ExpectPickComplete(picker.get(), uris[0]);
+    EXPECT_EQ(ExpectPickComplete(picker.get()), uris[0]);
   }
   ExpectNoStateChange();
 
@@ -201,7 +201,7 @@ TEST_F(RoundRobinTest, ThreeSubchannels) {
   ExpectState(GRPC_CHANNEL_READY);
   ExpectNoStateChange();
   second_subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                                          absl::OkStatus());
+                                          absl::UnknownError("This is a test"));
   ExpectReresolutionRequest();
   picker = ExpectState(GRPC_CHANNEL_READY);
   ExpectPickAddresses(picker.get(), {uris[0], uris[2]});
@@ -290,14 +290,17 @@ TEST_F(RoundRobinTest, AllTransientFailure) {
     auto subchannel = FindSubchannel(uris[i]);
     ASSERT_NE(subchannel, nullptr);
     subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                                     absl::OkStatus());
+                                     absl::UnknownError("error1"));
     ExpectReresolutionRequest();
     ExpectState(GRPC_CHANNEL_CONNECTING);
   }
   FindSubchannel(uris[2])->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                                                absl::OkStatus());
+                                                absl::UnknownError("error2"));
   ExpectReresolutionRequest();
-  ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE);
+  ExpectState(
+      GRPC_CHANNEL_TRANSIENT_FAILURE,
+      absl::UnavailableError(
+          "connections to all backends failing; last error: UNKNOWN: error2"));
   ExpectNoStateChange();
 }
 
@@ -329,7 +332,7 @@ TEST_F(RoundRobinTest, AddressListChange) {
   FindSubchannel(uris[0], {})
       ->SetConnectivityState(GRPC_CHANNEL_READY, absl::OkStatus());
   auto picker = ExpectState(GRPC_CHANNEL_READY);
-  auto picked = ExpectPickAddress(picker.get());
+  auto picked = ExpectPickComplete(picker.get());
   EXPECT_EQ(*picked, uris[0]);
   ExpectNoStateChange();
 
@@ -338,8 +341,8 @@ TEST_F(RoundRobinTest, AddressListChange) {
   ASSERT_TRUE(status.ok()) << status;
   ExpectState(GRPC_CHANNEL_READY);
   picker = ExpectState(GRPC_CHANNEL_READY);
-  EXPECT_EQ(*ExpectPickAddress(picker.get()), uris[0]);
-  EXPECT_EQ(*ExpectPickAddress(picker.get()), uris[0]);
+  EXPECT_EQ(*ExpectPickComplete(picker.get()), uris[0]);
+  EXPECT_EQ(*ExpectPickComplete(picker.get()), uris[0]);
   ExpectNoStateChange();
 
   // Second channel ready. Both channels are now picked.
