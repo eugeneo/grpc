@@ -208,6 +208,10 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
   ExpectRoundRobinPicks(picker.get(), {kFirstAddress, kThirdAddress});
   ExpectNoStateChange();
 
+  subchannels[1]->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
+  picker = ExpectState(GRPC_CHANNEL_READY);
+  ExpectNoStateChange();
+
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                        absl::UnknownError("This is a test"));
   ExpectReresolutionRequest();
@@ -218,6 +222,9 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
 }
 
 TEST_F(RoundRobinTest, OneChannelReady) {
+  auto subchannel = CreateSubchannel(kFirstAddress);
+  subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
+
   auto status = ApplyUpdate(BuildUpdateArgs({
                                 kFirstAddress,
                                 kSecondAddress,
@@ -225,53 +232,11 @@ TEST_F(RoundRobinTest, OneChannelReady) {
                             }),
                             policy.get());
   ASSERT_TRUE(status.ok()) << status;
-  for (int i = 0; i < 3; i++) {
-    ExpectState(GRPC_CHANNEL_CONNECTING);
-  }
-  ExpectState(GRPC_CHANNEL_CONNECTING);
-
-  auto subchannel = FindSubchannel(kFirstAddress);
-  ASSERT_NE(subchannel, nullptr);
-  subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
-
-  auto picker = ExpectState(GRPC_CHANNEL_READY);
-  EXPECT_EQ(ExpectPickComplete(picker.get()), kFirstAddress);
-  ExpectNoStateChange();
-}
-
-TEST_F(RoundRobinTest, ConnectingFromStart) {
-  auto status = ApplyUpdate(BuildUpdateArgs({
-                                kFirstAddress,
-                                kSecondAddress,
-                                kThirdAddress,
-                            }),
-                            policy.get());
-  ASSERT_TRUE(status.ok()) << status;
-  for (int i = 0; i < 3; i++) {
-    ExpectState(GRPC_CHANNEL_CONNECTING);
-  }
-  auto picker = ExpectState(GRPC_CHANNEL_CONNECTING);
-  ExpectPickQueued(picker.get());
-  EXPECT_EQ(3, subchannel_pool_.size());
-  ExpectNoStateChange();
-}
-
-TEST_F(RoundRobinTest, OneChannelReadyToIdle) {
-  auto status = ApplyUpdate(
-      BuildUpdateArgs({kFirstAddress, kSecondAddress, kThirdAddress}),
-      policy.get());
-  ASSERT_TRUE(status.ok()) << status;
-  for (int i = 0; i < 3; i++) {
-    ExpectState(GRPC_CHANNEL_CONNECTING);
-  }
-  ExpectState(GRPC_CHANNEL_CONNECTING);
-  auto subchannel = FindSubchannel(kFirstAddress);
-  ASSERT_NE(subchannel, nullptr);
-  subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
+  ExpectConnectingUpdate();
   ExpectState(GRPC_CHANNEL_READY);
-  subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE);
-  ExpectReresolutionRequest();
-  ExpectState(GRPC_CHANNEL_CONNECTING);
+  ExpectState(GRPC_CHANNEL_READY);
+  auto picker = ExpectState(GRPC_CHANNEL_READY);
+  ExpectRoundRobinPicks(picker.get(), {kFirstAddress});
   ExpectNoStateChange();
 }
 
@@ -290,14 +255,20 @@ TEST_F(RoundRobinTest, AllTransientFailure) {
   for (auto address : {kFirstAddress, kSecondAddress}) {
     auto subchannel = FindSubchannel(address);
     ASSERT_NE(subchannel, nullptr);
+    subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
+    ExpectState(GRPC_CHANNEL_READY);
     subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                      absl::UnknownError("error1"));
     ExpectReresolutionRequest();
     ExpectState(GRPC_CHANNEL_CONNECTING);
   }
-  FindSubchannel(kThirdAddress)
-      ->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
-                             absl::UnknownError("error2"));
+  auto third_subchannel = FindSubchannel(kThirdAddress);
+  ASSERT_NE(third_subchannel, nullptr);
+  third_subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
+  ExpectState(GRPC_CHANNEL_READY);
+
+  third_subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
+                                         absl::UnknownError("error2"));
   ExpectReresolutionRequest();
   ExpectState(
       GRPC_CHANNEL_TRANSIENT_FAILURE,
@@ -306,14 +277,17 @@ TEST_F(RoundRobinTest, AllTransientFailure) {
   ExpectNoStateChange();
 }
 
-TEST_F(RoundRobinTest, NoChannels) {
+TEST_F(RoundRobinTest, EmptyAddressList) {
   LoadBalancingPolicy::UpdateArgs update_args;
   update_args.resolution_note = "This is a test";
   update_args.addresses.emplace();
   absl::Status status = ApplyUpdate(std::move(update_args), policy.get());
   EXPECT_TRUE(absl::IsUnavailable(status));
-  ExpectState(GRPC_CHANNEL_TRANSIENT_FAILURE,
+  WaitForConnectionFailed([](const absl::Status& status) {
+    EXPECT_EQ(status,
               absl::UnavailableError("empty address list: This is a test"));
+  });
+  ExpectNoStateChange();
 }
 
 TEST_F(RoundRobinTest, AddressListChange) {
