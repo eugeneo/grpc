@@ -77,10 +77,7 @@ const absl::string_view kThirdAddress = "ipv4:127.0.0.1:443";
 
 TEST_F(RoundRobinTest, SingleAddress) {
   auto status = ApplyUpdate(BuildUpdate({kFirstAddress}), policy.get());
-
   ASSERT_TRUE(status.ok()) << status;
-  EXPECT_EQ(subchannel_pool_.size(), 1);
-
   // LB policy should have reported CONNECTING state.
   ExpectConnectingUpdate();
   auto subchannel = FindSubchannel(kFirstAddress);
@@ -88,9 +85,7 @@ TEST_F(RoundRobinTest, SingleAddress) {
   // LB policy should have requested a connection on this subchannel.
   EXPECT_TRUE(subchannel->ConnectionRequested());
   subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
-
   ExpectConnectingUpdate();
-
   // Subchannel is ready
   subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
   auto picker = WaitForConnected();
@@ -98,35 +93,26 @@ TEST_F(RoundRobinTest, SingleAddress) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(ExpectPickComplete(picker.get()), kFirstAddress);
   }
-
   subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE);
   ExpectReresolutionRequest();
   ExpectConnectingUpdate();
-
   subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   ExpectConnectingUpdate();
   ExpectNoStateChange();
-
   // There's a failure
   subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                    absl::UnavailableError("a test"));
   ExpectReresolutionRequest();
-
   auto expected_status = absl::UnavailableError(
       "connections to all backends failing; "
       "last error: UNAVAILABLE: a test");
-
   WaitForConnectionFailedWithStatus(expected_status);
-
   subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   WaitForConnectionFailedWithStatus(expected_status);
-
   // ... and a recovery!
   subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
-
   picker = WaitForConnected();
   EXPECT_EQ(ExpectPickComplete(picker.get()), kFirstAddress);
-
   ExpectNoStateChange();
 }
 
@@ -137,27 +123,20 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
                                 kThirdAddress,
                             }),
                             policy.get());
-
   ASSERT_TRUE(status.ok()) << status;
-  EXPECT_EQ(subchannel_pool_.size(), 3);
-
   ExpectConnectingUpdate();
-
   std::array<SubchannelState*, 3> subchannels = {
       FindSubchannel(kFirstAddress),
       FindSubchannel(kSecondAddress),
       FindSubchannel(kThirdAddress),
   };
-
   for (auto subchannel : subchannels) {
     ASSERT_NE(subchannel, nullptr);
     EXPECT_TRUE(subchannel->ConnectionRequested());
   }
-
   for (auto subchannel : subchannels) {
     subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   }
-
   for (int i = 0; i < subchannels.size(); i++) {
     subchannels[i]->SetConnectivityState(GRPC_CHANNEL_READY);
     // For the first subchannel, we use WaitForConnected() to drain any queued
@@ -170,32 +149,26 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
                               {kFirstAddress, kSecondAddress, kThirdAddress})
                               .subspan(0, i + 1));
   }
-
   ExpectNoStateChange();
-
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_IDLE);
   ExpectReresolutionRequest();
   auto picker = WaitForConnected();
   ExpectRoundRobinPicks(picker.get(), {kFirstAddress, kThirdAddress});
   ExpectNoStateChange();
-
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   picker = WaitForConnected();
   ExpectNoStateChange();
-
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                        absl::UnknownError("This is a test"));
   ExpectReresolutionRequest();
   picker = WaitForConnected();
   ExpectRoundRobinPicks(picker.get(), {kFirstAddress, kThirdAddress});
-
   ExpectNoStateChange();
 }
 
 TEST_F(RoundRobinTest, OneChannelReady) {
   auto subchannel = CreateSubchannel(kFirstAddress);
   subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
-
   auto status = ApplyUpdate(BuildUpdate({
                                 kFirstAddress,
                                 kSecondAddress,
@@ -234,7 +207,6 @@ TEST_F(RoundRobinTest, AllTransientFailure) {
   ASSERT_NE(third_subchannel, nullptr);
   third_subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
   WaitForConnected();
-
   third_subchannel->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                          absl::UnknownError("error2"));
   ExpectReresolutionRequest();
@@ -249,24 +221,34 @@ TEST_F(RoundRobinTest, EmptyAddressList) {
   update_args.resolution_note = "This is a test";
   update_args.addresses.emplace();
   absl::Status status = ApplyUpdate(std::move(update_args), policy.get());
-  EXPECT_TRUE(absl::IsUnavailable(status));
+  EXPECT_EQ(status,
+            absl::UnavailableError("empty address list: This is a test"));
   WaitForConnectionFailedWithStatus(
       absl::UnavailableError("empty address list: This is a test"));
   ExpectNoStateChange();
 }
 
 TEST_F(RoundRobinTest, AddressListChange) {
-  // One channel that is ready. Gets picked all the time.
+  std::array<SubchannelState*, 3> subchannels = {
+      CreateSubchannel(kFirstAddress),
+      CreateSubchannel(kSecondAddress),
+      CreateSubchannel(kThirdAddress),
+  };
+  for (auto subchannel : subchannels) {
+    subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
+  }
+
+  // A subchannel that is ready. Gets picked all the time.
   auto status = ApplyUpdate(BuildUpdate({kFirstAddress}), policy.get());
   ASSERT_TRUE(status.ok()) << status;
   ExpectConnectingUpdate();
-  FindSubchannel(kFirstAddress, {})->SetConnectivityState(GRPC_CHANNEL_READY);
+  subchannels[0]->SetConnectivityState(GRPC_CHANNEL_READY);
   auto picker = WaitForConnected();
   auto picked = ExpectPickComplete(picker.get());
   EXPECT_EQ(*picked, kFirstAddress);
   ExpectNoStateChange();
-
-  // Second channel added, connecting. Only the first channel gets picked still
+  // A second subchannel added, connecting. Only the first subchannel gets
+  // picked still
   status =
       ApplyUpdate(BuildUpdate({kFirstAddress, kSecondAddress}), policy.get());
   ASSERT_TRUE(status.ok()) << status;
@@ -275,20 +257,17 @@ TEST_F(RoundRobinTest, AddressListChange) {
   EXPECT_EQ(*ExpectPickComplete(picker.get()), kFirstAddress);
   EXPECT_EQ(*ExpectPickComplete(picker.get()), kFirstAddress);
   ExpectNoStateChange();
-
-  // Second channel ready. Both channels are now picked.
-  FindSubchannel(kSecondAddress, {})->SetConnectivityState(GRPC_CHANNEL_READY);
+  // Second subchannel ready. Both subchannels are now picked.
+  subchannels[1]->SetConnectivityState(GRPC_CHANNEL_READY);
   picker = WaitForConnected();
   ExpectRoundRobinPicks(picker.get(), {kFirstAddress, kSecondAddress});
   ExpectNoStateChange();
-
-  // First channel removed, third added and made ready. First channel should
+  // First address removed, third added and made ready. First subchannel should
   // not show up.
   status =
       ApplyUpdate(BuildUpdate({kSecondAddress, kThirdAddress}), policy.get());
   EXPECT_TRUE(status.ok()) << status;
-  FindSubchannel(kThirdAddress, {})
-      ->SetConnectivityState(GRPC_CHANNEL_READY, {});
+  subchannels[2]->SetConnectivityState(GRPC_CHANNEL_READY, {});
   WaitForConnected();
   WaitForConnected();
   picker = WaitForConnected();
