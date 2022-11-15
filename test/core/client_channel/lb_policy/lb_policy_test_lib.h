@@ -648,13 +648,17 @@ class LoadBalancingPolicyTest : public ::testing::Test {
 
   // Returns the entry in the subchannel pool, or null if not present.
   SubchannelState* FindSubchannel(absl::string_view address,
-                                  const ChannelArgs& args = ChannelArgs()) {
+                                  const ChannelArgs& args = ChannelArgs(),
+                                  SourceLocation location = SourceLocation()) {
     for (auto& subchannel_key_state : subchannel_pool_) {
       SubchannelState& state = subchannel_key_state.second;
       if (state.address() == address) {
         return &state;
       }
     }
+    EXPECT_NE(nullptr, nullptr)
+        << "No subchannel with address " << address << "\n"
+        << location.file() << ":" << location.line();
     return nullptr;
   }
 
