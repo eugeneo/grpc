@@ -557,6 +557,15 @@ class LoadBalancingPolicyTest : public ::testing::Test {
     return retval;
   }
 
+  bool WaitForConnectionFailedWithStatus(
+      const absl::Status& expected_status,
+      SourceLocation location = SourceLocation()) {
+    return WaitForConnectionFailed([&](const absl::Status& status) {
+      EXPECT_EQ(status, expected_status)
+          << location.file() << ":" << location.line();
+    });
+  }
+
   // Expects a state update for the specified state and status, and then
   // expects the resulting picker to queue picks.
   void ExpectStateAndQueuingPicker(
