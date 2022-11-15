@@ -161,9 +161,8 @@ class LoadBalancingPolicyTest : public ::testing::Test {
                               SourceLocation location = SourceLocation()) {
       if (state == GRPC_CHANNEL_TRANSIENT_FAILURE) {
         EXPECT_FALSE(status.ok())
-            << "bug in test: TRANSIENT_FAILURE must have non-OK status"
-            << "\n"
-            << location.file() << ":" << location.line();
+            << "bug in test: TRANSIENT_FAILURE must have "
+            << "non-OK status" << location.file() << ":" << location.line();
       } else {
         EXPECT_TRUE(status.ok())
             << "bug in test: " << ConnectivityStateName(state)
@@ -650,10 +649,13 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   // Returns the entry in the subchannel pool, or null if not present.
   SubchannelState* FindSubchannel(absl::string_view address,
                                   const ChannelArgs& args = ChannelArgs()) {
-    SubchannelKey key(MakeAddress(address), args);
-    auto it = subchannel_pool_.find(key);
-    if (it == subchannel_pool_.end()) return nullptr;
-    return &it->second;
+    for (auto& subchannel_key_state : subchannel_pool_) {
+      SubchannelState& state = subchannel_key_state.second;
+      if (state.address() == address) {
+        return &state;
+      }
+    }
+    return nullptr;
   }
 
   // Creates and returns an entry in the subchannel pool.
