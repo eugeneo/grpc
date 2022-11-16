@@ -16852,7 +16852,9 @@ target_include_directories(round_robin_test
 )
 
 target_link_libraries(round_robin_test
+  ${_gRPC_BASELIB_LIBRARIES}
   ${_gRPC_PROTOBUF_LIBRARIES}
+  ${_gRPC_ZLIB_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc_test_util
 )
