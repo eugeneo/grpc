@@ -137,7 +137,7 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
   for (auto subchannel : subchannels) {
     subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   }
-  for (int i = 0; i < subchannels.size(); i++) {
+  for (size_t i = 0; i < subchannels.size(); i++) {
     subchannels[i]->SetConnectivityState(GRPC_CHANNEL_READY);
     // For the first subchannel, we use WaitForConnected() to drain any queued
     // CONNECTING updates.  For each successive subchannel, we can read just
