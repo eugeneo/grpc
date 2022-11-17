@@ -160,9 +160,9 @@ class LoadBalancingPolicyTest : public ::testing::Test {
                               const absl::Status& status = absl::OkStatus(),
                               SourceLocation location = SourceLocation()) {
       if (state == GRPC_CHANNEL_TRANSIENT_FAILURE) {
-        EXPECT_FALSE(status.ok())
-            << "bug in test: TRANSIENT_FAILURE must have "
-            << "non-OK status" << location.file() << ":" << location.line();
+        EXPECT_FALSE(status.ok()) << "bug in test: TRANSIENT_FAILURE must have "
+                                  << "non-OK status\n"
+                                  << location.file() << ":" << location.line();
       } else {
         EXPECT_TRUE(status.ok())
             << "bug in test: " << ConnectivityStateName(state)
@@ -472,16 +472,8 @@ class LoadBalancingPolicyTest : public ::testing::Test {
     }
   }
 
-  void ExpectNoStateChange(SourceLocation location = SourceLocation()) {
-    EXPECT_FALSE(helper_->GetEvent().has_value())
-        << location.file() << ":" << location.line();
-  }
-
   void ExpectReresolutionRequest(SourceLocation location = SourceLocation()) {
-    auto event = helper_->GetEvent();
-    EXPECT_TRUE(event.has_value()) << location.file() << ":" << location.line();
-    EXPECT_NE(absl::get_if<FakeHelper::ReresolutionRequested>(&*event), nullptr)
-        << location.file() << ":" << location.line();
+    ASSERT_TRUE(helper_->GetNextReresolution(location));
   }
 
   // Expects that the LB policy has reported the specified connectivity
@@ -659,17 +651,10 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   SubchannelState* FindSubchannel(absl::string_view address,
                                   ChannelArgs args = ChannelArgs(),
                                   SourceLocation location = SourceLocation()) {
-    for (auto& subchannel_key_state : subchannel_pool_) {
-      SubchannelState& state = subchannel_key_state.second;
-      if (state.address() == address &&
-          subchannel_key_state.first.args() == args) {
-        return &state;
-      }
-    }
-    EXPECT_NE(nullptr, nullptr)
-        << "No subchannel with address " << address << "\n"
-        << location.file() << ":" << location.line();
-    return nullptr;
+    SubchannelKey key(MakeAddress(address), args);
+    auto it = subchannel_pool_.find(key);
+    if (it == subchannel_pool_.end()) return nullptr;
+    return &it->second;
   }
 
   // Creates and returns an entry in the subchannel pool.
