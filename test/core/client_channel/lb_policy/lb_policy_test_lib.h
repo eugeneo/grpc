@@ -473,7 +473,8 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   }
 
   void ExpectReresolutionRequest(SourceLocation location = SourceLocation()) {
-    ASSERT_TRUE(helper_->GetNextReresolution(location));
+    ASSERT_TRUE(helper_->GetNextReresolution(location))
+        << location.file() << ":" << location.line();
   }
 
   // Expects that the LB policy has reported the specified connectivity
@@ -503,20 +504,22 @@ class LoadBalancingPolicyTest : public ::testing::Test {
   RefCountedPtr<LoadBalancingPolicy::SubchannelPicker> WaitForConnected(
       SourceLocation location = SourceLocation()) {
     RefCountedPtr<LoadBalancingPolicy::SubchannelPicker> final_picker;
-    WaitForStateUpdate([&](FakeHelper::StateUpdate update) {
-      if (update.state == GRPC_CHANNEL_CONNECTING) {
-        EXPECT_TRUE(update.status.ok())
-            << update.status << " at " << location.file() << ":"
-            << location.line();
-        ExpectPickQueued(update.picker.get(), location);
-        return true;  // Keep going.
-      }
-      EXPECT_EQ(update.state, GRPC_CHANNEL_READY)
-          << ConnectivityStateName(update.state) << " at " << location.file()
-          << ":" << location.line();
-      final_picker = std::move(update.picker);
-      return false;  // Stop.
-    });
+    WaitForStateUpdate(
+        [&](FakeHelper::StateUpdate update) {
+          if (update.state == GRPC_CHANNEL_CONNECTING) {
+            EXPECT_TRUE(update.status.ok())
+                << update.status << " at " << location.file() << ":"
+                << location.line();
+            ExpectPickQueued(update.picker.get(), location);
+            return true;  // Keep going.
+          }
+          EXPECT_EQ(update.state, GRPC_CHANNEL_READY)
+              << ConnectivityStateName(update.state) << " at "
+              << location.file() << ":" << location.line();
+          final_picker = std::move(update.picker);
+          return false;  // Stop.
+        },
+        location);
     return final_picker;
   }
 
@@ -530,32 +533,36 @@ class LoadBalancingPolicyTest : public ::testing::Test {
       std::function<void(const absl::Status&)> check_status,
       SourceLocation location = SourceLocation()) {
     bool retval = false;
-    WaitForStateUpdate([&](FakeHelper::StateUpdate update) {
-      if (update.state == GRPC_CHANNEL_CONNECTING) {
-        EXPECT_TRUE(update.status.ok())
-            << update.status << " at " << location.file() << ":"
-            << location.line();
-        ExpectPickQueued(update.picker.get(), location);
-        return true;  // Keep going.
-      }
-      EXPECT_EQ(update.state, GRPC_CHANNEL_TRANSIENT_FAILURE)
-          << ConnectivityStateName(update.state) << " at " << location.file()
-          << ":" << location.line();
-      check_status(update.status);
-      ExpectPickFail(update.picker.get(), check_status, location);
-      retval = update.state == GRPC_CHANNEL_TRANSIENT_FAILURE;
-      return false;  // Stop.
-    });
+    WaitForStateUpdate(
+        [&](FakeHelper::StateUpdate update) {
+          if (update.state == GRPC_CHANNEL_CONNECTING) {
+            EXPECT_TRUE(update.status.ok())
+                << update.status << " at " << location.file() << ":"
+                << location.line();
+            ExpectPickQueued(update.picker.get(), location);
+            return true;  // Keep going.
+          }
+          EXPECT_EQ(update.state, GRPC_CHANNEL_TRANSIENT_FAILURE)
+              << ConnectivityStateName(update.state) << " at "
+              << location.file() << ":" << location.line();
+          check_status(update.status);
+          ExpectPickFail(update.picker.get(), check_status, location);
+          retval = update.state == GRPC_CHANNEL_TRANSIENT_FAILURE;
+          return false;  // Stop.
+        },
+        location);
     return retval;
   }
 
   bool WaitForConnectionFailedWithStatus(
       const absl::Status& expected_status,
       SourceLocation location = SourceLocation()) {
-    return WaitForConnectionFailed([&](const absl::Status& status) {
-      EXPECT_EQ(status, expected_status)
-          << location.file() << ":" << location.line();
-    });
+    return WaitForConnectionFailed(
+        [&](const absl::Status& status) {
+          EXPECT_EQ(status, expected_status)
+              << location.file() << ":" << location.line();
+        },
+        location);
   }
 
   // Expects a state update for the specified state and status, and then
