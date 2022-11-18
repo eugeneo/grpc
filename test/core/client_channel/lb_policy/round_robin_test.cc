@@ -130,7 +130,7 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
     // For the first subchannel, we use WaitForConnected() to drain any queued
     // CONNECTING updates.  For each successive subchannel, we can read just
     // one READY update at a time.
-    auto picker = WaitForConnected();
+    auto picker = i == 0 ? WaitForConnected() : ExpectState(GRPC_CHANNEL_READY);
     ASSERT_NE(picker, nullptr);
     ExpectRoundRobinPicks(
         picker.get(),
@@ -140,6 +140,7 @@ TEST_F(RoundRobinTest, ThreeAddresses) {
   ExpectReresolutionRequest();
   auto picker = WaitForConnected();
   ExpectRoundRobinPicks(picker.get(), {addresses[0], addresses[2]});
+  EXPECT_TRUE(subchannels[1]->ConnectionRequested());
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
   picker = WaitForConnected();
   subchannels[1]->SetConnectivityState(GRPC_CHANNEL_TRANSIENT_FAILURE,
