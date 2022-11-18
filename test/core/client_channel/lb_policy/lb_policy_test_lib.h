@@ -656,8 +656,7 @@ class LoadBalancingPolicyTest : public ::testing::Test {
 
   // Returns the entry in the subchannel pool, or null if not present.
   SubchannelState* FindSubchannel(absl::string_view address,
-                                  ChannelArgs args = ChannelArgs(),
-                                  SourceLocation location = SourceLocation()) {
+                                  ChannelArgs args = ChannelArgs()) {
     SubchannelKey key(MakeAddress(address), args);
     auto it = subchannel_pool_.find(key);
     if (it == subchannel_pool_.end()) return nullptr;
