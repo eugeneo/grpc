@@ -33,8 +33,6 @@ class LoadReportTracker {
   // A load report, or nullopt if the call had no load report.
   using LoadReportEntry = absl::optional<xds::data::orca::v3::OrcaLoadReport>;
 
-  ChannelArguments GetChannelArguments();
-  void ResetCollectedLoadReports();
   void RecordPerRpcLoadReport(
       const grpc_core::BackendMetricData* backend_metric_data);
   void RecordOobLoadReport(const grpc_core::BackendMetricData& oob_metric_data);
@@ -54,7 +52,8 @@ class LoadReportTracker {
 };
 
 void RegisterBackendMetricsLbPolicy(
-    grpc_core::CoreConfiguration::Builder* builder);
+    grpc_core::CoreConfiguration::Builder* builder,
+    std::shared_ptr<LoadReportTracker> load_report_tracker);
 }  // namespace testing
 }  // namespace grpc
 

@@ -38,8 +38,7 @@ typedef std::function<void(const InteropClientContextInspector&,
                            const SimpleRequest*, const SimpleResponse*)>
     CheckerFn;
 
-typedef std::function<std::shared_ptr<Channel>(ChannelArguments)>
-    ChannelCreationFunc;
+typedef std::function<std::shared_ptr<Channel>()> ChannelCreationFunc;
 
 class InteropClient {
  public:
@@ -113,7 +112,6 @@ class InteropClient {
  private:
   class ServiceStub {
    public:
-    typedef std::function<std::shared_ptr<Channel>()> ChannelCreationFunc;
     // If new_stub_every_call = true, pointer to a new instance of
     // TestServce::Stub is returned by Get() everytime it is called
     ServiceStub(ChannelCreationFunc channel_creation_func,
@@ -127,9 +125,9 @@ class InteropClient {
 
    private:
     ChannelCreationFunc channel_creation_func_;
-    std::unique_ptr<TestService::Stub> stub_;
+    absl::optional<std::unique_ptr<TestService::Stub>> stub_;
     std::unique_ptr<UnimplementedService::Stub> unimplemented_service_stub_;
-    std::shared_ptr<Channel> channel_;
+    absl::optional<std::shared_ptr<Channel>> channel_;
     bool new_stub_every_call_;  // If true, a new stub is returned by every
                                 // Get() call
   };
@@ -161,8 +159,6 @@ class InteropClient {
   ServiceStub serviceStub_;
   /// If true, abort() is not called for transient failures
   bool do_not_abort_on_transient_failures_;
-  // Load Orca metrics captured by the custom LB policy.
-  LoadReportTracker load_report_tracker_;
 };
 
 }  // namespace testing

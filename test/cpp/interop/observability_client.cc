@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
   grpc::testing::ChannelCreationFunc channel_creation_func;
   std::string test_case = absl::GetFlag(FLAGS_test_case);
   if (absl::GetFlag(FLAGS_additional_metadata).empty()) {
-    channel_creation_func = [test_case](auto arguments) {
+    channel_creation_func = [test_case]() {
       std::vector<std::unique_ptr<
           grpc::experimental::ClientInterceptorFactoryInterface>>
           factories;
@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
             new grpc::testing::MetadataAndStatusLoggerInterceptorFactory());
       }
       return CreateChannelForTestCase(test_case, std::move(factories),
-                                      arguments);
+                                      grpc::ChannelArguments());
     };
   } else {
     std::multimap<std::string, std::string> additional_metadata;
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    channel_creation_func = [test_case, additional_metadata](auto arguments) {
+    channel_creation_func = [test_case, additional_metadata]() {
       std::vector<std::unique_ptr<
           grpc::experimental::ClientInterceptorFactoryInterface>>
           factories;
@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
             new grpc::testing::MetadataAndStatusLoggerInterceptorFactory());
       }
       return CreateChannelForTestCase(test_case, std::move(factories),
-                                      arguments);
+                                      grpc::ChannelArguments());
     };
   }
 

@@ -38,7 +38,6 @@ using grpc_core::RefCountedPtr;
 
 constexpr absl::string_view kBackendMetricsLbPolicyName =
     "test_backend_metrics_load_balancer";
-constexpr absl::string_view kMetricsTrackerArgument = "orca_metrics_tracker";
 
 LoadReportTracker::LoadReportEntry BackendMetricDataToOrcaLoadReport(
     const grpc_core::BackendMetricData* backend_metric_data) {
@@ -62,10 +61,10 @@ LoadReportTracker::LoadReportEntry BackendMetricDataToOrcaLoadReport(
 
 class BackendMetricsLbPolicy : public LoadBalancingPolicy {
  public:
-  explicit BackendMetricsLbPolicy(Args args)
-      : LoadBalancingPolicy(std::move(args), /*initial_refcount=*/2) {
-    load_report_tracker_ =
-        channel_args().GetPointer<LoadReportTracker>(kMetricsTrackerArgument);
+  explicit BackendMetricsLbPolicy(
+      std::shared_ptr<LoadReportTracker> load_report_tracker, Args args)
+      : LoadBalancingPolicy(std::move(args), /*initial_refcount=*/2),
+        load_report_tracker_(std::move(load_report_tracker)) {
     GPR_ASSERT(load_report_tracker_ != nullptr);
     Args delegate_args;
     delegate_args.work_serializer = work_serializer();
@@ -97,9 +96,9 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
   class Picker : public SubchannelPicker {
    public:
     Picker(RefCountedPtr<SubchannelPicker> delegate_picker,
-           LoadReportTracker* load_report_tracker)
+           std::shared_ptr<LoadReportTracker> load_report_tracker)
         : delegate_picker_(std::move(delegate_picker)),
-          load_report_tracker_(load_report_tracker) {}
+          load_report_tracker_(std::move(load_report_tracker)) {}
 
     PickResult Pick(PickArgs args) override {
       // Do pick.
@@ -115,13 +114,14 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
 
    private:
     RefCountedPtr<SubchannelPicker> delegate_picker_;
-    LoadReportTracker* load_report_tracker_;
+    std::shared_ptr<LoadReportTracker> load_report_tracker_;
   };
 
   class OobMetricWatcher : public grpc_core::OobBackendMetricWatcher {
    public:
-    explicit OobMetricWatcher(LoadReportTracker* load_report_tracker)
-        : load_report_tracker_(load_report_tracker) {}
+    explicit OobMetricWatcher(
+        std::shared_ptr<LoadReportTracker> load_report_tracker)
+        : load_report_tracker_(std::move(load_report_tracker)) {}
 
    private:
     void OnBackendMetricReport(
@@ -129,7 +129,7 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
       load_report_tracker_->RecordOobLoadReport(backend_metric_data);
     }
 
-    LoadReportTracker* load_report_tracker_;
+    std::shared_ptr<LoadReportTracker> load_report_tracker_;
   };
 
   class Helper : public ChannelControlHelper {
@@ -179,8 +179,9 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
 
   class SubchannelCallTracker : public SubchannelCallTrackerInterface {
    public:
-    explicit SubchannelCallTracker(LoadReportTracker* load_report_tracker)
-        : load_report_tracker_(load_report_tracker) {}
+    explicit SubchannelCallTracker(
+        std::shared_ptr<LoadReportTracker> load_report_tracker)
+        : load_report_tracker_(std::move(load_report_tracker)) {}
 
     void Start() override {}
 
@@ -190,7 +191,7 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
     }
 
    private:
-    LoadReportTracker* load_report_tracker_;
+    std::shared_ptr<LoadReportTracker> load_report_tracker_;
   };
 
   void ShutdownLocked() override {
@@ -200,11 +201,16 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
   }
 
   OrphanablePtr<LoadBalancingPolicy> delegate_;
-  LoadReportTracker* load_report_tracker_;
+  std::shared_ptr<LoadReportTracker> load_report_tracker_;
 };
 
 class BackendMetricsLbPolicyFactory
     : public grpc_core::LoadBalancingPolicyFactory {
+ public:
+  BackendMetricsLbPolicyFactory(
+      std::shared_ptr<LoadReportTracker> load_report_tracker)
+      : load_report_tracker_(load_report_tracker) {}
+
  private:
   class BackendMetricsLbPolicyFactoryConfig
       : public LoadBalancingPolicy::Config {
@@ -220,19 +226,25 @@ class BackendMetricsLbPolicyFactory
 
   OrphanablePtr<LoadBalancingPolicy> CreateLoadBalancingPolicy(
       LoadBalancingPolicy::Args args) const override {
-    return grpc_core::MakeOrphanable<BackendMetricsLbPolicy>(std::move(args));
+    return grpc_core::MakeOrphanable<BackendMetricsLbPolicy>(
+        load_report_tracker_, std::move(args));
   }
 
   absl::StatusOr<RefCountedPtr<LoadBalancingPolicy::Config>>
   ParseLoadBalancingConfig(const grpc_core::Json& /*json*/) const override {
     return MakeRefCounted<BackendMetricsLbPolicyFactoryConfig>();
   }
+
+  std::shared_ptr<LoadReportTracker> load_report_tracker_;
 };
 }  // namespace
 
-void RegisterBackendMetricsLbPolicy(CoreConfiguration::Builder* builder) {
+void RegisterBackendMetricsLbPolicy(
+    CoreConfiguration::Builder* builder,
+    std::shared_ptr<LoadReportTracker> load_report_tracker) {
   builder->lb_policy_registry()->RegisterLoadBalancingPolicyFactory(
-      std::make_unique<BackendMetricsLbPolicyFactory>());
+      std::make_unique<BackendMetricsLbPolicyFactory>(
+          std::move(load_report_tracker)));
 }
 
 void LoadReportTracker::RecordPerRpcLoadReport(
@@ -282,18 +294,6 @@ LoadReportTracker::LoadReportEntry LoadReportTracker::WaitForOobLoadReport(
     }
   }
   return absl::nullopt;
-}
-
-void LoadReportTracker::ResetCollectedLoadReports() {
-  absl::MutexLock lock(&load_reports_mu_);
-  per_rpc_load_reports_.clear();
-  oob_load_reports_.clear();
-}
-
-ChannelArguments LoadReportTracker::GetChannelArguments() {
-  ChannelArguments arguments;
-  arguments.SetPointer(std::string(kMetricsTrackerArgument), this);
-  return arguments;
 }
 
 }  // namespace testing

@@ -210,7 +210,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   grpc::testing::ChannelCreationFunc channel_creation_func =
-      [test_case, &additional_metadata](grpc::ChannelArguments arguments) {
+      [test_case, &additional_metadata]() {
         std::vector<std::unique_ptr<
             grpc::experimental::ClientInterceptorFactoryInterface>>
             factories;
@@ -225,6 +225,7 @@ int main(int argc, char** argv) {
         }
         std::string service_config_json =
             absl::GetFlag(FLAGS_service_config_json);
+        grpc::ChannelArguments arguments;
         if (!service_config_json.empty()) {
           arguments.SetServiceConfigJSON(service_config_json);
         }
