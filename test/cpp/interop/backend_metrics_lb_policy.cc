@@ -207,7 +207,7 @@ class BackendMetricsLbPolicy : public LoadBalancingPolicy {
 class BackendMetricsLbPolicyFactory
     : public grpc_core::LoadBalancingPolicyFactory {
  public:
-  BackendMetricsLbPolicyFactory(
+  explicit BackendMetricsLbPolicyFactory(
       std::shared_ptr<LoadReportTracker> load_report_tracker)
       : load_report_tracker_(load_report_tracker) {}
 
