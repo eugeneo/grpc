@@ -168,8 +168,6 @@ BenchmarkDotNet.Artifacts/
 
 # clang JSON compilation database file
 compile_commands.json
-# VSCode C++ plugin
-compile_commands.json-*
 
 # IWYU byproducts
 compile_commands_for_iwyu.json

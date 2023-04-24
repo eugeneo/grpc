@@ -68,6 +68,8 @@
 #include "src/core/ext/xds/xds_routing.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
+#include "src/core/lib/channel/channel_stack.h"
+#include "src/core/lib/channel/promise_based_filter.h"
 #include "src/core/lib/channel/status_util.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
@@ -90,6 +92,8 @@
 #include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
+
+extern UniqueTypeName XdsClusterDataTypeName();
 
 TraceFlag grpc_xds_resolver_trace(false, "xds_resolver");
 
@@ -190,46 +194,46 @@ class XdsResolver : public Resolver {
     RefCountedPtr<XdsResolver> resolver_;
   };
 
-  class RouteConfigWatcher
-      : public XdsRouteConfigResourceType::WatcherInterface {
-   public:
-    explicit RouteConfigWatcher(RefCountedPtr<XdsResolver> resolver)
-        : resolver_(std::move(resolver)) {}
-    void OnResourceChanged(XdsRouteConfigResource route_config) override {
-      RefCountedPtr<RouteConfigWatcher> self = Ref();
-      resolver_->work_serializer_->Run(
-          [self = std::move(self),
-           route_config = std::move(route_config)]() mutable {
-            if (self != self->resolver_->route_config_watcher_) return;
-            self->resolver_->OnRouteConfigUpdate(std::move(route_config));
-          },
-          DEBUG_LOCATION);
-    }
-    void OnError(absl::Status status) override {
-      RefCountedPtr<RouteConfigWatcher> self = Ref();
-      resolver_->work_serializer_->Run(
-          [self = std::move(self), status = std::move(status)]() mutable {
-            if (self != self->resolver_->route_config_watcher_) return;
-            self->resolver_->OnError(self->resolver_->route_config_name_,
-                                     std::move(status));
-          },
-          DEBUG_LOCATION);
-    }
-    void OnResourceDoesNotExist() override {
-      RefCountedPtr<RouteConfigWatcher> self = Ref();
-      resolver_->work_serializer_->Run(
-          [self = std::move(self)]() {
-            if (self != self->resolver_->route_config_watcher_) return;
-            self->resolver_->OnResourceDoesNotExist(absl::StrCat(
-                self->resolver_->route_config_name_,
-                ": xDS route configuration resource does not exist"));
-          },
-          DEBUG_LOCATION);
-    }
+    class RouteConfigWatcher
+        : public XdsRouteConfigResourceType::WatcherInterface {
+     public:
+      explicit RouteConfigWatcher(RefCountedPtr<XdsResolver> resolver)
+          : resolver_(std::move(resolver)) {}
+      void OnResourceChanged(XdsRouteConfigResource route_config) override {
+        RefCountedPtr<RouteConfigWatcher> self = Ref();
+        resolver_->work_serializer_->Run(
+            [self = std::move(self),
+             route_config = std::move(route_config)]() mutable {
+              if (self != self->resolver_->route_config_watcher_) return;
+              self->resolver_->OnRouteConfigUpdate(std::move(route_config));
+            },
+            DEBUG_LOCATION);
+      }
+      void OnError(absl::Status status) override {
+        RefCountedPtr<RouteConfigWatcher> self = Ref();
+        resolver_->work_serializer_->Run(
+            [self = std::move(self), status = std::move(status)]() mutable {
+              if (self != self->resolver_->route_config_watcher_) return;
+              self->resolver_->OnError(self->resolver_->route_config_name_,
+                                       std::move(status));
+            },
+            DEBUG_LOCATION);
+      }
+      void OnResourceDoesNotExist() override {
+        RefCountedPtr<RouteConfigWatcher> self = Ref();
+        resolver_->work_serializer_->Run(
+            [self = std::move(self)]() {
+              if (self != self->resolver_->route_config_watcher_) return;
+              self->resolver_->OnResourceDoesNotExist(absl::StrCat(
+                  self->resolver_->route_config_name_,
+                  ": xDS route configuration resource does not exist"));
+            },
+            DEBUG_LOCATION);
+      }
 
-   private:
-    RefCountedPtr<XdsResolver> resolver_;
-  };
+     private:
+      RefCountedPtr<XdsResolver> resolver_;
+    };
 
   // An entry in the map of clusters that need to be present in the LB
   // policy config.  The map holds a weak ref.  One strong ref is held by
@@ -362,6 +366,41 @@ bool MethodConfigsEqual(const ServiceConfig* sc1, const ServiceConfig* sc2) {
   if (sc2 == nullptr) return false;
   return sc1->json_string() == sc2->json_string();
 }
+
+class ClusterSelectionFilter : public ChannelFilter {
+ public:
+  ClusterSelectionFilter(/*XdsResolver::ClusterStateMap* cluster_state_map*/)
+  // : cluster_state_map_(nullptr)
+  {}
+
+  const static grpc_channel_filter kFilter;
+
+  static absl::StatusOr<ClusterSelectionFilter> Create(
+      const ChannelArgs& args, ChannelFilter::Args filter_args) {
+    return ClusterSelectionFilter();
+  }
+
+  // Construct a promise for one call.
+  ArenaPromise<ServerMetadataHandle> MakeCallPromise(
+      CallArgs call_args, NextPromiseFactory next_promise_factory) override {
+    auto* service_config_call_data = static_cast<ServiceConfigCallData*>(
+        GetContext<
+            grpc_call_context_element>()[GRPC_CONTEXT_SERVICE_CONFIG_CALL_DATA]
+            .value);
+    GPR_ASSERT(service_config_call_data != nullptr);
+    service_config_call_data->SetCallAttribute(XdsClusterDataTypeName(),
+                                               "hello there!");
+    return next_promise_factory(std::move(call_args));
+  }
+
+ private:
+  // XdsResolver::ClusterStateMap* cluster_state_map_;
+};
+
+const grpc_channel_filter ClusterSelectionFilter::kFilter =
+    MakePromiseBasedFilter<ClusterSelectionFilter, FilterEndpoint::kClient,
+                           kFilterExaminesServerInitialMetadata>(
+        "cluster_selection_filter");
 
 bool XdsResolver::XdsConfigSelector::Route::ClusterWeightState::operator==(
     const ClusterWeightState& other) const {
@@ -502,6 +541,7 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
       filters_.push_back(filter_impl->channel_filter());
     }
   }
+  filters_.push_back(&ClusterSelectionFilter::kFilter);
 }
 
 XdsResolver::XdsConfigSelector::~XdsConfigSelector() {
