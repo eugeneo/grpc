@@ -352,7 +352,7 @@ class XdsResolver : public Resolver {
 
   class ClusterSelectionFilter : public ChannelFilter {
    public:
-    ClusterSelectionFilter(ChannelFilter::Args filter_args)
+    explicit ClusterSelectionFilter(ChannelFilter::Args filter_args)
         : filter_args_(std::move(filter_args)) {}
 
     const static grpc_channel_filter kFilter;
