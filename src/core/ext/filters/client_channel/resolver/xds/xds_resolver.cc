@@ -194,46 +194,46 @@ class XdsResolver : public Resolver {
     RefCountedPtr<XdsResolver> resolver_;
   };
 
-    class RouteConfigWatcher
-        : public XdsRouteConfigResourceType::WatcherInterface {
-     public:
-      explicit RouteConfigWatcher(RefCountedPtr<XdsResolver> resolver)
-          : resolver_(std::move(resolver)) {}
-      void OnResourceChanged(XdsRouteConfigResource route_config) override {
-        RefCountedPtr<RouteConfigWatcher> self = Ref();
-        resolver_->work_serializer_->Run(
-            [self = std::move(self),
-             route_config = std::move(route_config)]() mutable {
-              if (self != self->resolver_->route_config_watcher_) return;
-              self->resolver_->OnRouteConfigUpdate(std::move(route_config));
-            },
-            DEBUG_LOCATION);
-      }
-      void OnError(absl::Status status) override {
-        RefCountedPtr<RouteConfigWatcher> self = Ref();
-        resolver_->work_serializer_->Run(
-            [self = std::move(self), status = std::move(status)]() mutable {
-              if (self != self->resolver_->route_config_watcher_) return;
-              self->resolver_->OnError(self->resolver_->route_config_name_,
-                                       std::move(status));
-            },
-            DEBUG_LOCATION);
-      }
-      void OnResourceDoesNotExist() override {
-        RefCountedPtr<RouteConfigWatcher> self = Ref();
-        resolver_->work_serializer_->Run(
-            [self = std::move(self)]() {
-              if (self != self->resolver_->route_config_watcher_) return;
-              self->resolver_->OnResourceDoesNotExist(absl::StrCat(
-                  self->resolver_->route_config_name_,
-                  ": xDS route configuration resource does not exist"));
-            },
-            DEBUG_LOCATION);
-      }
+  class RouteConfigWatcher
+      : public XdsRouteConfigResourceType::WatcherInterface {
+   public:
+    explicit RouteConfigWatcher(RefCountedPtr<XdsResolver> resolver)
+        : resolver_(std::move(resolver)) {}
+    void OnResourceChanged(XdsRouteConfigResource route_config) override {
+      RefCountedPtr<RouteConfigWatcher> self = Ref();
+      resolver_->work_serializer_->Run(
+          [self = std::move(self),
+           route_config = std::move(route_config)]() mutable {
+            if (self != self->resolver_->route_config_watcher_) return;
+            self->resolver_->OnRouteConfigUpdate(std::move(route_config));
+          },
+          DEBUG_LOCATION);
+    }
+    void OnError(absl::Status status) override {
+      RefCountedPtr<RouteConfigWatcher> self = Ref();
+      resolver_->work_serializer_->Run(
+          [self = std::move(self), status = std::move(status)]() mutable {
+            if (self != self->resolver_->route_config_watcher_) return;
+            self->resolver_->OnError(self->resolver_->route_config_name_,
+                                     std::move(status));
+          },
+          DEBUG_LOCATION);
+    }
+    void OnResourceDoesNotExist() override {
+      RefCountedPtr<RouteConfigWatcher> self = Ref();
+      resolver_->work_serializer_->Run(
+          [self = std::move(self)]() {
+            if (self != self->resolver_->route_config_watcher_) return;
+            self->resolver_->OnResourceDoesNotExist(absl::StrCat(
+                self->resolver_->route_config_name_,
+                ": xDS route configuration resource does not exist"));
+          },
+          DEBUG_LOCATION);
+    }
 
-     private:
-      RefCountedPtr<XdsResolver> resolver_;
-    };
+   private:
+    RefCountedPtr<XdsResolver> resolver_;
+  };
 
   // An entry in the map of clusters that need to be present in the LB
   // policy config.  The map holds a weak ref.  One strong ref is held by
