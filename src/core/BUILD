@@ -5146,6 +5146,7 @@ grpc_cc_library(
     deps = [
         "unique_type_name",
         "//:gpr_platform",
+        "//:ref_counted_ptr",
     ],
 )
 

@@ -29,9 +29,9 @@ class XdsClusterMap;
 
 class XdsClusterLbData : public ServiceConfigCallData::CallAttributeInterface {
  public:
-  XdsClusterLbData(RefCountedPtr<XdsClusterMap> cluster_map);
+  explicit XdsClusterLbData(RefCountedPtr<XdsClusterMap> cluster_map);
 
-  virtual UniqueTypeName type() const override {
+  UniqueTypeName type() const override {
     static UniqueTypeName::Factory factory("xds_cluster_lb_data");
     return factory.Create();
   }

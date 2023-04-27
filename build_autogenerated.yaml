@@ -254,6 +254,7 @@ libs:
   - src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.h
   - src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h
   - src/core/ext/filters/client_channel/resolver/polling_resolver.h
+  - src/core/ext/filters/client_channel/resolver/xds/cluster_lb_data.h
   - src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h
   - src/core/ext/filters/client_channel/retry_filter.h
   - src/core/ext/filters/client_channel/retry_service_config.h

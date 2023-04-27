@@ -31,7 +31,7 @@ class XdsClusterMap;
 
 class XdsClusterLbData : public ServiceConfigCallData::CallAttributeInterface {
  public:
-  XdsClusterLbData(RefCountedPtr<XdsClusterMap> cluster_map);
+  explicit XdsClusterLbData(RefCountedPtr<XdsClusterMap> cluster_map);
 
  private:
   RefCountedPtr<XdsClusterMap> cluster_map_;

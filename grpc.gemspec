@@ -218,6 +218,7 @@ Gem::Specification.new do |s|
   s.files += %w( src/core/ext/filters/client_channel/resolver/polling_resolver.cc )
   s.files += %w( src/core/ext/filters/client_channel/resolver/polling_resolver.h )
   s.files += %w( src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc )
+  s.files += %w( src/core/ext/filters/client_channel/resolver/xds/cluster_lb_data.h )
   s.files += %w( src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc )
   s.files += %w( src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h )
   s.files += %w( src/core/ext/filters/client_channel/retry_filter.cc )
