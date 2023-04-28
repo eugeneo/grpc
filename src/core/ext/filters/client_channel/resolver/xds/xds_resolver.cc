@@ -207,7 +207,7 @@ class XdsResolver : public Resolver {
   }
 
  private:
-  friend class ClusterState;
+  friend class grpc_core::ClusterState;
 
   class ListenerWatcher : public XdsListenerResourceType::WatcherInterface {
    public:
