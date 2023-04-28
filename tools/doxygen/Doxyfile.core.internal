@@ -986,6 +986,7 @@ src/core/ext/filters/client_channel/resolver/polling_resolver.cc \
 src/core/ext/filters/client_channel/resolver/polling_resolver.h \
 src/core/ext/filters/client_channel/resolver/sockaddr/README.md \
 src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc \
+src/core/ext/filters/client_channel/resolver/xds/cluster_lb_data.h \
 src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc \
 src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h \
 src/core/ext/filters/client_channel/retry_filter.cc \

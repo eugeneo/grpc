@@ -5158,8 +5158,10 @@ grpc_cc_library(
     ],
     language = "c++",
     deps = [
+        "grpc_service_config",
         "unique_type_name",
         "//:gpr_platform",
+        "//:ref_counted_ptr",
     ],
 )
 
