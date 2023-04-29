@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -166,7 +167,7 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
               std::string(*cookie_value).c_str());
     }
     std::pair<absl::string_view, absl::string_view> host_cluster =
-        absl::StrSplit(*cookie_value, absl::MaxSplits(";", 1));
+        absl::StrSplit(*cookie_value, absl::MaxSplits(';', 1));
     if (!host_cluster.first.empty()) {
       // We have a valid cookie, so add the call attribute to be used by the
       // xds_override_host LB policy.
@@ -188,18 +189,18 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
                                          cluster_name, md.get());
         return md;
       });
-  return Map(next_promise_factory(std::move(call_args)),
-             [cookie_config, cookie_value,
-              cluster_name](ServerMetadataHandle md) {
-               // If we got a Trailers-Only response, then add the
-               // cookie to the trailing metadata instead of the
-               // initial metadata.
-               if (md->get(GrpcTrailersOnly()).value_or(false)) {
-                 MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
-                                                  cluster_name, md.get());
-               }
-               return md;
-             });
+  return Map(
+      next_promise_factory(std::move(call_args)),
+      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
+        // If we got a Trailers-Only response, then add the
+        // cookie to the trailing metadata instead of the
+        // initial metadata.
+        if (md->get(GrpcTrailersOnly()).value_or(false)) {
+          MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
+                                           cluster_name, md.get());
+        }
+        return md;
+      });
 }
 
 absl::optional<absl::string_view>
