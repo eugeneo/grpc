@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -38,6 +39,7 @@
 #include <grpc/support/log.h>
 #include <grpc/support/time.h>
 
+#include "src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h"
 #include "src/core/ext/filters/stateful_session/stateful_session_service_config_parser.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/context.h"
@@ -87,16 +89,21 @@ namespace {
 void MaybeUpdateServerInitialMetadata(
     const StatefulSessionMethodParsedConfig::CookieConfig* cookie_config,
     absl::optional<absl::string_view> cookie_value,
-    ServerMetadata* server_initial_metadata) {
+    absl::string_view cluster_name, ServerMetadata* server_initial_metadata) {
   // Get peer string.
   Slice* peer_string = server_initial_metadata->get_pointer(PeerString());
   if (peer_string == nullptr) return;  // Nothing we can do.
+  std::string new_value;
+  if (cluster_name.empty()) {
+    new_value = absl::Base64Escape(peer_string->as_string_view());
+  } else {
+    new_value = absl::Base64Escape(
+        absl::StrCat(peer_string->as_string_view(), ";\"", cluster_name, "\""));
+  }
   // If there was no cookie or if the address changed, set the cookie.
-  if (!cookie_value.has_value() ||
-      peer_string->as_string_view() != *cookie_value) {
-    std::vector<std::string> parts = {absl::StrCat(
-        *cookie_config->name, "=",
-        absl::Base64Escape(peer_string->as_string_view()), "; HttpOnly")};
+  if (!cookie_value.has_value() || new_value != *cookie_value) {
+    std::vector<std::string> parts = {
+        absl::StrCat(*cookie_config->name, "=", new_value, "; HttpOnly")};
     if (!cookie_config->path.empty()) {
       parts.emplace_back(absl::StrCat("Path=", cookie_config->path));
     }
@@ -158,29 +165,44 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
               this, cookie_config->name->c_str(),
               std::string(*cookie_value).c_str());
     }
-    // We have a valid cookie, so add the call attribute to be used by the
-    // xds_override_host LB policy.
-    service_config_call_data->SetCallAttribute(
-        GetContext<Arena>()->New<XdsOverrideHostAttribute>(*cookie_value));
+    std::pair<absl::string_view, absl::string_view> host_cluster =
+        absl::StrSplit(*cookie_value, absl::MaxSplits(';', 1));
+    if (!host_cluster.first.empty()) {
+      // We have a valid cookie, so add the call attribute to be used by the
+      // xds_override_host LB policy.
+      service_config_call_data->SetCallAttribute(
+          GetContext<Arena>()->New<XdsOverrideHostAttribute>(
+              host_cluster.first));
+    }
+    // Cluster is not yet in use
+  }
+  absl::string_view cluster_name;
+  auto cluster_name_attribute = static_cast<XdsClusterAttribute*>(
+      service_config_call_data->GetCallAttribute(
+          XdsClusterAttribute::TypeName()));
+  if (cluster_name_attribute != nullptr) {
+    cluster_name = cluster_name_attribute->cluster();
   }
   // Intercept server initial metadata.
   call_args.server_initial_metadata->InterceptAndMap(
-      [cookie_config, cookie_value](ServerMetadataHandle md) {
+      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
         // Add cookie to server initial metadata if needed.
-        MaybeUpdateServerInitialMetadata(cookie_config, cookie_value, md.get());
+        MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
+                                         cluster_name, md.get());
         return md;
       });
-  return Map(next_promise_factory(std::move(call_args)),
-             [cookie_config, cookie_value](ServerMetadataHandle md) {
-               // If we got a Trailers-Only response, then add the
-               // cookie to the trailing metadata instead of the
-               // initial metadata.
-               if (md->get(GrpcTrailersOnly()).value_or(false)) {
-                 MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
-                                                  md.get());
-               }
-               return md;
-             });
+  return Map(
+      next_promise_factory(std::move(call_args)),
+      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
+        // If we got a Trailers-Only response, then add the
+        // cookie to the trailing metadata instead of the
+        // initial metadata.
+        if (md->get(GrpcTrailersOnly()).value_or(false)) {
+          MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
+                                           cluster_name, md.get());
+        }
+        return md;
+      });
 }
 
 absl::optional<absl::string_view>
