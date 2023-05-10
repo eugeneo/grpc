@@ -128,7 +128,7 @@ class RouteTable : public RefCounted<RouteTable> {
     bool operator==(const RouteEntry& other) const;
   };
 
-  RouteTable(size_t capacity) : route_table_(capacity) {}
+  explicit RouteTable(size_t capacity) : route_table_(capacity) {}
 
   absl::StatusOr<const RouteTable::RouteEntry*> RouteActionForPath(
       absl::string_view path, grpc_metadata_batch* initial_metadata) const;
