@@ -128,7 +128,7 @@ class RouteTable : public RefCounted<RouteTable> {
     bool operator==(const RouteEntry& other) const;
   };
 
-  explicit RouteTable(size_t capacity) : route_table_(capacity) {}
+  explicit RouteTable(size_t capacity) { route_table_.reserve(capacity); }
 
   absl::StatusOr<const RouteTable::RouteEntry*> RouteActionForPath(
       absl::string_view path, grpc_metadata_batch* initial_metadata) const;
@@ -573,13 +573,13 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
                   weighted_clusters) {
             uint32_t end = 0;
             for (const auto& weighted_cluster : weighted_clusters) {
-              RouteTable::RouteEntry::ClusterWeightState cluster_weight_state;
               auto result =
                   CreateMethodConfig(route_entry->route, &weighted_cluster);
               if (!result.ok()) {
                 *status = result.status();
                 return;
               }
+              RouteTable::RouteEntry::ClusterWeightState cluster_weight_state;
               cluster_weight_state.method_config = std::move(*result);
               end += weighted_cluster.weight;
               cluster_weight_state.range_end = end;
@@ -742,15 +742,7 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
     GetCallConfigArgs args) {
   Slice* path = args.initial_metadata->get_pointer(HttpPathMetadata());
   GPR_ASSERT(path != nullptr);
-  // auto route_index = XdsRouting::GetRouteForRequest(
-  //     RouteTable::RouteListIterator(route_table_.get()),
-  //     path->as_string_view(), args.initial_metadata);
-  // if (!route_index.has_value()) {
-  //   return absl::UnavailableError(
-  //       "No matching route found in xDS route config");
-  // }
-  // auto& entry = route_table_[*route_index];
-  // // Found a route match
+  // Found a route match
   auto status_or_route_action = route_table_->RouteActionForPath(
       path->as_string_view(), args.initial_metadata);
   if (!status_or_route_action.ok()) {
