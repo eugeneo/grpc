@@ -130,7 +130,7 @@ class RouteTable : public RefCounted<RouteTable> {
 
   explicit RouteTable(size_t capacity) { route_table_.reserve(capacity); }
 
-  absl::StatusOr<const RouteTable::RouteEntry*> RouteActionForPath(
+  absl::StatusOr<const RouteTable::RouteEntry*> RouteEntryForPath(
       absl::string_view path, grpc_metadata_batch* initial_metadata) const;
 
   RouteEntry* EmplaceBack(const XdsRouteConfigResource::Route& route) {
@@ -743,7 +743,7 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
   Slice* path = args.initial_metadata->get_pointer(HttpPathMetadata());
   GPR_ASSERT(path != nullptr);
   // Found a route match
-  auto status_or_route_action = route_table_->RouteActionForPath(
+  auto status_or_route_action = route_table_->RouteEntryForPath(
       path->as_string_view(), args.initial_metadata);
   if (!status_or_route_action.ok()) {
     return status_or_route_action.status();
@@ -1241,7 +1241,7 @@ bool RouteTable::RouteEntry::operator==(const RouteEntry& other) const {
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-absl::StatusOr<const RouteTable::RouteEntry*> RouteTable::RouteActionForPath(
+absl::StatusOr<const RouteTable::RouteEntry*> RouteTable::RouteEntryForPath(
     absl::string_view path, grpc_metadata_batch* initial_metadata) const {
   auto route_index = XdsRouting::GetRouteForRequest(
       RouteTable::RouteListIterator(this), path, initial_metadata);
