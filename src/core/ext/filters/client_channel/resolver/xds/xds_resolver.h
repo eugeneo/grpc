@@ -57,6 +57,8 @@ class XdsClusterDataAttribute
   // reference to the cluster map, and subsequent calls will return nullptr.
   RefCountedPtr<ClusterState> LockAndGetCluster(absl::string_view cluster_name);
 
+  bool HasClusterForRoute(absl::string_view cluster) const;
+
   UniqueTypeName type() const override { return TypeName(); }
 
  private:

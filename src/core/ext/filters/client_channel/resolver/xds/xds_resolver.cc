@@ -1239,6 +1239,11 @@ RefCountedPtr<ClusterState> XdsClusterDataAttribute::LockAndGetCluster(
   return cluster;
 }
 
+bool XdsClusterDataAttribute::HasClusterForRoute(
+    absl::string_view cluster) const {
+  return true;
+}
+
 void RegisterXdsResolver(CoreConfiguration::Builder* builder) {
   builder->resolver_registry()->RegisterResolverFactory(
       std::make_unique<XdsResolverFactory>());

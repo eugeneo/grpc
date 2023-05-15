@@ -172,6 +172,21 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
       service_config_call_data->SetCallAttribute(
           GetContext<Arena>()->New<XdsOverrideHostAttribute>(
               host_cluster.first));
+      // Cookie has quotes that we need to remove
+      if (host_cluster.second.length() > 2) {
+        absl::string_view cluster_name =
+            host_cluster.second.substr(1, host_cluster.second.length() - 2);
+        auto cluster_data = static_cast<XdsClusterDataAttribute*>(
+            service_config_call_data->GetCallAttribute(
+                XdsClusterDataAttribute::TypeName()));
+        auto cluster_attribute = static_cast<XdsClusterAttribute*>(
+            service_config_call_data->GetCallAttribute(
+                XdsClusterAttribute::TypeName()));
+        if (cluster_data != nullptr && cluster_attribute != nullptr &&
+            cluster_data->HasClusterForRoute(cluster_name)) {
+          cluster_attribute->update_cluster(cluster_name);
+        }
+      }
     }
     // Cluster is not yet in use
   }
