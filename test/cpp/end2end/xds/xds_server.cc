@@ -71,6 +71,11 @@ void AdsServiceImpl::UnsetResource(const std::string& type_url,
   resource_state.resource_type_version =
       resource_type_state.resource_type_version;
   resource_state.resource.reset();
+
+  std::cout << "\n\n\n"
+            << "!!!!!!!!!!!!!!!!!!!!"
+            << "\n\n\n";
+
   gpr_log(GPR_INFO,
           "ADS[%p]: Unsetting %s resource %s; resource_type_version now %u",
           this, type_url.c_str(), name.c_str(),

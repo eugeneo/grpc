@@ -813,7 +813,7 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
   args.service_config_call_data->SetCallAttribute(
       args.arena->New<RequestHashAttribute>(hash_value));
   args.service_config_call_data->SetCallAttribute(
-      args.arena->ManagedNew<XdsClusterDataAttribute>(route_data_));
+      args.arena->ManagedNew<XdsClusterDataAttribute>(route_data_, entry));
   return absl::OkStatus();
 }
 
@@ -1224,8 +1224,8 @@ UniqueTypeName XdsClusterDataAttribute::TypeName() {
 }
 
 XdsClusterDataAttribute::XdsClusterDataAttribute(
-    RefCountedPtr<RouteData> route_data)
-    : route_data_(std::move(route_data)) {}
+    RefCountedPtr<RouteData> route_data, void* route)
+    : route_data_(std::move(route_data)), opaque_route_(route) {}
 
 // This method can be called only once. The first call will release the
 // reference to the cluster map, and subsequent calls will return nullptr.
@@ -1240,8 +1240,35 @@ RefCountedPtr<ClusterState> XdsClusterDataAttribute::LockAndGetCluster(
 }
 
 bool XdsClusterDataAttribute::HasClusterForRoute(
-    absl::string_view cluster) const {
-  return true;
+    absl::string_view cluster_name) const {
+  auto prefixless = absl::StripPrefix(cluster_name, "cluster:");
+  // Found a route match
+  const auto* route_action =
+      absl::get_if<XdsRouteConfigResource::Route::RouteAction>(
+          &static_cast<RouteData::RouteEntry*>(opaque_route_)->route.action);
+  if (route_action == nullptr) {
+    return false;
+  }
+  // ClusterName, std::vector<ClusterWeight>, ClusterSpecifierPluginName
+  return Match(
+      route_action->action,
+      [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName& name)
+          -> bool { return name.cluster_name == prefixless; },
+      [&](const std::vector<
+          XdsRouteConfigResource::Route::RouteAction::ClusterWeight>& clusters)
+          -> bool {
+        for (const auto& cluster : clusters) {
+          if (cluster.name == prefixless) {
+            return true;
+          }
+        }
+        return false;
+      },
+      [&](const XdsRouteConfigResource::Route::RouteAction::
+              ClusterSpecifierPluginName& name) -> bool {
+        return absl::StrCat("cluster_specifier_plugin:",
+                            name.cluster_specifier_plugin_name) == cluster_name;
+      });
 }
 
 void RegisterXdsResolver(CoreConfiguration::Builder* builder) {

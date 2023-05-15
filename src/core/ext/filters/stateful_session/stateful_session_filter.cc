@@ -118,6 +118,32 @@ void MaybeUpdateServerInitialMetadata(
   }
 }
 
+// Updates cluster with one from the cookie if cluster is still configured for
+// route.
+// Returns true if the cluster was found or if no cluster was in the cookie
+bool OverrideClusterIfNeeded(absl::string_view cookie_cluster,
+                             ServiceConfigCallData* service_config_call_data,
+                             Arena* arena) {
+  // Cookie has quotes that we need to remove
+  if (cookie_cluster.length() < 2) {
+    return true;
+  }
+  absl::string_view cluster_name =
+      cookie_cluster.substr(1, cookie_cluster.length() - 2);
+  auto cluster_data = static_cast<XdsClusterDataAttribute*>(
+      service_config_call_data->GetCallAttribute(
+          XdsClusterDataAttribute::TypeName()));
+  if (cluster_data == nullptr) {
+    return false;
+  }
+  if (!cluster_data->HasClusterForRoute(cluster_name)) {
+    return false;
+  }
+  service_config_call_data->SetCallAttribute(
+      arena->New<XdsClusterAttribute>(cluster_name));
+  return true;
+}
+
 }  // namespace
 
 // Construct a promise for one call.
@@ -166,27 +192,14 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
     }
     std::pair<absl::string_view, absl::string_view> host_cluster =
         absl::StrSplit(*cookie_value, absl::MaxSplits(';', 1));
-    if (!host_cluster.first.empty()) {
+    if (!host_cluster.first.empty() &&
+        OverrideClusterIfNeeded(host_cluster.second, service_config_call_data,
+                                GetContext<Arena>())) {
       // We have a valid cookie, so add the call attribute to be used by the
       // xds_override_host LB policy.
       service_config_call_data->SetCallAttribute(
           GetContext<Arena>()->New<XdsOverrideHostAttribute>(
               host_cluster.first));
-      // Cookie has quotes that we need to remove
-      if (host_cluster.second.length() > 2) {
-        absl::string_view cluster_name =
-            host_cluster.second.substr(1, host_cluster.second.length() - 2);
-        auto cluster_data = static_cast<XdsClusterDataAttribute*>(
-            service_config_call_data->GetCallAttribute(
-                XdsClusterDataAttribute::TypeName()));
-        auto cluster_attribute = static_cast<XdsClusterAttribute*>(
-            service_config_call_data->GetCallAttribute(
-                XdsClusterAttribute::TypeName()));
-        if (cluster_data != nullptr && cluster_attribute != nullptr &&
-            cluster_data->HasClusterForRoute(cluster_name)) {
-          cluster_attribute->update_cluster(cluster_name);
-        }
-      }
     }
     // Cluster is not yet in use
   }

@@ -35,8 +35,6 @@ class XdsClusterAttribute
 
   absl::string_view cluster() const { return cluster_; }
 
-  void update_cluster(absl::string_view cluster) { cluster_ = cluster; }
-
  private:
   UniqueTypeName type() const override { return TypeName(); }
 
@@ -51,18 +49,21 @@ class XdsClusterDataAttribute
  public:
   static UniqueTypeName TypeName();
 
-  explicit XdsClusterDataAttribute(RefCountedPtr<RouteData> route_data);
+  explicit XdsClusterDataAttribute(RefCountedPtr<RouteData> route_data,
+                                   void* route);
 
   // This method can be called only once. The first call will release the
   // reference to the cluster map, and subsequent calls will return nullptr.
   RefCountedPtr<ClusterState> LockAndGetCluster(absl::string_view cluster_name);
 
-  bool HasClusterForRoute(absl::string_view cluster) const;
+  bool HasClusterForRoute(absl::string_view cluster_name) const;
 
   UniqueTypeName type() const override { return TypeName(); }
 
  private:
   RefCountedPtr<RouteData> route_data_;
+  // No need to leak another type
+  void* opaque_route_;
 };
 }  // namespace grpc_core
 
