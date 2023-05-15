@@ -42,6 +42,26 @@ class XdsClusterAttribute
 
   absl::string_view cluster_;
 };
+
+class ClusterState;
+class RouteData;
+
+class XdsClusterDataAttribute
+    : public ServiceConfigCallData::CallAttributeInterface {
+ public:
+  static UniqueTypeName TypeName();
+
+  explicit XdsClusterDataAttribute(RefCountedPtr<RouteData> route_data);
+
+  // This method can be called only once. The first call will release the
+  // reference to the cluster map, and subsequent calls will return nullptr.
+  RefCountedPtr<ClusterState> LockAndGetCluster(absl::string_view cluster_name);
+
+  UniqueTypeName type() const override { return TypeName(); }
+
+ private:
+  RefCountedPtr<RouteData> route_data_;
+};
 }  // namespace grpc_core
 
 #endif  // GRPC_SRC_CORE_EXT_FILTERS_CLIENT_CHANNEL_RESOLVER_XDS_XDS_RESOLVER_H
