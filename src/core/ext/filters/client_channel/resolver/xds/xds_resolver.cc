@@ -107,58 +107,6 @@ UniqueTypeName XdsClusterAttribute::TypeName() {
   return kFactory.Create();
 }
 
-class RouteTable : public RefCounted<RouteTable> {
- public:
-  struct RouteEntry {
-    struct ClusterWeightState {
-      uint32_t range_end;
-      absl::string_view cluster;
-      RefCountedPtr<ServiceConfig> method_config;
-
-      bool operator==(const ClusterWeightState& other) const;
-    };
-
-    XdsRouteConfigResource::Route route;
-    RefCountedPtr<ServiceConfig> method_config;
-    std::vector<ClusterWeightState> weighted_cluster_state;
-
-    RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
-
-    bool operator==(const RouteEntry& other) const;
-  };
-
-  // Reserve the necessary entries up-front to avoid reallocation as we add
-  // elements. This is necessary because the string_view in the entry's
-  // weighted_cluster_state field points to the memory in the route field, so
-  // moving the entry in a reallocation will cause the string_view to point to
-  // invalid data.
-  explicit RouteTable(size_t initial_capacity) {
-    routes_.reserve(initial_capacity);
-  }
-
-  bool operator==(const RouteTable& other) const {
-    return routes_ == other.routes_;
-  }
-
-  RouteEntry* Emplace(const XdsRouteConfigResource::Route& route) {
-    routes_.emplace_back(route);
-    return &routes_.back();
-  }
-
-  RouteEntry* GetRouteForRequest(absl::string_view path,
-                                 grpc_metadata_batch* initial_metadata);
-
- private:
-  class RouteListIterator;
-
-  const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
-      size_t index) const {
-    return routes_[index].route.matchers;
-  }
-
-  std::vector<RouteEntry> routes_;
-};
-
 namespace {
 
 std::string GetDefaultAuthorityInternal(const URI& uri) {
@@ -324,14 +272,37 @@ class XdsResolver : public Resolver {
   // this map will be taken by each call processed by the XdsConfigSelector,
   // stored in a the call's call attributes, and later unreffed
   // by the ClusterSelection filter.
-  class XdsClusterMap : public RefCounted<XdsClusterMap> {
+  class RouteData : public RefCounted<RouteData> {
    public:
-    explicit XdsClusterMap(
-        std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters)
-        : clusters_(std::move(clusters)) {}
+    struct RouteEntry {
+      struct ClusterWeightState {
+        uint32_t range_end;
+        absl::string_view cluster;
+        RefCountedPtr<ServiceConfig> method_config;
 
-    bool operator==(const XdsClusterMap& other) const {
-      return clusters_ == other.clusters_;
+        bool operator==(const ClusterWeightState& other) const;
+      };
+
+      XdsRouteConfigResource::Route route;
+      RefCountedPtr<ServiceConfig> method_config;
+      std::vector<ClusterWeightState> weighted_cluster_state;
+
+      RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
+
+      bool operator==(const RouteEntry& other) const;
+    };
+
+    // Reserve the necessary entries up-front to avoid reallocation as we add
+    // elements. This is necessary because the string_view in the entry's
+    // weighted_cluster_state field points to the memory in the route field, so
+    // moving the entry in a reallocation will cause the string_view to point to
+    // invalid data.
+    explicit RouteData(size_t initial_route_table_capacity) {
+      routes_.reserve(initial_route_table_capacity);
+    }
+
+    bool operator==(const RouteData& other) const {
+      return clusters_ == other.clusters_ && routes_ == other.routes_;
     }
 
     RefCountedPtr<ClusterState> Find(absl::string_view name) const {
@@ -342,8 +313,29 @@ class XdsResolver : public Resolver {
       return it->second;
     }
 
+    void set_clusters(
+        std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters) {
+      clusters_ = std::move(clusters);
+    }
+
+    RouteEntry* AddRoute(const XdsRouteConfigResource::Route& route) {
+      routes_.emplace_back(route);
+      return &routes_.back();
+    }
+
+    RouteEntry* GetRouteForRequest(absl::string_view path,
+                                   grpc_metadata_batch* initial_metadata);
+
    private:
+    class RouteListIterator;
+
+    const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
+        size_t index) const {
+      return routes_[index].route.matchers;
+    }
+
     std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters_;
+    std::vector<RouteEntry> routes_;
   };
 
   class XdsConfigSelector : public ConfigSelector {
@@ -357,8 +349,7 @@ class XdsResolver : public Resolver {
     bool Equals(const ConfigSelector* other) const override {
       const auto* other_xds = static_cast<const XdsConfigSelector*>(other);
       // Don't need to compare resolver_, since that will always be the same.
-      return *route_table_ == *other_xds->route_table_ &&
-             *cluster_map_ == *other_xds->cluster_map_;
+      return *route_data_ == *other_xds->route_data_;
     }
 
     absl::Status GetCallConfig(GetCallConfigArgs args) override;
@@ -374,8 +365,7 @@ class XdsResolver : public Resolver {
             cluster_weight);
 
     RefCountedPtr<XdsResolver> resolver_;
-    RefCountedPtr<RouteTable> route_table_;
-    RefCountedPtr<XdsClusterMap> cluster_map_;
+    RefCountedPtr<RouteData> route_data_;
     std::vector<const grpc_channel_filter*> filters_;
   };
 
@@ -440,25 +430,25 @@ class XdsResolver : public Resolver {
       return factory.Create();
     }
 
-    explicit XdsClusterMapAttribute(RefCountedPtr<XdsClusterMap> cluster_map)
-        : cluster_map_(std::move(cluster_map)) {}
+    explicit XdsClusterMapAttribute(RefCountedPtr<RouteData> route_data)
+        : route_data_(std::move(route_data)) {}
 
     // This method can be called only once. The first call will release the
     // reference to the cluster map, and subsequent calls will return nullptr.
     RefCountedPtr<ClusterState> LockAndGetCluster(
         absl::string_view cluster_name) {
-      if (cluster_map_ == nullptr) {
+      if (route_data_ == nullptr) {
         return nullptr;
       }
-      auto cluster = cluster_map_->Find(cluster_name);
-      cluster_map_.reset();
+      auto cluster = route_data_->Find(cluster_name);
+      route_data_.reset();
       return cluster;
     }
 
     UniqueTypeName type() const override { return TypeName(); }
 
    private:
-    RefCountedPtr<XdsClusterMap> cluster_map_;
+    RefCountedPtr<RouteData> route_data_;
   };
 
   void OnListenerUpdate(XdsListenerResource listener);
@@ -520,7 +510,7 @@ const grpc_channel_filter XdsResolver::ClusterSelectionFilter::kFilter =
 XdsResolver::XdsConfigSelector::XdsConfigSelector(
     RefCountedPtr<XdsResolver> resolver, absl::Status* status)
     : resolver_(std::move(resolver)),
-      route_table_(MakeRefCounted<RouteTable>(
+      route_data_(MakeRefCounted<RouteData>(
           resolver_->current_virtual_host_->routes.size())) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
     gpr_log(GPR_INFO, "[xds_resolver %p] creating XdsConfigSelector %p",
@@ -542,7 +532,7 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
       gpr_log(GPR_INFO, "[xds_resolver %p] XdsConfigSelector %p: route: %s",
               resolver_.get(), this, route.ToString().c_str());
     }
-    auto* route_entry = route_table_->Emplace(route);
+    auto* route_entry = route_data_->AddRoute(route);
     auto* route_action =
         absl::get_if<XdsRouteConfigResource::Route::RouteAction>(
             &route_entry->route.action);
@@ -573,7 +563,7 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
                   weighted_clusters) {
             uint32_t end = 0;
             for (const auto& weighted_cluster : weighted_clusters) {
-              RouteTable::RouteEntry::ClusterWeightState cluster_weight_state;
+              RouteData::RouteEntry::ClusterWeightState cluster_weight_state;
               auto result =
                   CreateMethodConfig(route_entry->route, &weighted_cluster);
               if (!result.ok()) {
@@ -606,7 +596,7 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
       if (!status->ok()) return;
     }
   }
-  cluster_map_ = MakeRefCounted<XdsClusterMap>(std::move(clusters));
+  route_data_->set_clusters(std::move(clusters));
   // Populate filter list.
   const auto& http_filter_registry =
       static_cast<const GrpcXdsBootstrap&>(resolver_->xds_client_->bootstrap())
@@ -631,7 +621,7 @@ XdsResolver::XdsConfigSelector::~XdsConfigSelector() {
     gpr_log(GPR_INFO, "[xds_resolver %p] destroying XdsConfigSelector %p",
             resolver_.get(), this);
   }
-  cluster_map_.reset();
+  route_data_.reset();
   resolver_->MaybeRemoveUnusedClusters();
 }
 
@@ -742,8 +732,8 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
     GetCallConfigArgs args) {
   Slice* path = args.initial_metadata->get_pointer(HttpPathMetadata());
   GPR_ASSERT(path != nullptr);
-  auto* entry = route_table_->GetRouteForRequest(path->as_string_view(),
-                                                 args.initial_metadata);
+  auto* entry = route_data_->GetRouteForRequest(path->as_string_view(),
+                                                args.initial_metadata);
   if (entry == nullptr) {
     return absl::UnavailableError(
         "No matching route found in xDS route config");
@@ -802,7 +792,7 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
             cluster_specifier_plugin_name.cluster_specifier_plugin_name);
         method_config = entry->method_config;
       });
-  auto cluster = cluster_map_->Find(cluster_name);
+  auto cluster = route_data_->Find(cluster_name);
   GPR_ASSERT(cluster != nullptr);
   // Generate a hash.
   absl::optional<uint64_t> hash;
@@ -850,7 +840,9 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
   args.service_config_call_data->SetCallAttribute(
       args.arena->New<RequestHashAttribute>(hash_value));
   args.service_config_call_data->SetCallAttribute(
-      args.arena->ManagedNew<XdsClusterMapAttribute>(cluster_map_));
+      args.arena->ManagedNew<XdsClusterMapAttribute>(route_data_));
+  // args.service_config_call_data->SetCallAttribute(
+  //     args.arena->ManagedNew<XdsRouteTableAttribute>(route_table_));
   return absl::OkStatus();
 }
 
@@ -1204,13 +1196,12 @@ class XdsResolverFactory : public ResolverFactory {
   }
 };
 
-}  // namespace
-
 // Implementation of XdsRouting::RouteListIterator for getting the matching
 // route for a request.
-class RouteTable::RouteListIterator : public XdsRouting::RouteListIterator {
+class XdsResolver::RouteData::RouteListIterator
+    : public XdsRouting::RouteListIterator {
  public:
-  explicit RouteListIterator(const RouteTable* route_table)
+  explicit RouteListIterator(const XdsResolver::RouteData* route_table)
       : route_table_(route_table) {}
 
   size_t Size() const override { return route_table_->routes_.size(); }
@@ -1221,23 +1212,23 @@ class RouteTable::RouteListIterator : public XdsRouting::RouteListIterator {
   }
 
  private:
-  const RouteTable* route_table_;
+  const XdsResolver::RouteData* route_table_;
 };
 
-bool RouteTable::RouteEntry::ClusterWeightState::operator==(
+bool XdsResolver::RouteData::RouteEntry::ClusterWeightState::operator==(
     const ClusterWeightState& other) const {
   return range_end == other.range_end && cluster == other.cluster &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-bool RouteTable::RouteEntry::operator==(
-    const RouteTable::RouteEntry& other) const {
+bool XdsResolver::RouteData::RouteEntry::operator==(
+    const RouteData::RouteEntry& other) const {
   return route == other.route &&
          weighted_cluster_state == other.weighted_cluster_state &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-RouteTable::RouteEntry* RouteTable::GetRouteForRequest(
+XdsResolver::RouteData::RouteEntry* XdsResolver::RouteData::GetRouteForRequest(
     absl::string_view path, grpc_metadata_batch* initial_metadata) {
   auto route_index = XdsRouting::GetRouteForRequest(RouteListIterator(this),
                                                     path, initial_metadata);
@@ -1246,6 +1237,7 @@ RouteTable::RouteEntry* RouteTable::GetRouteForRequest(
   }
   return &routes_[*route_index];
 }
+}  // namespace
 
 void RegisterXdsResolver(CoreConfiguration::Builder* builder) {
   builder->resolver_registry()->RegisterResolverFactory(
