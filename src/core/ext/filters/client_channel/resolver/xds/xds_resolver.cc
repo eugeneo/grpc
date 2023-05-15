@@ -1252,11 +1252,12 @@ bool XdsClusterDataAttribute::HasClusterForRoute(
   // ClusterName, std::vector<ClusterWeight>, ClusterSpecifierPluginName
   return Match(
       route_action->action,
-      [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName& name)
-          -> bool { return name.cluster_name == prefixless; },
+      [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName& name) {
+        return name.cluster_name == prefixless;
+      },
       [&](const std::vector<
-          XdsRouteConfigResource::Route::RouteAction::ClusterWeight>& clusters)
-          -> bool {
+          XdsRouteConfigResource::Route::RouteAction::ClusterWeight>&
+              clusters) {
         for (const auto& cluster : clusters) {
           if (cluster.name == prefixless) {
             return true;
@@ -1265,7 +1266,7 @@ bool XdsClusterDataAttribute::HasClusterForRoute(
         return false;
       },
       [&](const XdsRouteConfigResource::Route::RouteAction::
-              ClusterSpecifierPluginName& name) -> bool {
+              ClusterSpecifierPluginName& name) {
         return absl::StrCat("cluster_specifier_plugin:",
                             name.cluster_specifier_plugin_name) == cluster_name;
       });

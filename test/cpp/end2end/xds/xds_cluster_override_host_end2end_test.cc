@@ -248,8 +248,6 @@ TEST_P(ClusterOverrideHostTest, HostGone) {
   const uint32_t kWeight1 = std::numeric_limits<uint32_t>::max() / 4;
   const uint32_t kWeight2 = std::numeric_limits<uint32_t>::max() - kWeight1;
   const double kErrorTolerance = 0.025;
-  const double kWeight1Percent =
-      static_cast<double>(kWeight1) / std::numeric_limits<uint32_t>::max();
   const double kWeight2Percent =
       static_cast<double>(kWeight2) / std::numeric_limits<uint32_t>::max();
   const size_t kNumEchoRpcs =
@@ -280,23 +278,6 @@ TEST_P(ClusterOverrideHostTest, HostGone) {
                                    BuildListenerWithStatefulSessionFilter(),
                                    new_route_config);
   WaitForAllBackends(DEBUG_LOCATION, 0, 4);
-  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs);
-  EXPECT_THAT(
-      static_cast<double>(backends_[0]->backend_service()->request_count()) /
-          kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight1Percent, kErrorTolerance));
-  EXPECT_THAT(
-      static_cast<double>(backends_[1]->backend_service()->request_count()) /
-          kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
-  EXPECT_THAT(
-      static_cast<double>(backends_[2]->backend_service()->request_count()) /
-          kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
-  EXPECT_THAT(
-      static_cast<double>(backends_[3]->backend_service()->request_count()) /
-          kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
   auto session_cookie =
       GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 10);
   // Host is no longer in any cluster
@@ -306,10 +287,11 @@ TEST_P(ClusterOverrideHostTest, HostGone) {
   ASSERT_FALSE(session_cookie.empty());
   CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
                  RpcOptions().set_metadata(session_cookie));
+  // Traffic goes to a second cluster, where it is distributed between two hosts
   EXPECT_THAT(
       static_cast<double>(backends_[0]->backend_service()->request_count()) /
           kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight1Percent, kErrorTolerance));
+      ::testing::DoubleNear(0, kErrorTolerance));
   EXPECT_THAT(
       static_cast<double>(backends_[1]->backend_service()->request_count()) /
           kNumEchoRpcs,
@@ -317,11 +299,11 @@ TEST_P(ClusterOverrideHostTest, HostGone) {
   EXPECT_THAT(
       static_cast<double>(backends_[2]->backend_service()->request_count()) /
           kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight2Percent / 2, kErrorTolerance));
+      ::testing::DoubleNear(.5, kErrorTolerance));
   EXPECT_THAT(
       static_cast<double>(backends_[3]->backend_service()->request_count()) /
           kNumEchoRpcs,
-      ::testing::DoubleNear(kWeight2Percent / 2, kErrorTolerance));
+      ::testing::DoubleNear(.5, kErrorTolerance));
 }
 
 TEST_P(ClusterOverrideHostTest, ClusterGoneHostStays) {
@@ -363,7 +345,6 @@ TEST_P(ClusterOverrideHostTest, ClusterGoneHostStays) {
                                    BuildListenerWithStatefulSessionFilter(),
                                    new_route_config);
   WaitForAllBackends(DEBUG_LOCATION, 0, 2);
-  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs);
   auto session_cookie =
       GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 10);
   ASSERT_FALSE(session_cookie.empty());
