@@ -108,6 +108,100 @@ UniqueTypeName XdsClusterAttribute::TypeName() {
 }
 
 namespace {
+class XdsResolver;
+}
+
+// A map containing cluster refs held by the XdsConfigSelector. A ref to
+// this map will be taken by each call processed by the XdsConfigSelector,
+// stored in a the call's call attributes, and later unreffed
+// by the ClusterSelection filter.
+class RouteData : public RefCounted<RouteData> {
+ public:
+  struct RouteEntry {
+    struct ClusterWeightState {
+      uint32_t range_end;
+      absl::string_view cluster;
+      RefCountedPtr<ServiceConfig> method_config;
+
+      bool operator==(const ClusterWeightState& other) const;
+    };
+
+    XdsRouteConfigResource::Route route;
+    RefCountedPtr<ServiceConfig> method_config;
+    std::vector<ClusterWeightState> weighted_cluster_state;
+
+    RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
+
+    bool operator==(const RouteEntry& other) const;
+  };
+
+  // An entry in the map of clusters that need to be present in the LB
+  // policy config.  The map holds a weak ref.  One strong ref is held by
+  // the ConfigSelector, and another is held by each call assigned to
+  // the cluster by the ConfigSelector.  The ref for each call is held
+  // until the call is committed.  When the strong refs go away, we hop
+  // back into the WorkSerializer to remove the entry from the map.
+  class ClusterState : public DualRefCounted<ClusterState> {
+   public:
+    ClusterState(RefCountedPtr<XdsResolver> resolver,
+                 absl::string_view cluster_name);
+
+    void Orphan() override;
+
+    const std::string& cluster_name() const { return cluster_name_; }
+
+   private:
+    RefCountedPtr<XdsResolver> resolver_;
+    std::string cluster_name_;
+  };
+
+  // Reserve the necessary entries up-front to avoid reallocation as we add
+  // elements. This is necessary because the string_view in the entry's
+  // weighted_cluster_state field points to the memory in the route field, so
+  // moving the entry in a reallocation will cause the string_view to point to
+  // invalid data.
+  explicit RouteData(size_t initial_route_table_capacity) {
+    routes_.reserve(initial_route_table_capacity);
+  }
+
+  bool operator==(const RouteData& other) const {
+    return clusters_ == other.clusters_ && routes_ == other.routes_;
+  }
+
+  RefCountedPtr<ClusterState> Find(absl::string_view name) const {
+    auto it = clusters_.find(name);
+    if (it == clusters_.end()) {
+      return nullptr;
+    }
+    return it->second;
+  }
+
+  void set_clusters(
+      std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters) {
+    clusters_ = std::move(clusters);
+  }
+
+  RouteEntry* AddRoute(const XdsRouteConfigResource::Route& route) {
+    routes_.emplace_back(route);
+    return &routes_.back();
+  }
+
+  RouteEntry* GetRouteForRequest(absl::string_view path,
+                                 grpc_metadata_batch* initial_metadata);
+
+ private:
+  class RouteListIterator;
+
+  const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
+      size_t index) const {
+    return routes_[index].route.matchers;
+  }
+
+  std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters_;
+  std::vector<RouteEntry> routes_;
+};
+
+namespace {
 
 std::string GetDefaultAuthorityInternal(const URI& uri) {
   // Obtain the authority to use for the data plane connections, which is
@@ -160,6 +254,12 @@ class XdsResolver : public Resolver {
 
   void ResetBackoffLocked() override {
     if (xds_client_ != nullptr) xds_client_->ResetBackoff();
+  }
+
+  void MaybeRemoveUnusedClustersOnWorkSerializer() {
+    work_serializer_->Run(
+        [resolver = this]() { resolver->MaybeRemoveUnusedClusters(); },
+        DEBUG_LOCATION);
   }
 
  private:
@@ -240,104 +340,6 @@ class XdsResolver : public Resolver {
     RefCountedPtr<XdsResolver> resolver_;
   };
 
-  // An entry in the map of clusters that need to be present in the LB
-  // policy config.  The map holds a weak ref.  One strong ref is held by
-  // the ConfigSelector, and another is held by each call assigned to
-  // the cluster by the ConfigSelector.  The ref for each call is held
-  // until the call is committed.  When the strong refs go away, we hop
-  // back into the WorkSerializer to remove the entry from the map.
-  class ClusterState : public DualRefCounted<ClusterState> {
-   public:
-    ClusterState(RefCountedPtr<XdsResolver> resolver,
-                 absl::string_view cluster_name)
-        : resolver_(std::move(resolver)), cluster_name_(cluster_name) {}
-
-    void Orphan() override {
-      auto* resolver = resolver_.get();
-      resolver->work_serializer_->Run(
-          [resolver = std::move(resolver_)]() {
-            resolver->MaybeRemoveUnusedClusters();
-          },
-          DEBUG_LOCATION);
-    }
-
-    const std::string& cluster_name() const { return cluster_name_; }
-
-   private:
-    RefCountedPtr<XdsResolver> resolver_;
-    std::string cluster_name_;
-  };
-
-  // A map containing cluster refs held by the XdsConfigSelector. A ref to
-  // this map will be taken by each call processed by the XdsConfigSelector,
-  // stored in a the call's call attributes, and later unreffed
-  // by the ClusterSelection filter.
-  class RouteData : public RefCounted<RouteData> {
-   public:
-    struct RouteEntry {
-      struct ClusterWeightState {
-        uint32_t range_end;
-        absl::string_view cluster;
-        RefCountedPtr<ServiceConfig> method_config;
-
-        bool operator==(const ClusterWeightState& other) const;
-      };
-
-      XdsRouteConfigResource::Route route;
-      RefCountedPtr<ServiceConfig> method_config;
-      std::vector<ClusterWeightState> weighted_cluster_state;
-
-      RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
-
-      bool operator==(const RouteEntry& other) const;
-    };
-
-    // Reserve the necessary entries up-front to avoid reallocation as we add
-    // elements. This is necessary because the string_view in the entry's
-    // weighted_cluster_state field points to the memory in the route field, so
-    // moving the entry in a reallocation will cause the string_view to point to
-    // invalid data.
-    explicit RouteData(size_t initial_route_table_capacity) {
-      routes_.reserve(initial_route_table_capacity);
-    }
-
-    bool operator==(const RouteData& other) const {
-      return clusters_ == other.clusters_ && routes_ == other.routes_;
-    }
-
-    RefCountedPtr<ClusterState> Find(absl::string_view name) const {
-      auto it = clusters_.find(name);
-      if (it == clusters_.end()) {
-        return nullptr;
-      }
-      return it->second;
-    }
-
-    void set_clusters(
-        std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters) {
-      clusters_ = std::move(clusters);
-    }
-
-    RouteEntry* AddRoute(const XdsRouteConfigResource::Route& route) {
-      routes_.emplace_back(route);
-      return &routes_.back();
-    }
-
-    RouteEntry* GetRouteForRequest(absl::string_view path,
-                                   grpc_metadata_batch* initial_metadata);
-
-   private:
-    class RouteListIterator;
-
-    const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
-        size_t index) const {
-      return routes_[index].route.matchers;
-    }
-
-    std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters_;
-    std::vector<RouteEntry> routes_;
-  };
-
   class XdsConfigSelector : public ConfigSelector {
    public:
     XdsConfigSelector(RefCountedPtr<XdsResolver> resolver,
@@ -411,11 +413,12 @@ class XdsResolver : public Resolver {
     ChannelFilter::Args filter_args_;
   };
 
-  RefCountedPtr<ClusterState> GetOrCreateClusterState(
+  RefCountedPtr<RouteData::ClusterState> GetOrCreateClusterState(
       absl::string_view cluster_name) {
     auto it = cluster_state_map_.find(cluster_name);
     if (it == cluster_state_map_.end()) {
-      auto cluster = MakeRefCounted<ClusterState>(Ref(), cluster_name);
+      auto cluster =
+          MakeRefCounted<RouteData::ClusterState>(Ref(), cluster_name);
       cluster_state_map_.emplace(cluster->cluster_name(), cluster->WeakRef());
       return cluster;
     }
@@ -435,7 +438,7 @@ class XdsResolver : public Resolver {
 
     // This method can be called only once. The first call will release the
     // reference to the cluster map, and subsequent calls will return nullptr.
-    RefCountedPtr<ClusterState> LockAndGetCluster(
+    RefCountedPtr<RouteData::ClusterState> LockAndGetCluster(
         absl::string_view cluster_name) {
       if (route_data_ == nullptr) {
         return nullptr;
@@ -484,7 +487,7 @@ class XdsResolver : public Resolver {
            std::string /*LB policy config*/>
       cluster_specifier_plugin_map_;
 
-  std::map<absl::string_view, WeakRefCountedPtr<ClusterState>>
+  std::map<absl::string_view, WeakRefCountedPtr<RouteData::ClusterState>>
       cluster_state_map_;
 };
 
@@ -520,7 +523,7 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
   // 2  Update resolver's cluster state map
   // 3. Construct cluster list to hold on to entries in the cluster state
   // map.
-  std::map<absl::string_view, RefCountedPtr<ClusterState>> clusters;
+  std::map<absl::string_view, RefCountedPtr<RouteData::ClusterState>> clusters;
   auto maybe_add_cluster = [&](absl::string_view cluster_name) {
     if (clusters.find(cluster_name) != clusters.end()) return;
     auto cluster_state = resolver_->GetOrCreateClusterState(cluster_name);
@@ -1155,7 +1158,8 @@ void XdsResolver::GenerateResult() {
 void XdsResolver::MaybeRemoveUnusedClusters() {
   bool update_needed = false;
   for (auto it = cluster_state_map_.begin(); it != cluster_state_map_.end();) {
-    RefCountedPtr<ClusterState> cluster_state = it->second->RefIfNonZero();
+    RefCountedPtr<RouteData::ClusterState> cluster_state =
+        it->second->RefIfNonZero();
     if (cluster_state != nullptr) {
       ++it;
     } else {
@@ -1196,12 +1200,13 @@ class XdsResolverFactory : public ResolverFactory {
   }
 };
 
+}  // namespace
+
 // Implementation of XdsRouting::RouteListIterator for getting the matching
 // route for a request.
-class XdsResolver::RouteData::RouteListIterator
-    : public XdsRouting::RouteListIterator {
+class RouteData::RouteListIterator : public XdsRouting::RouteListIterator {
  public:
-  explicit RouteListIterator(const XdsResolver::RouteData* route_table)
+  explicit RouteListIterator(const RouteData* route_table)
       : route_table_(route_table) {}
 
   size_t Size() const override { return route_table_->routes_.size(); }
@@ -1212,23 +1217,23 @@ class XdsResolver::RouteData::RouteListIterator
   }
 
  private:
-  const XdsResolver::RouteData* route_table_;
+  const RouteData* route_table_;
 };
 
-bool XdsResolver::RouteData::RouteEntry::ClusterWeightState::operator==(
+bool RouteData::RouteEntry::ClusterWeightState::operator==(
     const ClusterWeightState& other) const {
   return range_end == other.range_end && cluster == other.cluster &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-bool XdsResolver::RouteData::RouteEntry::operator==(
+bool RouteData::RouteEntry::operator==(
     const RouteData::RouteEntry& other) const {
   return route == other.route &&
          weighted_cluster_state == other.weighted_cluster_state &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-XdsResolver::RouteData::RouteEntry* XdsResolver::RouteData::GetRouteForRequest(
+RouteData::RouteEntry* RouteData::GetRouteForRequest(
     absl::string_view path, grpc_metadata_batch* initial_metadata) {
   auto route_index = XdsRouting::GetRouteForRequest(RouteListIterator(this),
                                                     path, initial_metadata);
@@ -1237,7 +1242,14 @@ XdsResolver::RouteData::RouteEntry* XdsResolver::RouteData::GetRouteForRequest(
   }
   return &routes_[*route_index];
 }
-}  // namespace
+
+RouteData::ClusterState::ClusterState(RefCountedPtr<XdsResolver> resolver,
+                                      absl::string_view cluster_name)
+    : resolver_(std::move(resolver)), cluster_name_(cluster_name) {}
+
+void RouteData::ClusterState::Orphan() {
+  resolver_->MaybeRemoveUnusedClustersOnWorkSerializer();
+}
 
 void RegisterXdsResolver(CoreConfiguration::Builder* builder) {
   builder->resolver_registry()->RegisterResolverFactory(
