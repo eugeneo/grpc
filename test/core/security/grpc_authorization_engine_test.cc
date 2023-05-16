@@ -85,7 +85,7 @@ class TestAuditLoggerFactory : public AuditLoggerFactory {
 
   absl::string_view name() const override { return kLoggerName; }
   absl::StatusOr<std::unique_ptr<AuditLoggerFactory::Config>>
-  ParseAuditLoggerConfig(const Json&) override {
+  ParseAuditLoggerConfig(const experimental::Json&) override {
     Crash("unreachable");
     return nullptr;
   }

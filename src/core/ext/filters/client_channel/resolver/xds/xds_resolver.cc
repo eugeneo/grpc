@@ -150,7 +150,7 @@ class RouteData : public RefCounted<RouteData> {
     RefCountedPtr<ServiceConfig> method_config;
     std::vector<ClusterWeightState> weighted_cluster_state;
 
-    RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
+    explicit RouteEntry(const XdsRouteConfigResource::Route& r) : route(r) {}
 
     bool operator==(const RouteEntry& other) const;
   };
