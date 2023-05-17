@@ -21,6 +21,7 @@
 
 #include "absl/strings/string_view.h"
 
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/unique_type_name.h"
 #include "src/core/lib/service_config/service_config_call_data.h"
 
@@ -39,6 +40,31 @@ class XdsClusterAttribute
   UniqueTypeName type() const override { return TypeName(); }
 
   absl::string_view cluster_;
+};
+
+class ClusterRef;
+class RouteData;
+
+class XdsClusterDataAttribute
+    : public ServiceConfigCallData::CallAttributeInterface {
+ public:
+  static UniqueTypeName TypeName();
+
+  explicit XdsClusterDataAttribute(RefCountedPtr<RouteData> route_data,
+                                   void* route);
+
+  // This method can be called only once. The first call will release the
+  // reference to the cluster map, and subsequent calls will return nullptr.
+  RefCountedPtr<ClusterRef> LockAndGetCluster(absl::string_view cluster_name);
+
+  bool HasClusterForRoute(absl::string_view cluster_name) const;
+
+  UniqueTypeName type() const override { return TypeName(); }
+
+ private:
+  RefCountedPtr<RouteData> route_data_;
+  // No need to leak another type
+  void* opaque_route_;
 };
 }  // namespace grpc_core
 
