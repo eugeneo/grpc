@@ -486,11 +486,10 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
             resolver_.get(), this);
   }
   for (auto& route : resolver_->current_virtual_host_->routes) {
-    if (!route_data_
-             ->AddRouteEntry(
-                 route, resolver_->current_listener_.http_max_stream_duration,
-                 resolver_.get())
-             .ok()) {
+    *status = route_data_->AddRouteEntry(
+        route, resolver_->current_listener_.http_max_stream_duration,
+        resolver_.get());
+    if (!status->ok()) {
       return;
     }
   }
