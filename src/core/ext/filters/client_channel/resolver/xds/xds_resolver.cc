@@ -173,7 +173,7 @@ class RouteData : public RefCounted<RouteData> {
     return clusters_ == other.clusters_ && routes_ == other.routes_;
   }
 
-  RefCountedPtr<ClusterRef> Find(absl::string_view name) const {
+  RefCountedPtr<ClusterRef> FindClusterRef(absl::string_view name) const {
     auto it = clusters_.find(name);
     if (it == clusters_.end()) {
       return nullptr;
@@ -635,15 +635,14 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
     return absl::UnavailableError("Matching route has inappropriate action");
   }
   std::string cluster_name;
-  RefCountedPtr<ServiceConfig> method_config;
-  Match(
+  RefCountedPtr<ServiceConfig> method_config = Match(
       route_action->action,
       // cluster name
       [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName&
               action_cluster_name) {
         cluster_name =
             absl::StrCat("cluster:", action_cluster_name.cluster_name);
-        method_config = entry->method_config;
+        return entry->method_config;
       },
       // WeightedClusters
       [&](const std::vector<
@@ -671,7 +670,7 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
         GPR_ASSERT(entry->weighted_cluster_state[index].range_end > key);
         cluster_name = absl::StrCat(
             "cluster:", entry->weighted_cluster_state[index].cluster);
-        method_config = entry->weighted_cluster_state[index].method_config;
+        return entry->weighted_cluster_state[index].method_config;
       },
       // ClusterSpecifierPlugin
       [&](const XdsRouteConfigResource::Route::RouteAction::
@@ -679,9 +678,9 @@ absl::Status XdsResolver::XdsConfigSelector::GetCallConfig(
         cluster_name = absl::StrCat(
             "cluster_specifier_plugin:",
             cluster_specifier_plugin_name.cluster_specifier_plugin_name);
-        method_config = entry->method_config;
+        return entry->method_config;
       });
-  auto cluster = route_data_->Find(cluster_name);
+  auto cluster = route_data_->FindClusterRef(cluster_name);
   GPR_ASSERT(cluster != nullptr);
   // Generate a hash.
   absl::optional<uint64_t> hash;
@@ -1248,7 +1247,7 @@ RefCountedPtr<ClusterRef> XdsClusterDataAttribute::LockAndGetCluster(
   if (route_data_ == nullptr) {
     return nullptr;
   }
-  auto cluster = route_data_->Find(cluster_name);
+  auto cluster = route_data_->FindClusterRef(cluster_name);
   route_data_.reset();
   return cluster;
 }
