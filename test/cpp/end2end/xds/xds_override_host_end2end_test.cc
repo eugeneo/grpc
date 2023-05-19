@@ -27,6 +27,7 @@
 #include "src/core/ext/filters/client_channel/backup_poller.h"
 #include "src/core/lib/config/config_vars.h"
 #include "src/core/lib/gprpp/match.h"
+#include "src/proto/grpc/testing/xds/v3/aggregate_cluster.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/cluster.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/outlier_detection.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/router.grpc.pb.h"
@@ -121,13 +122,17 @@ class OverrideHostTest : public XdsEnd2endTest {
   std::vector<std::pair<std::string, std::string>>
   GetAffinityCookieHeaderForBackend(grpc_core::DebugLocation debug_location,
                                     size_t backend_index,
+                                    size_t max_requests = 0,
                                     RpcOptions rpc_options = RpcOptions()) {
     EXPECT_LT(backend_index, backends_.size());
     if (backend_index >= backends_.size()) {
       return {};
     }
     const auto& backend = backends_[backend_index];
-    for (size_t i = 0; i < backends_.size(); ++i) {
+    if (max_requests == 0) {
+      max_requests = backends_.size();
+    }
+    for (size_t i = 0; i < max_requests; ++i) {
       std::multimap<std::string, std::string> server_initial_metadata;
       grpc::Status status =
           SendRpc(rpc_options, nullptr, &server_initial_metadata);
@@ -149,6 +154,50 @@ class OverrideHostTest : public XdsEnd2endTest {
     ADD_FAILURE_AT(debug_location.file(), debug_location.line())
         << "Desired backend had not been hit";
     return {};
+  }
+
+  void SetClusterResource(absl::string_view cluster_name,
+                          absl::string_view service_name) {
+    Cluster cluster = default_cluster_;
+    cluster.set_name(cluster_name);
+    cluster.mutable_eds_cluster_config()->set_service_name(service_name);
+    balancer_->ads_service()->SetCdsResource(cluster);
+  }
+
+  struct ClusterData {
+    const char* clusterName;
+    uint32_t weight;
+  };
+
+  RouteConfiguration BuildRouteConfiguration(
+      const std::vector<ClusterData>& clusters) {
+    RouteConfiguration new_route_config = default_route_config_;
+    auto* route1 = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
+    route1->mutable_match()->set_prefix("");
+    for (const auto& cluster : clusters) {
+      auto* weighted_cluster =
+          route1->mutable_route()->mutable_weighted_clusters()->add_clusters();
+      weighted_cluster->set_name(cluster.clusterName);
+      weighted_cluster->mutable_weight()->set_value(cluster.weight);
+    }
+    return new_route_config;
+  }
+
+  void SetEdsCdsResources(const char* cluster_name,
+                          const char* eds_service_name, size_t start_index,
+                          size_t end_index) {
+    balancer_->ads_service()->SetEdsResource(BuildEdsResource(
+        EdsResourceArgs({{"locality0",
+                          CreateEndpointsForBackends(start_index, end_index)}}),
+        eds_service_name));
+    SetClusterResource(cluster_name, eds_service_name);
+  }
+
+  static double BackendRequestPercentage(
+      const std::unique_ptr<BackendServerThread>& backend,
+      size_t num_requests) {
+    return static_cast<double>(backend->backend_service()->request_count()) /
+           num_requests;
   }
 };
 
@@ -267,6 +316,140 @@ TEST_P(OverrideHostTest, DrainingExcludedFromOverrideSet) {
   EXPECT_EQ(2, backends_[2]->backend_service()->request_count());
   ResetBackendCounters();
 }
+
+TEST_P(OverrideHostTest, HostOverridden) {
+  CreateAndStartBackends(4);
+  const char* kNewCluster1Name = "new_cluster_1";
+  const char* kNewEdsService1Name = "new_eds_service_name_1";
+  const char* kNewCluster2Name = "new_cluster_2";
+  const char* kNewEdsService2Name = "new_eds_service_name_2";
+  const uint32_t kWeight1 = std::numeric_limits<uint32_t>::max() / 4;
+  const uint32_t kWeight2 = std::numeric_limits<uint32_t>::max() - kWeight1;
+  const double kErrorTolerance = 0.025;
+  const double kWeight1Percent =
+      static_cast<double>(kWeight1) / std::numeric_limits<uint32_t>::max();
+  const double kWeight2Percent =
+      static_cast<double>(kWeight2) / std::numeric_limits<uint32_t>::max();
+  const size_t kNumEchoRpcs =
+      ComputeIdealNumRpcs(kWeight2Percent, kErrorTolerance);
+  // Populate EDS and CDS resources.
+  SetEdsCdsResources(kNewCluster1Name, kNewEdsService1Name, 0, 1);
+  SetEdsCdsResources(kNewCluster2Name, kNewEdsService2Name, 1, 4);
+  // Populating Route Configurations for LDS.
+  SetListenerAndRouteConfiguration(
+      balancer_.get(), BuildListenerWithStatefulSessionFilter(),
+      BuildRouteConfiguration(
+          {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
+  WaitForAllBackends(DEBUG_LOCATION, 0, 4);
+  // Setup done, send requests and check that they are distributed across
+  // backends
+  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs);
+  // Cluster with a single backed, all cluster requests end up there
+  EXPECT_THAT(BackendRequestPercentage(backends_[0], kNumEchoRpcs),
+              ::testing::DoubleNear(kWeight1Percent, kErrorTolerance));
+  // Cluster with 3 backends. Backends get distributed there
+  EXPECT_THAT(BackendRequestPercentage(backends_[1], kNumEchoRpcs),
+              ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
+  EXPECT_THAT(BackendRequestPercentage(backends_[2], kNumEchoRpcs),
+              ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
+  EXPECT_THAT(BackendRequestPercentage(backends_[3], kNumEchoRpcs),
+              ::testing::DoubleNear(kWeight2Percent / 3, kErrorTolerance));
+  auto session_cookie =
+      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2, 10);
+  ASSERT_FALSE(session_cookie.empty());
+  // All requests go to the backend we requested.
+  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
+                 RpcOptions().set_metadata(session_cookie));
+  EXPECT_EQ(backends_[0]->backend_service()->request_count(), 0);
+  EXPECT_EQ(backends_[1]->backend_service()->request_count(), 0);
+  EXPECT_EQ(backends_[2]->backend_service()->request_count(), kNumEchoRpcs);
+  EXPECT_EQ(backends_[3]->backend_service()->request_count(), 0);
+}
+
+TEST_P(OverrideHostTest, HostGone) {
+  CreateAndStartBackends(4);
+  const char* kNewCluster1Name = "new_cluster_1";
+  const char* kNewEdsService1Name = "new_eds_service_name_1";
+  const char* kNewCluster2Name = "new_cluster_2";
+  const char* kNewEdsService2Name = "new_eds_service_name_2";
+  const uint32_t kWeight1 = std::numeric_limits<uint32_t>::max() / 4;
+  const uint32_t kWeight2 = std::numeric_limits<uint32_t>::max() - kWeight1;
+  const double kErrorTolerance = 0.025;
+  const double kWeight2Percent =
+      static_cast<double>(kWeight2) / std::numeric_limits<uint32_t>::max();
+  const size_t kNumEchoRpcs =
+      ComputeIdealNumRpcs(kWeight2Percent, kErrorTolerance);
+  // Populate EDS and CDS resources.
+  SetEdsCdsResources(kNewCluster1Name, kNewEdsService1Name, 0, 1);
+  SetEdsCdsResources(kNewCluster2Name, kNewEdsService2Name, 1, 4);
+  // Populating Route Configurations for LDS.
+  SetListenerAndRouteConfiguration(
+      balancer_.get(), BuildListenerWithStatefulSessionFilter(),
+      BuildRouteConfiguration(
+          {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
+  WaitForAllBackends(DEBUG_LOCATION, 0, 4);
+  auto session_cookie =
+      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 3, 10);
+  ASSERT_FALSE(session_cookie.empty());
+  // Remove backends[1] from cluster 2
+  SetEdsCdsResources(kNewCluster2Name, kNewEdsService2Name, 1, 3);
+  WaitForAllBackends(DEBUG_LOCATION, 0, 3);
+  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
+                 RpcOptions().set_metadata(session_cookie));
+  // Traffic goes to a second cluster, where it is equally distributed between
+  // the two remaining hosts
+  EXPECT_THAT(BackendRequestPercentage(backends_[1], kNumEchoRpcs),
+              ::testing::DoubleNear(.5, kErrorTolerance));
+  EXPECT_THAT(BackendRequestPercentage(backends_[2], kNumEchoRpcs),
+              ::testing::DoubleNear(.5, kErrorTolerance));
+  // There will still be some traffic arriving, before the xDS update is applied
+  EXPECT_THAT(BackendRequestPercentage(backends_[3], kNumEchoRpcs),
+              ::testing::DoubleNear(0, kErrorTolerance));
+}
+
+TEST_P(OverrideHostTest, ClusterGoneHostStays) {
+  CreateAndStartBackends(2);
+  const char* kNewCluster1Name = "new_cluster_1";
+  const char* kNewEdsService1Name = "new_eds_service_name_1";
+  const char* kNewCluster2Name = "new_cluster_2";
+  const char* kNewEdsService2Name = "new_eds_service_name_2";
+  const uint32_t kWeight1 = std::numeric_limits<uint32_t>::max() / 2;
+  const uint32_t kWeight2 = std::numeric_limits<uint32_t>::max() - kWeight1;
+  const double kErrorTolerance = 0.025;
+  const double kWeight2Percent =
+      static_cast<double>(kWeight2) / std::numeric_limits<uint32_t>::max();
+  const size_t kNumEchoRpcs =
+      ComputeIdealNumRpcs(kWeight2Percent, kErrorTolerance);
+  // Populate EDS and CDS resources.
+  SetEdsCdsResources(kNewCluster1Name, kNewEdsService1Name, 0, 1);
+  SetEdsCdsResources(kNewCluster2Name, kNewEdsService2Name, 1, 2);
+  // Populating Route Configurations for LDS.
+  SetListenerAndRouteConfiguration(
+      balancer_.get(), BuildListenerWithStatefulSessionFilter(),
+      BuildRouteConfiguration(
+          {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
+  WaitForAllBackends(DEBUG_LOCATION, 0, 2);
+  auto session_cookie =
+      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 10);
+  ASSERT_FALSE(session_cookie.empty());
+  SetListenerAndRouteConfiguration(
+      balancer_.get(), BuildListenerWithStatefulSessionFilter(),
+      BuildRouteConfiguration({{kNewCluster1Name, kWeight1}}));
+  // Cluster is gone
+  balancer_->ads_service()->UnsetResource(kEdsTypeUrl, kNewEdsService1Name);
+  balancer_->ads_service()->UnsetResource(kEdsTypeUrl, kNewEdsService2Name);
+  // Both backends are in the same cluster
+  SetEdsCdsResources(kNewCluster1Name, kNewEdsService1Name, 0, 2);
+  WaitForAllBackends(DEBUG_LOCATION, 0, 2);
+  CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
+                 RpcOptions().set_metadata(session_cookie));
+  // Traffic is equally divided across both backends
+  EXPECT_THAT(BackendRequestPercentage(backends_[0], kNumEchoRpcs),
+              ::testing::DoubleNear(.5, kErrorTolerance));
+  EXPECT_THAT(BackendRequestPercentage(backends_[1], kNumEchoRpcs),
+              ::testing::DoubleNear(.5, kErrorTolerance));
+}
+
 }  // namespace
 }  // namespace testing
 }  // namespace grpc
