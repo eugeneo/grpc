@@ -9331,6 +9331,16 @@ targets:
   deps:
   - grpc++
   - grpc_test_util
+- name: load_config_test
+  gtest: true
+  build: test
+  language: c++
+  headers: []
+  src:
+  - test/core/config/load_config_test.cc
+  deps:
+  - grpc
+  uses_polling: false
 - name: lock_free_event_test
   gtest: true
   build: test
@@ -9520,7 +9530,7 @@ targets:
   - test/core/util/subprocess.h
   - test/core/util/tracer_util.h
   src:
-  - test/core/security/matchers_test.cc
+  - test/core/matchers/matchers_test.cc
   - test/core/util/cmdline.cc
   - test/core/util/fuzzer_util.cc
   - test/core/util/grpc_profiler.cc
