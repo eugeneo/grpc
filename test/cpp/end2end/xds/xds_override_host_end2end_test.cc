@@ -443,11 +443,11 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
   WaitForAllBackends(DEBUG_LOCATION, 0, 2);
   CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
                  RpcOptions().set_metadata(session_cookie));
-  // Traffic is equally divided across both backends
+  // Traffic is still delivered to the same host
   EXPECT_THAT(BackendRequestPercentage(backends_[0], kNumEchoRpcs),
-              ::testing::DoubleNear(.5, kErrorTolerance));
+              ::testing::DoubleNear(0, kErrorTolerance));
   EXPECT_THAT(BackendRequestPercentage(backends_[1], kNumEchoRpcs),
-              ::testing::DoubleNear(.5, kErrorTolerance));
+              ::testing::DoubleNear(1, kErrorTolerance));
 }
 
 }  // namespace

@@ -1262,7 +1262,6 @@ bool XdsClusterDataAttribute::HasClusterForRoute(
   if (route_action == nullptr) {
     return false;
   }
-  // ClusterName, std::vector<ClusterWeight>, ClusterSpecifierPluginName
   return Match(
       route_action->action,
       [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName& name) {

@@ -35,6 +35,7 @@ class XdsClusterAttribute
   explicit XdsClusterAttribute(absl::string_view cluster) : cluster_(cluster) {}
 
   absl::string_view cluster() const { return cluster_; }
+  void set_cluster(absl::string_view cluster) { cluster_ = cluster; }
 
  private:
   UniqueTypeName type() const override { return TypeName(); }

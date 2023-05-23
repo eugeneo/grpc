@@ -65,11 +65,6 @@ class StatefulSessionFilter : public ChannelFilter {
 
  private:
   explicit StatefulSessionFilter(ChannelFilter::Args filter_args);
-
-  absl::optional<absl::string_view> GetOverrideHostFromCookie(
-      const ClientMetadataHandle& initial_metadata,
-      absl::string_view cookie_name);
-
   // The relative index of instances of the same filter.
   const size_t index_;
   // Index of the service config parser.
