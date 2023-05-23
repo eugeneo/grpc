@@ -1095,7 +1095,6 @@ class XdsResolverFactory : public ResolverFactory {
 // XdsResolver::XdsRouteStateAttributeImpl
 bool XdsResolver::XdsRouteStateAttributeImpl::HasClusterForRoute(
     absl::string_view cluster_name) const {
-  auto prefixless = absl::StripPrefix(cluster_name, "cluster:");
   // Found a route match
   const auto* route_action =
       absl::get_if<XdsRouteConfigResource::Route::RouteAction>(
@@ -1106,23 +1105,20 @@ bool XdsResolver::XdsRouteStateAttributeImpl::HasClusterForRoute(
   return Match(
       route_action->action,
       [&](const XdsRouteConfigResource::Route::RouteAction::ClusterName& name) {
-        return name.cluster_name == prefixless;
+        return name.cluster_name == cluster_name;
       },
       [&](const std::vector<
           XdsRouteConfigResource::Route::RouteAction::ClusterWeight>&
               clusters) {
         for (const auto& cluster : clusters) {
-          if (cluster.name == prefixless) {
+          if (cluster.name == cluster_name) {
             return true;
           }
         }
         return false;
       },
       [&](const XdsRouteConfigResource::Route::RouteAction::
-              ClusterSpecifierPluginName& name) {
-        return absl::StrCat("cluster_specifier_plugin:",
-                            name.cluster_specifier_plugin_name) == cluster_name;
-      });
+              ClusterSpecifierPluginName& name) { return false; });
 }
 
 // This method can be called only once. The first call will release the

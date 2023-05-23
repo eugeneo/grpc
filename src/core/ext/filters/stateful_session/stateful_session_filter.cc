@@ -145,7 +145,9 @@ absl::string_view GetClusterToUse(
     auto route_data =
         service_config_call_data->GetCallAttribute<XdsRouteStateAttribute>();
     GPR_ASSERT(route_data != nullptr);
-    if (route_data->HasClusterForRoute(cluster_from_cookie)) {
+    if (route_data->HasClusterForRoute(
+            absl::StripPrefix(cluster_from_cookie, kClusterPrefix))) {
+      // This string is already allocated on arena
       cluster_to_use = cluster_from_cookie;
     } else {
       cluster_to_use = ToArena(cluster);
