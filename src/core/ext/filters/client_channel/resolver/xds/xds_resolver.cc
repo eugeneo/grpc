@@ -1114,7 +1114,7 @@ bool XdsResolver::XdsRouteStateAttributeImpl::HasClusterForRoute(
         return false;
       },
       [&](const XdsRouteConfigResource::Route::RouteAction::
-              ClusterSpecifierPluginName& name) { return false; });
+              ClusterSpecifierPluginName& /* name */) { return false; });
 }
 
 // This method can be called only once. The first call will release the
