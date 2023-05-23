@@ -171,11 +171,6 @@ class XdsResolver : public Resolver {
         DEBUG_LOCATION);
   }
 
-  absl::StatusOr<RefCountedPtr<ServiceConfig>> CreateMethodConfig(
-      const XdsRouteConfigResource::Route& route,
-      const XdsRouteConfigResource::Route::RouteAction::ClusterWeight*
-          cluster_weight);
-
  private:
   class ListenerWatcher : public XdsListenerResourceType::WatcherInterface {
    public:
@@ -240,7 +235,7 @@ class XdsResolver : public Resolver {
   // XdsConfigSelector. A ref to this map will be taken by each call processed
   // by the XdsConfigSelector, stored in a the call's call attributes, and later
   // unreffed by the ClusterSelection filter.
-  class RouteData : public RefCounted<RouteData> {
+  class RouteConfigData : public RefCounted<RouteConfigData> {
    public:
     struct RouteEntry {
       struct ClusterWeightState {
@@ -260,21 +255,12 @@ class XdsResolver : public Resolver {
       bool operator==(const RouteEntry& other) const;
     };
 
-    static absl::StatusOr<RefCountedPtr<RouteData>> BuildRouteData(
+    static absl::StatusOr<RefCountedPtr<RouteConfigData>> Create(
         XdsResolver* resolver,
         const std::vector<XdsRouteConfigResource::Route>& routes,
         const Duration& default_max_stream_duration);
 
-    // Reserve the necessary entries up-front to avoid reallocation as we add
-    // elements. This is necessary because the string_view in the entry's
-    // weighted_cluster_state field points to the memory in the route field, so
-    // moving the entry in a reallocation will cause the string_view to point to
-    // invalid data.
-    explicit RouteData(size_t initial_route_table_capacity) {
-      routes_.reserve(initial_route_table_capacity);
-    }
-
-    bool operator==(const RouteData& other) const {
+    bool operator==(const RouteConfigData& other) const {
       return clusters_ == other.clusters_ && routes_ == other.routes_;
     }
 
@@ -295,11 +281,6 @@ class XdsResolver : public Resolver {
     absl::Status AddRouteEntry(const XdsRouteConfigResource::Route& route,
                                const Duration& default_max_stream_duration,
                                XdsResolver* resolver);
-
-    const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
-        size_t index) const {
-      return routes_[index].route.matchers;
-    }
 
     std::map<absl::string_view, RefCountedPtr<ClusterRef>> clusters_;
     std::vector<RouteEntry> routes_;
@@ -348,7 +329,7 @@ class XdsResolver : public Resolver {
 
   class XdsConfigSelector : public ConfigSelector {
    public:
-    XdsConfigSelector(RefCountedPtr<RouteData> data,
+    XdsConfigSelector(RefCountedPtr<RouteConfigData> data,
                       RefCountedPtr<XdsResolver> resolver);
     ~XdsConfigSelector() override;
 
@@ -368,14 +349,15 @@ class XdsResolver : public Resolver {
 
    private:
     RefCountedPtr<XdsResolver> resolver_;
-    RefCountedPtr<RouteData> route_data_;
+    RefCountedPtr<RouteConfigData> route_data_;
     std::vector<const grpc_channel_filter*> filters_;
   };
 
   class XdsRouteStateAttributeImpl : public XdsRouteStateAttribute {
    public:
-    explicit XdsRouteStateAttributeImpl(RefCountedPtr<RouteData> route_data,
-                                        RouteData::RouteEntry* route)
+    explicit XdsRouteStateAttributeImpl(
+        RefCountedPtr<RouteConfigData> route_data,
+        RouteConfigData::RouteEntry* route)
         : route_data_(std::move(route_data)), route_(route) {}
 
     // This method can be called only once. The first call will release
@@ -386,9 +368,9 @@ class XdsResolver : public Resolver {
     bool HasClusterForRoute(absl::string_view cluster_name) const override;
 
    private:
-    RefCountedPtr<RouteData> route_data_;
+    RefCountedPtr<RouteConfigData> route_data_;
     // No need to leak another type
-    RouteData::RouteEntry* route_;
+    RouteConfigData::RouteEntry* route_;
   };
 
   class ClusterSelectionFilter : public ChannelFilter {
@@ -452,6 +434,11 @@ class XdsResolver : public Resolver {
     return it->second->Ref();
   }
 
+  absl::StatusOr<RefCountedPtr<ServiceConfig>> CreateMethodConfig(
+      const XdsRouteConfigResource::Route& route,
+      const XdsRouteConfigResource::Route::RouteAction::ClusterWeight*
+          cluster_weight);
+
   std::shared_ptr<WorkSerializer> work_serializer_;
   std::unique_ptr<ResultHandler> result_handler_;
   ChannelArgs args_;
@@ -498,7 +485,8 @@ const grpc_channel_filter XdsResolver::ClusterSelectionFilter::kFilter =
 //
 
 XdsResolver::XdsConfigSelector::XdsConfigSelector(
-    RefCountedPtr<RouteData> route_data, RefCountedPtr<XdsResolver> resolver)
+    RefCountedPtr<RouteConfigData> route_data,
+    RefCountedPtr<XdsResolver> resolver)
     : resolver_(std::move(resolver)), route_data_(std::move(route_data)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
     gpr_log(GPR_INFO, "[xds_resolver %p] creating XdsConfigSelector %p",
@@ -1030,8 +1018,8 @@ void XdsResolver::GenerateResult() {
   // First create XdsConfigSelector, which may add new entries to the cluster
   // state map, and then CreateServiceConfig for LB policies.
   auto status =
-      RouteData::BuildRouteData(this, current_virtual_host_->routes,
-                                current_listener_.http_max_stream_duration);
+      RouteConfigData::Create(this, current_virtual_host_->routes,
+                              current_listener_.http_max_stream_duration);
   if (!status.ok()) {
     OnError("could not create ConfigSelector",
             absl::UnavailableError(status.status().message()));
@@ -1107,7 +1095,7 @@ bool XdsResolver::XdsRouteStateAttributeImpl::HasClusterForRoute(
   // Found a route match
   const auto* route_action =
       absl::get_if<XdsRouteConfigResource::Route::RouteAction>(
-          &static_cast<RouteData::RouteEntry*>(route_)->route.action);
+          &static_cast<RouteConfigData::RouteEntry*>(route_)->route.action);
   if (route_action == nullptr) {
     return false;
   }
@@ -1146,40 +1134,41 @@ XdsResolver::XdsRouteStateAttributeImpl::LockAndGetCluster(
   return cluster;
 }
 
-// XdsResolver::RouteData
+// XdsResolver::RouteConfigData
 // Implementation of XdsRouting::RouteListIterator for getting the matching
 // route for a request.
-class XdsResolver::RouteData::RouteListIterator
+class XdsResolver::RouteConfigData::RouteListIterator
     : public XdsRouting::RouteListIterator {
  public:
-  explicit RouteListIterator(const RouteData* route_table)
+  explicit RouteListIterator(const RouteConfigData* route_table)
       : route_table_(route_table) {}
 
   size_t Size() const override { return route_table_->routes_.size(); }
 
   const XdsRouteConfigResource::Route::Matchers& GetMatchersForRoute(
       size_t index) const override {
-    return route_table_->GetMatchersForRoute(index);
+    return route_table_->routes_[index].route.matchers;
   }
 
  private:
-  const RouteData* route_table_;
+  const RouteConfigData* route_table_;
 };
 
-bool XdsResolver::RouteData::RouteEntry::ClusterWeightState::operator==(
+bool XdsResolver::RouteConfigData::RouteEntry::ClusterWeightState::operator==(
     const ClusterWeightState& other) const {
   return range_end == other.range_end && cluster == other.cluster &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-bool XdsResolver::RouteData::RouteEntry::operator==(
-    const XdsResolver::RouteData::RouteEntry& other) const {
+bool XdsResolver::RouteConfigData::RouteEntry::operator==(
+    const XdsResolver::RouteConfigData::RouteEntry& other) const {
   return route == other.route &&
          weighted_cluster_state == other.weighted_cluster_state &&
          MethodConfigsEqual(method_config.get(), other.method_config.get());
 }
 
-XdsResolver::RouteData::RouteEntry* XdsResolver::RouteData::GetRouteForRequest(
+XdsResolver::RouteConfigData::RouteEntry*
+XdsResolver::RouteConfigData::GetRouteForRequest(
     absl::string_view path, grpc_metadata_batch* initial_metadata) {
   auto route_index = XdsRouting::GetRouteForRequest(RouteListIterator(this),
                                                     path, initial_metadata);
@@ -1189,12 +1178,18 @@ XdsResolver::RouteData::RouteEntry* XdsResolver::RouteData::GetRouteForRequest(
   return &routes_[*route_index];
 }
 
-absl::StatusOr<RefCountedPtr<XdsResolver::RouteData>>
-XdsResolver::RouteData::BuildRouteData(
+absl::StatusOr<RefCountedPtr<XdsResolver::RouteConfigData>>
+XdsResolver::RouteConfigData::Create(
     XdsResolver* resolver,
     const std::vector<XdsRouteConfigResource::Route>& routes,
     const Duration& default_max_stream_duration) {
-  auto data = MakeRefCounted<RouteData>(routes.size());
+  auto data = MakeRefCounted<RouteConfigData>();
+  // Reserve the necessary entries up-front to avoid reallocation as we add
+  // elements. This is necessary because the string_view in the entry's
+  // weighted_cluster_state field points to the memory in the route field, so
+  // moving the entry in a reallocation will cause the string_view to point to
+  // invalid data.
+  data->routes_.reserve(routes.size());
   for (auto& route : routes) {
     absl::Status status =
         data->AddRouteEntry(route, default_max_stream_duration, resolver);
@@ -1205,7 +1200,7 @@ XdsResolver::RouteData::BuildRouteData(
   return data;
 }
 
-absl::Status XdsResolver::RouteData::AddRouteEntry(
+absl::Status XdsResolver::RouteConfigData::AddRouteEntry(
     const XdsRouteConfigResource::Route& route,
     const Duration& default_max_stream_duration, XdsResolver* resolver) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
@@ -1249,7 +1244,8 @@ absl::Status XdsResolver::RouteData::AddRouteEntry(
                 weighted_clusters) {
           uint32_t end = 0;
           for (const auto& weighted_cluster : weighted_clusters) {
-            RouteData::RouteEntry::ClusterWeightState cluster_weight_state;
+            RouteConfigData::RouteEntry::ClusterWeightState
+                cluster_weight_state;
             auto result = resolver->CreateMethodConfig(route_entry->route,
                                                        &weighted_cluster);
             if (!result.ok()) {
