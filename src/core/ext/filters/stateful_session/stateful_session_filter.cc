@@ -106,18 +106,15 @@ void MaybeUpdateServerInitialMetadata(
     // No changes, keep the same set-cookie header.
     return;
   }
-  std::string new_value;
-  if (actual_cluster.empty()) {
-    new_value = absl::Base64Escape(peer_string->as_string_view());
-  } else {
-    new_value = absl::Base64Escape(
-        absl::StrCat(peer_string->as_string_view(), ";", actual_cluster));
+  std::string new_value(peer_string->as_string_view());
+  if (!actual_cluster.empty()) {
+    absl::StrAppend(&new_value, ";", actual_cluster);
   }
   if (new_value == cookie_value) {
     return;
   }
-  std::vector<std::string> parts = {
-      absl::StrCat(*cookie_config->name, "=", new_value, "; HttpOnly")};
+  std::vector<std::string> parts = {absl::StrCat(
+      *cookie_config->name, "=", absl::Base64Escape(new_value), "; HttpOnly")};
   if (!cookie_config->path.empty()) {
     parts.emplace_back(absl::StrCat("Path=", cookie_config->path));
   }
@@ -146,7 +143,7 @@ absl::string_view GetClusterToUse(
   }
   if (!cluster_from_cookie.empty()) {
     auto route_data =
-        service_config_call_data->GetCallAttribute<XdsClusterDataAttribute>();
+        service_config_call_data->GetCallAttribute<XdsRouteStateAttribute>();
     GPR_ASSERT(route_data != nullptr);
     if (route_data->HasClusterForRoute(cluster_from_cookie)) {
       cluster_to_use = cluster_from_cookie;

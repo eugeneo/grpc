@@ -43,29 +43,12 @@ class XdsClusterAttribute
   absl::string_view cluster_;
 };
 
-class ClusterRef;
-class RouteData;
-
-class XdsClusterDataAttribute
+class XdsRouteStateAttribute
     : public ServiceConfigCallData::CallAttributeInterface {
  public:
   static UniqueTypeName TypeName();
-
-  explicit XdsClusterDataAttribute(RefCountedPtr<RouteData> route_data,
-                                   void* route);
-
-  // This method can be called only once. The first call will release the
-  // reference to the cluster map, and subsequent calls will return nullptr.
-  RefCountedPtr<ClusterRef> LockAndGetCluster(absl::string_view cluster_name);
-
-  bool HasClusterForRoute(absl::string_view cluster_name) const;
-
+  virtual bool HasClusterForRoute(absl::string_view cluster_name) const = 0;
   UniqueTypeName type() const override { return TypeName(); }
-
- private:
-  RefCountedPtr<RouteData> route_data_;
-  // No need to leak another type
-  void* opaque_route_;
 };
 }  // namespace grpc_core
 
