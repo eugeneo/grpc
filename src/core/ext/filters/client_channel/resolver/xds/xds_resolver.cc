@@ -162,15 +162,6 @@ class XdsResolver : public Resolver {
     if (xds_client_ != nullptr) xds_client_->ResetBackoff();
   }
 
-  void MaybeRemoveUnusedClustersOnWorkSerializer() {
-    work_serializer_->Run(
-        [resolver = Ref()]() mutable {
-          static_cast<XdsResolver*>(resolver.get())
-              ->MaybeRemoveUnusedClusters();
-        },
-        DEBUG_LOCATION);
-  }
-
  private:
   class ListenerWatcher : public XdsListenerResourceType::WatcherInterface {
    public:
@@ -221,7 +212,12 @@ class XdsResolver : public Resolver {
         : resolver_(std::move(resolver)), cluster_name_(cluster_name) {}
 
     void Orphan() override {
-      resolver_->MaybeRemoveUnusedClustersOnWorkSerializer();
+      resolver_->work_serializer_->Run(
+          [resolver = std::move(resolver_)]() mutable {
+            static_cast<XdsResolver*>(resolver.get())
+                ->MaybeRemoveUnusedClusters();
+          },
+          DEBUG_LOCATION);
     }
 
     const std::string& cluster_name() const { return cluster_name_; }
