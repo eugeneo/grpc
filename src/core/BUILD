@@ -4589,6 +4589,8 @@ grpc_cc_library(
         "ext/filters/client_channel/lb_policy/pick_first/pick_first.cc",
     ],
     external_deps = [
+        "absl/algorithm:container",
+        "absl/random",
         "absl/status",
         "absl/status:statusor",
         "absl/strings",
@@ -4597,8 +4599,10 @@ grpc_cc_library(
     language = "c++",
     deps = [
         "channel_args",
+        "env",
         "grpc_lb_subchannel_list",
         "json",
+        "json_object_loader",
         "lb_policy",
         "lb_policy_factory",
         "subchannel_interface",
