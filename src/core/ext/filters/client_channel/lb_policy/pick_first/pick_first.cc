@@ -92,8 +92,8 @@ class PickFirstConfig : public LoadBalancingPolicy::Config {
   absl::string_view name() const override { return kPickFirst; }
   bool shuffle_addresses() const { return shuffle_addresses_; }
 
-  void JsonPostLoad(const Json& json, const JsonArgs& args,
-                    ValidationErrors* errors) {
+  void JsonPostLoad(const Json& /* json */, const JsonArgs& /* args */,
+                    ValidationErrors* /* errors */) {
     if (!ShufflePickFirstEnabled()) {
       shuffle_addresses_ = false;
     }
