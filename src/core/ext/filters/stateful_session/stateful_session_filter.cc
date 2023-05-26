@@ -85,14 +85,16 @@ StatefulSessionFilter::StatefulSessionFilter(ChannelFilter::Args filter_args)
 
 namespace {
 
-absl::string_view ToArena(absl::string_view src) {
+constexpr absl::string_view kClusterPrefix = "cluster:";
+
+absl::string_view AllocateStringOnArena(absl::string_view src) {
   if (src.empty()) {
     return src;
   }
-  char* host_allocated_value =
+  char* arena_allocated_value =
       static_cast<char*>(GetContext<Arena>()->Alloc(src.size()));
-  memcpy(host_allocated_value, src.data(), src.size());
-  return absl::string_view(host_allocated_value, src.size());
+  memcpy(arena_allocated_value, src.data(), src.size());
+  return absl::string_view(arena_allocated_value, src.size());
 }
 
 // Adds the set-cookie header to the server initial metadata if needed.
@@ -132,29 +134,25 @@ void MaybeUpdateServerInitialMetadata(
 absl::string_view GetClusterToUse(
     absl::string_view cluster_from_cookie,
     ServiceConfigCallData* service_config_call_data) {
-  static constexpr absl::string_view kClusterPrefix = "cluster:";
   auto cluster_attribute =
       service_config_call_data->GetCallAttribute<XdsClusterAttribute>();
   GPR_ASSERT(cluster_attribute != nullptr);
-  auto cluster = cluster_attribute->cluster();
-  auto cluster_to_use = cluster;
-  if (!absl::StartsWith(cluster, kClusterPrefix)) {
+  auto cluster_to_use = cluster_attribute->cluster();
+  if (!absl::ConsumePrefix(&cluster_to_use, kClusterPrefix)) {
     return absl::string_view();
   }
   if (!cluster_from_cookie.empty()) {
     auto route_data =
         service_config_call_data->GetCallAttribute<XdsRouteStateAttribute>();
     GPR_ASSERT(route_data != nullptr);
-    if (route_data->HasClusterForRoute(
-            absl::StripPrefix(cluster_from_cookie, kClusterPrefix))) {
+    if (route_data->HasClusterForRoute(cluster_from_cookie)) {
       // This string is already allocated on arena
       cluster_to_use = cluster_from_cookie;
-    } else {
-      cluster_to_use = ToArena(cluster);
     }
   }
-  cluster_attribute->set_cluster(cluster_to_use);
-  return cluster_to_use;
+  cluster_attribute->set_cluster(
+      AllocateStringOnArena(absl::StrCat(kClusterPrefix, cluster_to_use)));
+  return absl::StripPrefix(cluster_attribute->cluster(), kClusterPrefix);
 }
 
 std::string GetCookieValue(const ClientMetadataHandle& client_initial_metadata,
@@ -228,7 +226,7 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
     return next_promise_factory(std::move(call_args));
   }
   // Base64-decode cookie value.
-  absl::string_view cookie_value = ToArena(
+  absl::string_view cookie_value = AllocateStringOnArena(
       GetCookieValue(call_args.client_initial_metadata, *cookie_config->name));
   std::pair<absl::string_view, absl::string_view> host_cluster =
       absl::StrSplit(cookie_value, absl::MaxSplits(';', 1));
@@ -240,14 +238,15 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
       GetClusterToUse(host_cluster.second, service_config_call_data);
   // Intercept server initial metadata.
   call_args.server_initial_metadata->InterceptAndMap(
-      [=](ServerMetadataHandle md) {
+      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
         // Add cookie to server initial metadata if needed.
         MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
                                          cluster_name, md.get());
         return md;
       });
   return Map(next_promise_factory(std::move(call_args)),
-             [=](ServerMetadataHandle md) {
+             [cookie_config, cookie_value,
+              cluster_name](ServerMetadataHandle md) {
                // If we got a Trailers-Only response, then add the
                // cookie to the trailing metadata instead of the
                // initial metadata.
