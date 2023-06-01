@@ -396,7 +396,7 @@ class XdsResolver : public Resolver {
 
     // Construct a promise for one call.
     ArenaPromise<ServerMetadataHandle> MakeCallPromise(
-        CallArgs call_args, NextPromiseFactory next_promise_factory);
+        CallArgs call_args, NextPromiseFactory next_promise_factory) override;
 
    private:
     explicit ClusterSelectionFilter(ChannelFilter::Args filter_args)
