@@ -266,18 +266,18 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
                                          cluster_name, md.get());
         return md;
       });
-  return Map(next_promise_factory(std::move(call_args)),
-             [cookie_config, cookie_value,
-              cluster_name](ServerMetadataHandle md) {
-               // If we got a Trailers-Only response, then add the
-               // cookie to the trailing metadata instead of the
-               // initial metadata.
-               if (md->get(GrpcTrailersOnly()).value_or(false)) {
-                 MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
-                                                  cluster_name, md.get());
-               }
-               return md;
-             });
+  return Map(
+      next_promise_factory(std::move(call_args)),
+      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
+        // If we got a Trailers-Only response, then add the
+        // cookie to the trailing metadata instead of the
+        // initial metadata.
+        if (md->get(GrpcTrailersOnly()).value_or(false)) {
+          MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
+                                           cluster_name, md.get());
+        }
+        return md;
+      });
 }
 
 void StatefulSessionFilterRegister(CoreConfiguration::Builder* builder) {
