@@ -25,13 +25,13 @@
 cmake_minimum_required(VERSION 3.8)
 
 set(PACKAGE_NAME          "grpc")
-set(PACKAGE_VERSION       "1.56.0-dev")
-set(gRPC_CORE_VERSION     "32.0.0")
-set(gRPC_CORE_SOVERSION   "32")
-set(gRPC_CPP_VERSION      "1.56.0-dev")
-set(gRPC_CPP_SOVERSION    "1.56")
-set(gRPC_CSHARP_VERSION   "2.56.0-dev")
-set(gRPC_CSHARP_SOVERSION "2.56")
+set(PACKAGE_VERSION       "1.57.0-dev")
+set(gRPC_CORE_VERSION     "33.0.0")
+set(gRPC_CORE_SOVERSION   "33")
+set(gRPC_CPP_VERSION      "1.57.0-dev")
+set(gRPC_CPP_SOVERSION    "1.57")
+set(gRPC_CSHARP_VERSION   "2.57.0-dev")
+set(gRPC_CSHARP_SOVERSION "2.57")
 set(PACKAGE_STRING        "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_TARNAME       "${PACKAGE_NAME}-${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT     "https://github.com/grpc/grpc/issues/")
@@ -299,7 +299,7 @@ endif()
 if (gRPC_XDS_USER_AGENT_IS_CSHARP)
   # The value of the defines needs to contain quotes.
   # See https://github.com/grpc/grpc/blob/fbf32836a418cc84f58786700273b65cb9174e1d/src/core/ext/xds/xds_api.cc#L854
-  add_definitions("-DGRPC_XDS_USER_AGENT_NAME_SUFFIX=\"csharp\"" "-DGRPC_XDS_USER_AGENT_VERSION_SUFFIX=\"2.56.0-dev\"")
+  add_definitions("-DGRPC_XDS_USER_AGENT_NAME_SUFFIX=\"csharp\"" "-DGRPC_XDS_USER_AGENT_VERSION_SUFFIX=\"2.57.0-dev\"")
 endif()
 
 if(UNIX AND NOT HAIKU)
@@ -980,7 +980,6 @@ if(gRPC_BUILD_TESTS)
   add_dependencies(buildtests_cxx generic_end2end_test)
   add_dependencies(buildtests_cxx goaway_server_test)
   add_dependencies(buildtests_cxx google_c2p_resolver_test)
-  add_dependencies(buildtests_cxx google_mesh_ca_certificate_provider_factory_test)
   add_dependencies(buildtests_cxx graceful_shutdown_test)
   add_dependencies(buildtests_cxx grpc_alts_credentials_options_test)
   add_dependencies(buildtests_cxx grpc_audit_logging_test)
@@ -11949,44 +11948,6 @@ target_link_libraries(google_c2p_resolver_test
 endif()
 if(gRPC_BUILD_TESTS)
 
-add_executable(google_mesh_ca_certificate_provider_factory_test
-  src/core/ext/xds/google_mesh_ca_certificate_provider_factory.cc
-  test/core/xds/google_mesh_ca_certificate_provider_factory_test.cc
-  third_party/googletest/googletest/src/gtest-all.cc
-  third_party/googletest/googlemock/src/gmock-all.cc
-)
-target_compile_features(google_mesh_ca_certificate_provider_factory_test PUBLIC cxx_std_14)
-target_include_directories(google_mesh_ca_certificate_provider_factory_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${_gRPC_ADDRESS_SORTING_INCLUDE_DIR}
-    ${_gRPC_RE2_INCLUDE_DIR}
-    ${_gRPC_SSL_INCLUDE_DIR}
-    ${_gRPC_UPB_GENERATED_DIR}
-    ${_gRPC_UPB_GRPC_GENERATED_DIR}
-    ${_gRPC_UPB_INCLUDE_DIR}
-    ${_gRPC_XXHASH_INCLUDE_DIR}
-    ${_gRPC_ZLIB_INCLUDE_DIR}
-    third_party/googletest/googletest/include
-    third_party/googletest/googletest
-    third_party/googletest/googlemock/include
-    third_party/googletest/googlemock
-    ${_gRPC_PROTO_GENS_DIR}
-)
-
-target_link_libraries(google_mesh_ca_certificate_provider_factory_test
-  ${_gRPC_BASELIB_LIBRARIES}
-  ${_gRPC_PROTOBUF_LIBRARIES}
-  ${_gRPC_ZLIB_LIBRARIES}
-  ${_gRPC_ALLTARGETS_LIBRARIES}
-  grpc_test_util
-)
-
-
-endif()
-if(gRPC_BUILD_TESTS)
-
 add_executable(graceful_shutdown_test
   test/core/end2end/cq_verifier.cc
   test/core/transport/chttp2/graceful_shutdown_test.cc
@@ -12113,6 +12074,7 @@ if(gRPC_BUILD_TESTS)
 
 add_executable(grpc_authorization_engine_test
   test/core/security/grpc_authorization_engine_test.cc
+  test/core/util/audit_logging_utils.cc
   test/core/util/cmdline.cc
   test/core/util/fuzzer_util.cc
   test/core/util/grpc_profiler.cc
@@ -12228,6 +12190,7 @@ add_executable(grpc_authz_end2end_test
   ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/orca_load_report.pb.h
   ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/orca_load_report.grpc.pb.h
   src/cpp/server/authorization_policy_provider.cc
+  test/core/util/audit_logging_utils.cc
   test/cpp/end2end/grpc_authz_end2end_test.cc
   test/cpp/end2end/test_service_impl.cc
   third_party/googletest/googletest/src/gtest-all.cc
@@ -24396,6 +24359,11 @@ if(_gRPC_PLATFORM_LINUX OR _gRPC_PLATFORM_MAC OR _gRPC_PLATFORM_POSIX)
     ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/tls.grpc.pb.cc
     ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/tls.pb.h
     ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/tls.grpc.pb.h
+    ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/typed_struct.pb.cc
+    ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/typed_struct.grpc.pb.cc
+    ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/typed_struct.pb.h
+    ${_gRPC_PROTO_GENS_DIR}/src/proto/grpc/testing/xds/v3/typed_struct.grpc.pb.h
+    test/core/util/audit_logging_utils.cc
     test/cpp/end2end/test_service_impl.cc
     test/cpp/end2end/xds/xds_end2end_test.cc
     test/cpp/end2end/xds/xds_end2end_test_lib.cc

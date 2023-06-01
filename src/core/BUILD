@@ -15,6 +15,7 @@
 load(
     "//bazel:grpc_build_system.bzl",
     "grpc_cc_library",
+    "grpc_generate_one_off_internal_targets",
     "grpc_upb_proto_library",
     "grpc_upb_proto_reflection_library",
 )
@@ -120,7 +121,10 @@ grpc_cc_library(
         "//:grpc_experiments_are_final": ["GRPC_EXPERIMENTS_ARE_FINAL"],
         "//conditions:default": [],
     }),
-    external_deps = ["absl/strings"],
+    external_deps = [
+        "absl/functional:any_invocable",
+        "absl/strings",
+    ],
     language = "c++",
     deps = [
         "no_destruct",
@@ -434,6 +438,7 @@ grpc_cc_library(
         "promise_factory",
         "promise_trace",
         "ref_counted",
+        "//:event_engine_base_hdrs",
         "//:exec_ctx",
         "//:gpr",
         "//:grpc_trace",
@@ -2767,10 +2772,12 @@ grpc_cc_library(
     hdrs = [
         "lib/security/certificate_provider/certificate_provider_factory.h",
     ],
+    external_deps = ["absl/strings"],
     deps = [
-        "error",
         "json",
+        "json_args",
         "ref_counted",
+        "validation_errors",
         "//:alts_util",
         "//:gpr",
         "//:ref_counted_ptr",
@@ -4237,28 +4244,6 @@ grpc_cc_library(
         "//:config",
         "//:gpr_platform",
         "//:grpc_security_base",
-        "//:ref_counted_ptr",
-    ],
-)
-
-grpc_cc_library(
-    name = "grpc_google_mesh_ca_certificate_provider_factory",
-    srcs = [
-        "ext/xds/google_mesh_ca_certificate_provider_factory.cc",
-    ],
-    hdrs = [
-        "ext/xds/google_mesh_ca_certificate_provider_factory.h",
-    ],
-    language = "c++",
-    deps = [
-        "certificate_provider_factory",
-        "error",
-        "grpc_tls_credentials",
-        "json",
-        "json_util",
-        "time",
-        "//:alts_util",
-        "//:gpr_platform",
         "//:ref_counted_ptr",
     ],
 )
@@ -6009,3 +5994,5 @@ WELL_KNOWN_PROTO_TARGETS = [
     name = "protobuf_" + target + "_upbdefs",
     deps = ["@com_google_protobuf//:" + target + "_proto"],
 ) for target in WELL_KNOWN_PROTO_TARGETS]
+
+grpc_generate_one_off_internal_targets()
