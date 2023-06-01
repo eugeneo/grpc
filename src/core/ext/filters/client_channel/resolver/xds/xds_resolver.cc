@@ -212,10 +212,10 @@ class XdsResolver : public Resolver {
         : resolver_(std::move(resolver)), cluster_name_(cluster_name) {}
 
     void Orphan() override {
-      resolver_->work_serializer_->Run(
+      XdsResolver* resolver_ptr = resolver_.get();
+      resolver_ptr->work_serializer_->Run(
           [resolver = std::move(resolver_)]() mutable {
-            static_cast<XdsResolver*>(resolver.get())
-                ->MaybeRemoveUnusedClusters();
+            resolver->MaybeRemoveUnusedClusters();
           },
           DEBUG_LOCATION);
     }
@@ -341,8 +341,8 @@ class XdsResolver : public Resolver {
 
   class XdsConfigSelector : public ConfigSelector {
    public:
-    XdsConfigSelector(RefCountedPtr<RouteConfigData> route_config_data,
-                      RefCountedPtr<XdsResolver> resolver);
+    XdsConfigSelector(RefCountedPtr<XdsResolver> resolver,
+                      RefCountedPtr<RouteConfigData> route_config_data);
     ~XdsConfigSelector() override;
 
     const char* name() const override { return "XdsConfigSelector"; }
@@ -382,7 +382,6 @@ class XdsResolver : public Resolver {
 
    private:
     RefCountedPtr<RouteConfigData> route_config_data_;
-    // No need to leak another type
     RouteConfigData::RouteEntry* route_;
   };
 
@@ -746,7 +745,7 @@ void XdsResolver::GenerateResult() {
     return;
   }
   auto config_selector =
-      MakeRefCounted<XdsConfigSelector>(std::move(*route_config_data), Ref());
+      MakeRefCounted<XdsConfigSelector>(Ref(), std::move(*route_config_data));
   Result result;
   result.addresses.emplace();
   result.service_config = CreateServiceConfig();
@@ -1081,8 +1080,8 @@ const grpc_channel_filter XdsResolver::ClusterSelectionFilter::kFilter =
         "cluster_selection_filter");
 
 XdsResolver::XdsConfigSelector::XdsConfigSelector(
-    RefCountedPtr<RouteConfigData> route_config_data,
-    RefCountedPtr<XdsResolver> resolver)
+    RefCountedPtr<XdsResolver> resolver,
+    RefCountedPtr<RouteConfigData> route_config_data)
     : resolver_(std::move(resolver)),
       route_config_data_(std::move(route_config_data)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
@@ -1268,13 +1267,13 @@ XdsResolver::ClusterSelectionFilter::MakeCallPromise(
               [GRPC_CONTEXT_SERVICE_CONFIG_CALL_DATA]
                   .value);
   GPR_ASSERT(service_config_call_data != nullptr);
-  auto* cluster_data = static_cast<XdsRouteStateAttributeImpl*>(
+  auto* route_state_attribute = static_cast<XdsRouteStateAttributeImpl*>(
       service_config_call_data->GetCallAttribute<XdsRouteStateAttribute>());
   auto* cluster_name_attribute =
       service_config_call_data->GetCallAttribute<XdsClusterAttribute>();
-  if (cluster_data != nullptr && cluster_name_attribute != nullptr) {
-    auto cluster =
-        cluster_data->LockAndGetCluster(cluster_name_attribute->cluster());
+  if (route_state_attribute != nullptr && cluster_name_attribute != nullptr) {
+    auto cluster = route_state_attribute->LockAndGetCluster(
+        cluster_name_attribute->cluster());
     if (cluster != nullptr) {
       service_config_call_data->SetOnCommit(
           [cluster = std::move(cluster)]() mutable { cluster.reset(); });
