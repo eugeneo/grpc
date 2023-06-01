@@ -131,16 +131,27 @@ void MaybeUpdateServerInitialMetadata(
       });
 }
 
+// Returns an arena-allocated string containing the cluster name
+// to use for this RPC, which will live long enough to use when modifying
+// the server's initial metadata.  If cluster_from_cookie is non-empty and
+// points to a cluster present in the selected route, uses that; otherwise,
+// uses the cluster selected by the XdsConfigSelector.
+// Returns the empty string if cluster override cannot be used (i.e., the route
+// uses a cluster specifier plugin).
 absl::string_view GetClusterToUse(
     absl::string_view cluster_from_cookie,
     ServiceConfigCallData* service_config_call_data) {
+  // Get cluster assigned by the XdsConfigSelector.
   auto cluster_attribute =
       service_config_call_data->GetCallAttribute<XdsClusterAttribute>();
   GPR_ASSERT(cluster_attribute != nullptr);
   auto cluster_to_use = cluster_attribute->cluster();
+  // If prefix is not "cluster:", then we can't use cluster override.
   if (!absl::ConsumePrefix(&cluster_to_use, kClusterPrefix)) {
     return absl::string_view();
   }
+  // If we have a cluster from the cookie that is present in the
+  // selected route, use that instead.
   if (!cluster_from_cookie.empty()) {
     auto route_data =
         service_config_call_data->GetCallAttribute<XdsRouteStateAttribute>();
@@ -150,6 +161,9 @@ absl::string_view GetClusterToUse(
       cluster_to_use = cluster_from_cookie;
     }
   }
+  // If we chose the cluster from the cookie above, then update
+  // the cluster name attribute as well.  Note that the attribute will
+  // point to the arena-allocated string, which will live long enough.
   cluster_attribute->set_cluster(
       AllocateStringOnArena(absl::StrCat(kClusterPrefix, cluster_to_use)));
   return absl::StripPrefix(cluster_attribute->cluster(), kClusterPrefix);
@@ -228,12 +242,20 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
   // Base64-decode cookie value.
   absl::string_view cookie_value = AllocateStringOnArena(
       GetCookieValue(call_args.client_initial_metadata, *cookie_config->name));
+  // Cookie format is "host;cluster"
   std::pair<absl::string_view, absl::string_view> host_cluster =
       absl::StrSplit(cookie_value, absl::MaxSplits(';', 1));
+  // Set override host attribute.  Allocate the string on the
+  // arena, so that it has the right lifetime.
   if (!host_cluster.first.empty()) {
     service_config_call_data->SetCallAttribute(
         GetContext<Arena>()->New<XdsOverrideHostAttribute>(host_cluster.first));
   }
+  // Check if the cluster override is valid, and apply it if necessary.
+  // Note that cluster_name will point to an arena-allocated string
+  // that will still be alive when we see the server initial metadata.
+  // If the cluster name is empty, that means we cannot use a
+  // cluster override (i.e., the route uses a cluster specifier plugin).
   absl::string_view cluster_name =
       GetClusterToUse(host_cluster.second, service_config_call_data);
   // Intercept server initial metadata.
