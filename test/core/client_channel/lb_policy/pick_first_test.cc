@@ -44,17 +44,16 @@ class PickFirstTest : public LoadBalancingPolicyTest {
   PickFirstTest() : lb_policy_(MakeLbPolicy("pick_first")) {}
 
   static RefCountedPtr<LoadBalancingPolicy::Config> MakePickFirstConfig(
-      bool shuffleAddressList) {
+      bool shuffle_address_list) {
     return MakeConfig(Json::FromArray({Json::FromObject({{
         "pick_first",
         Json::FromObject(
-            {{"shuffleAddressList", Json::FromBool(shuffleAddressList)}}),
+            {{"shuffleAddressList", Json::FromBool(shuffle_address_list)}}),
     }})}));
   }
 
-  template <typename C>
   absl::string_view GetConnectionRequestedAddress(
-      const C& addresses, bool shuffle,
+      absl::Span<const absl::string_view> addresses, bool shuffle,
       SourceLocation location = SourceLocation()) {
     auto status = ApplyUpdate(
         BuildUpdate(addresses, MakePickFirstConfig(shuffle)), lb_policy_.get());
@@ -79,8 +78,9 @@ class PickFirstTest : public LoadBalancingPolicyTest {
       absl::Span<const absl::string_view> addresses,
       absl::string_view address) {
     std::vector<absl::string_view> filtered;
-    absl::c_remove_copy_if(addresses, std::back_inserter(filtered),
-                           [=](auto addr) { return addr == address; });
+    for (absl::string_view addr : addresses) {
+      if (addr != address) filtered.push_back(addr);
+    }
     return filtered;
   }
 
@@ -88,8 +88,8 @@ class PickFirstTest : public LoadBalancingPolicyTest {
       absl::Span<const absl::string_view> addresses, size_t iterations,
       bool shuffle) {
     std::set<absl::string_view> selected_addresses;
-    absl::string_view address_to_ignore = "";
-    for (size_t i = 0; i < iterations; i++) {
+    absl::string_view address_to_ignore;
+    for (size_t i = 0; i < iterations; ++i) {
       // We will be keeping track of these picks
       address_to_ignore = GetConnectionRequestedAddress(
           ExcludeAddress(addresses, address_to_ignore), shuffle);
@@ -241,6 +241,8 @@ TEST_F(PickFirstTest, GoesIdleWhenConnectionFailsThenCanReconnect) {
 }
 
 TEST_F(PickFirstTest, WithShuffle) {
+  grpc_core::testing::ScopedExperimentalEnvVar env_var(
+      "GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG");
   constexpr size_t kPolicyUpdates = 20;
   constexpr std::array<absl::string_view, 6> kAddressUris = {
       "ipv4:127.0.0.1:443", "ipv4:127.0.0.1:444", "ipv4:127.0.0.1:445",
@@ -251,13 +253,22 @@ TEST_F(PickFirstTest, WithShuffle) {
   EXPECT_EQ(ResetPickedAddress(kAddressUris, kPolicyUpdates, false).size(), 1);
 }
 
+TEST_F(PickFirstTest, DisabledExperiment) {
+  constexpr size_t kPolicyUpdates = 20;
+  constexpr std::array<absl::string_view, 6> kAddressUris = {
+      "ipv4:127.0.0.1:443", "ipv4:127.0.0.1:444", "ipv4:127.0.0.1:445",
+      "ipv4:127.0.0.1:446", "ipv4:127.0.0.1:447", "ipv4:127.0.0.1:448"};
+  // With shuffling, different addresses should be returned.
+  EXPECT_EQ(ResetPickedAddress(kAddressUris, kPolicyUpdates, true).size(), 1);
+  // Without shuffling, the same address will always be returned
+  EXPECT_EQ(ResetPickedAddress(kAddressUris, kPolicyUpdates, false).size(), 1);
+}
+
 }  // namespace
 }  // namespace testing
 }  // namespace grpc_core
 
 int main(int argc, char** argv) {
-  grpc_core::testing::ScopedExperimentalEnvVar env_var(
-      "GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG");
   ::testing::InitGoogleTest(&argc, argv);
   grpc::testing::TestEnvironment env(&argc, argv);
   grpc_init();
