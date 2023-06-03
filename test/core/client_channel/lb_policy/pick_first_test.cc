@@ -16,7 +16,11 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <array>
+#include <vector>
+
+#include "absl/algorithm/container.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -254,7 +258,7 @@ TEST_F(PickFirstTest, GoesIdleWhenConnectionFailsThenCanReconnect) {
 }
 
 TEST_F(PickFirstTest, WithShuffle) {
-  grpc_core::testing::ScopedExperimentalEnvVar env_var(
+  testing::ScopedExperimentalEnvVar env_var(
       "GRPC_EXPERIMENTAL_PICKFIRST_LB_CONFIG");
   // 6 addresses have 6! = 720 permutations or 0.1% chance that the shuffle
   // returns initial sequence
