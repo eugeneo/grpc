@@ -92,10 +92,10 @@ absl::string_view AllocateStringOnArena(
   }
   char* arena_allocated_value =
       static_cast<char*>(GetContext<Arena>()->Alloc(src1.size() + src2.size()));
-  if (src1.size() > 0) {
+  if (!src1.empty()) {
     memcpy(arena_allocated_value, src1.data(), src1.size());
   }
-  if (src2.size() > 0) {
+  if (!src2.empty()) {
     memcpy(arena_allocated_value + src1.size(), src2.data(), src2.size());
   }
   return absl::string_view(arena_allocated_value, src1.size() + src2.size());
@@ -272,20 +272,19 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
                                          host_override, cluster_name, md.get());
         return md;
       });
-  return Map(
-      next_promise_factory(std::move(call_args)),
-      [cookie_config, cluster_changed, host_override,
-       cluster_name](ServerMetadataHandle md) {
-        // If we got a Trailers-Only response, then add the
-        // cookie to the trailing metadata instead of the
-        // initial metadata.
-        if (md->get(GrpcTrailersOnly()).value_or(false)) {
-          MaybeUpdateServerInitialMetadata(cookie_config, cluster_changed,
-                                           host_override, cluster_name,
-                                           md.get());
-        }
-        return md;
-      });
+  return Map(next_promise_factory(std::move(call_args)),
+             [cookie_config, cluster_changed, host_override,
+              cluster_name](ServerMetadataHandle md) {
+               // If we got a Trailers-Only response, then add the
+               // cookie to the trailing metadata instead of the
+               // initial metadata.
+               if (md->get(GrpcTrailersOnly()).value_or(false)) {
+                 MaybeUpdateServerInitialMetadata(
+                     cookie_config, cluster_changed, host_override,
+                     cluster_name, md.get());
+               }
+               return md;
+             });
 }
 
 void StatefulSessionFilterRegister(CoreConfiguration::Builder* builder) {
