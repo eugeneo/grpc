@@ -80,6 +80,9 @@ bool ShufflePickFirstEnabled() {
 
 class PickFirstConfig : public LoadBalancingPolicy::Config {
  public:
+  absl::string_view name() const override { return kPickFirst; }
+  bool shuffle_addresses() const { return shuffle_addresses_; }
+
   static const JsonLoaderInterface* JsonLoader(const JsonArgs&) {
     static const auto kJsonLoader =
         JsonObjectLoader<PickFirstConfig>()
@@ -88,10 +91,6 @@ class PickFirstConfig : public LoadBalancingPolicy::Config {
             .Finish();
     return kJsonLoader;
   }
-
-  explicit PickFirstConfig() {}
-  absl::string_view name() const override { return kPickFirst; }
-  bool shuffle_addresses() const { return shuffle_addresses_; }
 
   void JsonPostLoad(const Json& /* json */, const JsonArgs& /* args */,
                     ValidationErrors* /* errors */) {
@@ -210,6 +209,8 @@ class PickFirst : public LoadBalancingPolicy {
   bool idle_ = false;
   // Are we shut down?
   bool shutdown_ = false;
+  // Random bit generator used for shuffling addresses if configured
+  absl::BitGen bit_gen;
 };
 
 PickFirst::PickFirst(Args args) : LoadBalancingPolicy(std::move(args)) {
@@ -258,6 +259,13 @@ void PickFirst::AttemptToConnectUsingLatestUpdateArgsLocked() {
   ServerAddressList addresses;
   if (latest_update_args_.addresses.ok()) {
     addresses = *latest_update_args_.addresses;
+  }
+  if (latest_update_args_.config != nullptr) {
+    auto config =
+        static_cast<PickFirstConfig*>(latest_update_args_.config.get());
+    if (config->shuffle_addresses()) {
+      absl::c_shuffle(addresses, bit_gen);
+    }
   }
   // Replace latest_pending_subchannel_list_.
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_pick_first_trace) &&
@@ -323,13 +331,6 @@ absl::Status PickFirst::UpdateLocked(UpdateArgs args) {
   }
   // Update latest_update_args_.
   latest_update_args_ = std::move(args);
-  if (latest_update_args_.config != nullptr) {
-    RefCountedPtr<PickFirstConfig> config = latest_update_args_.config;
-    if (config->shuffle_addresses() && ShufflePickFirstEnabled()) {
-      static absl::BitGen bit_gen;
-      absl::c_shuffle(*latest_update_args_.addresses, bit_gen);
-    }
-  }
   // If we are not in idle, start connection attempt immediately.
   // Otherwise, we defer the attempt into ExitIdleLocked().
   if (!idle_) {
