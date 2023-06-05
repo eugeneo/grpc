@@ -18,16 +18,19 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
+#include <utility>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 #include <grpc/grpc.h>
 #include <grpc/support/json.h>
+#include <grpc/support/log.h>
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/debug_location.h"
