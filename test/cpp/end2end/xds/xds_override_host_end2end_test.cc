@@ -402,25 +402,24 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
       BuildRouteConfigurationWithWeightedClusters(
           {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
   WaitForAllBackends(DEBUG_LOCATION, 0, 2);
-  auto host2_in_cluster2_cookie =
+  auto backend1_in_cluster2_cookie =
       GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1);
-  ASSERT_FALSE(host2_in_cluster2_cookie.empty());
-  // Cluster is gone
-  balancer_->ads_service()->UnsetResource(kEdsTypeUrl, kNewEdsService1Name);
-  balancer_->ads_service()->UnsetResource(kEdsTypeUrl, kNewEdsService2Name);
-  // Both backends are in the same cluster
-  SetCdsAndEdsResources(kNewCluster1Name, kNewEdsService1Name, 0, 2);
+  ASSERT_FALSE(backend1_in_cluster2_cookie.empty());
+  // Create a new cluster, cluster 3, containing a new backend, backend 2.
   SetCdsAndEdsResources(kNewCluster3Name, kNewEdsService3Name, 2, 3);
+  // Send an EDS update for cluster 1 that adds backend 1. (Now cluster 1 has
+  // backends 0 and 1.)
+  balancer_->ads_service()->SetEdsResource(BuildEdsResource(
+      EdsResourceArgs({{"locality0", CreateEndpointsForBackends(0, 2)}}),
+      kNewEdsService1Name));
   SetListenerAndRouteConfiguration(
       balancer_.get(), BuildListenerWithStatefulSessionFilter(),
       BuildRouteConfigurationWithWeightedClusters(
           {{kNewCluster1Name, kWeight1}, {kNewCluster3Name, kWeight2}}));
-  WaitForAllBackends(DEBUG_LOCATION, 0, 3);
-  auto host3_in_cluster3_cookie =
-      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2);
-  ASSERT_FALSE(host3_in_cluster3_cookie.empty());
+  WaitForAllBackends(DEBUG_LOCATION, 2);
+  GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2);
   CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
-                 RpcOptions().set_metadata(host2_in_cluster2_cookie));
+                 RpcOptions().set_metadata(backend1_in_cluster2_cookie));
   // Traffic is split between clusters. Cluster1 traffic is sent to backends_[1]
   EXPECT_THAT(BackendRequestPercentage(backends_[0], kNumEchoRpcs),
               ::testing::DoubleNear(0, kErrorTolerance));
@@ -429,7 +428,7 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
   EXPECT_THAT(BackendRequestPercentage(backends_[2], kNumEchoRpcs),
               ::testing::DoubleNear(1 - kPercentage1, kErrorTolerance));
   // backends_[1] cookie is updated with a new cluster
-  EXPECT_NE(host2_in_cluster2_cookie,
+  EXPECT_NE(backend1_in_cluster2_cookie,
             GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1));
 }
 
