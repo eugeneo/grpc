@@ -210,7 +210,7 @@ class PickFirst : public LoadBalancingPolicy {
   // Are we shut down?
   bool shutdown_ = false;
   // Random bit generator used for shuffling addresses if configured
-  absl::BitGen bit_gen;
+  absl::BitGen bit_gen_;
 };
 
 PickFirst::PickFirst(Args args) : LoadBalancingPolicy(std::move(args)) {
@@ -264,7 +264,7 @@ void PickFirst::AttemptToConnectUsingLatestUpdateArgsLocked() {
     auto config =
         static_cast<PickFirstConfig*>(latest_update_args_.config.get());
     if (config->shuffle_addresses()) {
-      absl::c_shuffle(addresses, bit_gen);
+      absl::c_shuffle(addresses, bit_gen_);
     }
   }
   // Replace latest_pending_subchannel_list_.

@@ -78,45 +78,54 @@ class PickFirstTest : public LoadBalancingPolicyTest {
   void GetOrderAddressesArePicked(
       absl::Span<const absl::string_view> addresses,
       std::vector<absl::string_view>* out_address_order) {
-    absl::string_view address;
-    SubchannelState* subchannel = nullptr;
-    out_address_order->clear();
-    while (addresses.size() > out_address_order->size()) {
-      // All channels except the last one must fail
-      if (subchannel != nullptr) {
+    // Construct a map of subchannel to address.
+    // We will remove entries as each subchannel starts to connect.
+    std::map<SubchannelState*, absl::string_view> subchannels;
+    for (auto address : addresses) {
+      auto* subchannel = FindSubchannel(
+          address, ChannelArgs().Set(GRPC_ARG_INHIBIT_HEALTH_CHECKING, true));
+      ASSERT_NE(subchannel, nullptr);
+      subchannels.emplace(subchannel, address);
+    }
+    // Now process each subchannel in the order in which pick_first tries it.
+    while (!subchannels.empty()) {
+      // Find the subchannel that is being attempted.
+      SubchannelState* subchannel = nullptr;
+      for (const auto& p : subchannels) {
+        if (p.first->ConnectionRequested()) {
+          out_address_order->push_back(p.second);
+          subchannel = p.first;
+          break;
+        }
+      }
+      ASSERT_NE(subchannel, nullptr);
+      // The subchannel reports CONNECTING.
+      subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
+      // If this is the first subchannel being attempted, expect a CONNECTING
+      // update.
+      if (subchannels.size() == addresses.size()) {
+        ExpectConnectingUpdate();
+      }
+      if (subchannels.size() > 1) {
+        // Not the last subchannel in the list.  Connection attempt should fail.
         subchannel->SetConnectivityState(
             GRPC_CHANNEL_TRANSIENT_FAILURE,
             absl::UnavailableError("failed to connect"));
         subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE);
+      } else {
+        // Last subchannel in the list.  Connection attempt should succeed.
+        subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
+        auto picker = WaitForConnected();
+        ASSERT_NE(picker, nullptr);
+        EXPECT_EQ(ExpectPickComplete(picker.get()), out_address_order->back());
+        // Then it should become disconnected.
+        subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE);
+        ExpectReresolutionRequest();
+        ExpectStateAndQueuingPicker(GRPC_CHANNEL_IDLE);
       }
-      address = GetConnectingSubchannel(addresses);
-      ASSERT_NE(address, "");
-      subchannel = FindSubchannel(
-          address, ChannelArgs().Set(GRPC_ARG_INHIBIT_HEALTH_CHECKING, true));
-      ASSERT_NE(subchannel, nullptr);
-      subchannel->SetConnectivityState(GRPC_CHANNEL_CONNECTING);
-      ExpectConnectingUpdate();
-      ASSERT_EQ(absl::c_find(*out_address_order, address),
-                out_address_order->end());
-      out_address_order->emplace_back(address);
+      // Remove the subchannel from the map.
+      subchannels.erase(subchannel);
     }
-    subchannel->SetConnectivityState(GRPC_CHANNEL_READY);
-    auto picker = WaitForConnected();
-    ASSERT_NE(picker, nullptr);
-    EXPECT_EQ(ExpectPickComplete(picker.get()), address);
-    subchannel->SetConnectivityState(GRPC_CHANNEL_IDLE);
-    ExpectReresolutionRequest();
-    ExpectStateAndQueuingPicker(GRPC_CHANNEL_IDLE);
-  }
-
-  static std::vector<absl::string_view> ExcludeAddress(
-      absl::Span<const absl::string_view> addresses,
-      absl::string_view address) {
-    std::vector<absl::string_view> filtered;
-    for (absl::string_view addr : addresses) {
-      if (addr != address) filtered.push_back(addr);
-    }
-    return filtered;
   }
 
   OrphanablePtr<LoadBalancingPolicy> lb_policy_;
@@ -269,32 +278,26 @@ TEST_F(PickFirstTest, WithShuffle) {
       BuildUpdate(kAddresses, MakePickFirstConfig(true)), lb_policy_.get());
   EXPECT_TRUE(status.ok()) << status;
   std::vector<absl::string_view> prev_attempt_connect_order;
-  GetOrderAddressesArePicked(kAddresses, &prev_attempt_connect_order);
-  size_t first_shuffle = 0;
-  for (size_t i = 0; i < kAddresses.size(); ++i) {
-    if (kAddresses[i] != prev_attempt_connect_order[i]) {
-      first_shuffle += 1;
-    }
-  }
   // There is 0.1% chance this check fails by design. Not an assert to prevent
   // flake
-  EXPECT_GT(first_shuffle, 0) << "Addresses were not shuffled";
-  size_t shuffle_count = 0;
-  // 3 attempts to reduce flakes. Probability of a flake is 0.001%
-  for (size_t attempt = 0; attempt < 3; ++attempt) {
+  if (absl::MakeConstSpan(prev_attempt_connect_order) ==
+      absl::MakeConstSpan(kAddresses)) {
+    gpr_log(GPR_INFO, "Address order did not change");
+  }
+  constexpr size_t kMaxAttempts = 5;
+  bool shuffled = false;
+  for (size_t attempt = 0; attempt < kMaxAttempts && !shuffled; ++attempt) {
     std::vector<absl::string_view> address_order;
     GetOrderAddressesArePicked(kAddresses, &address_order);
-    for (size_t i = 0; i < address_order.size(); i++) {
-      if (address_order[i] != prev_attempt_connect_order[i]) {
-        shuffle_count += 1;
-      }
+    if (address_order != prev_attempt_connect_order) {
+      shuffled = true;
     }
     std::swap(prev_attempt_connect_order, address_order);
   }
-  ASSERT_GT(shuffle_count, 0) << "Addresses are not reshuffled";
+  ASSERT_TRUE(shuffled) << "Addresses are not reshuffled";
 }
 
-TEST_F(PickFirstTest, DisabledExperiment) {
+TEST_F(PickFirstTest, ShufflingDisabled) {
   constexpr std::array<absl::string_view, 6> kAddresses = {
       "ipv4:127.0.0.1:443", "ipv4:127.0.0.1:444", "ipv4:127.0.0.1:445",
       "ipv4:127.0.0.1:446", "ipv4:127.0.0.1:447", "ipv4:127.0.0.1:448"};
@@ -303,28 +306,19 @@ TEST_F(PickFirstTest, DisabledExperiment) {
   EXPECT_TRUE(status.ok()) << status;
   std::vector<absl::string_view> prev_attempt_connect_order;
   GetOrderAddressesArePicked(kAddresses, &prev_attempt_connect_order);
-  size_t first_shuffle = 0;
-  for (size_t i = 0; i < kAddresses.size(); ++i) {
-    if (kAddresses[i] != prev_attempt_connect_order[i]) {
-      first_shuffle += 1;
-    }
-  }
-  // There is 0.1% chance this check fails by design. Not an assert to prevent
-  // flake
-  ASSERT_EQ(first_shuffle, 0) << "Addresses were shuffled";
-  size_t shuffle_count = 0;
-  // 3 attempts to reduce flakes. Probability of a flake is 0.001%
-  for (size_t attempt = 0; attempt < 3; ++attempt) {
+  ASSERT_THAT(absl::MakeConstSpan(prev_attempt_connect_order),
+              ::testing::ContainerEq(absl::MakeConstSpan(kAddresses)));
+  constexpr size_t kMaxAttempts = 5;
+  bool shuffled = false;
+  for (size_t attempt = 0; attempt < kMaxAttempts && !shuffled; ++attempt) {
     std::vector<absl::string_view> address_order;
     GetOrderAddressesArePicked(kAddresses, &address_order);
-    for (size_t i = 0; i < address_order.size(); i++) {
-      if (address_order[i] != prev_attempt_connect_order[i]) {
-        shuffle_count += 1;
-      }
+    if (address_order != prev_attempt_connect_order) {
+      shuffled = true;
     }
     std::swap(prev_attempt_connect_order, address_order);
   }
-  ASSERT_EQ(shuffle_count, 0) << "Addresses were reshuffled";
+  ASSERT_FALSE(shuffled) << "Addresses were reshuffled";
 }
 
 }  // namespace
