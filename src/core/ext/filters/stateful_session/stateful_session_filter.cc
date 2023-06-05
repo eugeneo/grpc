@@ -104,20 +104,20 @@ absl::string_view AllocateStringOnArena(
 // Adds the set-cookie header to the server initial metadata if needed.
 void MaybeUpdateServerInitialMetadata(
     const StatefulSessionMethodParsedConfig::CookieConfig* cookie_config,
-    absl::string_view cookie_value, absl::string_view actual_cluster,
-    ServerMetadata* server_initial_metadata) {
+    bool cluster_changed, absl::string_view host_override,
+    absl::string_view actual_cluster, ServerMetadata* server_initial_metadata) {
   // Get peer string.
   Slice* peer_string = server_initial_metadata->get_pointer(PeerString());
   if (peer_string == nullptr) {
     // No changes, keep the same set-cookie header.
     return;
   }
+  if (host_override == peer_string->as_string_view() && !cluster_changed) {
+    return;
+  }
   std::string new_value(peer_string->as_string_view());
   if (!actual_cluster.empty()) {
     absl::StrAppend(&new_value, ";", actual_cluster);
-  }
-  if (new_value == cookie_value) {
-    return;
   }
   std::vector<std::string> parts = {absl::StrCat(
       *cookie_config->name, "=", absl::Base64Escape(new_value), "; HttpOnly")};
@@ -247,12 +247,13 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
   // Cookie format is "host;cluster"
   std::pair<absl::string_view, absl::string_view> host_cluster =
       absl::StrSplit(cookie_value, absl::MaxSplits(';', 1));
+  absl::string_view host_override;
   // Set override host attribute.  Allocate the string on the
   // arena, so that it has the right lifetime.
   if (!host_cluster.first.empty()) {
+    host_override = AllocateStringOnArena(host_cluster.first);
     service_config_call_data->SetCallAttribute(
-        GetContext<Arena>()->New<XdsOverrideHostAttribute>(
-            AllocateStringOnArena(host_cluster.first)));
+        GetContext<Arena>()->New<XdsOverrideHostAttribute>(host_override));
   }
   // Check if the cluster override is valid, and apply it if necessary.
   // Note that cluster_name will point to an arena-allocated string
@@ -261,23 +262,27 @@ ArenaPromise<ServerMetadataHandle> StatefulSessionFilter::MakeCallPromise(
   // cluster override (i.e., the route uses a cluster specifier plugin).
   absl::string_view cluster_name =
       GetClusterToUse(host_cluster.second, service_config_call_data);
+  bool cluster_changed = cluster_name != host_cluster.second;
   // Intercept server initial metadata.
   call_args.server_initial_metadata->InterceptAndMap(
-      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
+      [cookie_config, cluster_changed, host_override,
+       cluster_name](ServerMetadataHandle md) {
         // Add cookie to server initial metadata if needed.
-        MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
-                                         cluster_name, md.get());
+        MaybeUpdateServerInitialMetadata(cookie_config, cluster_changed,
+                                         host_override, cluster_name, md.get());
         return md;
       });
   return Map(
       next_promise_factory(std::move(call_args)),
-      [cookie_config, cookie_value, cluster_name](ServerMetadataHandle md) {
+      [cookie_config, cluster_changed, host_override,
+       cluster_name](ServerMetadataHandle md) {
         // If we got a Trailers-Only response, then add the
         // cookie to the trailing metadata instead of the
         // initial metadata.
         if (md->get(GrpcTrailersOnly()).value_or(false)) {
-          MaybeUpdateServerInitialMetadata(cookie_config, cookie_value,
-                                           cluster_name, md.get());
+          MaybeUpdateServerInitialMetadata(cookie_config, cluster_changed,
+                                           host_override, cluster_name,
+                                           md.get());
         }
         return md;
       });

@@ -119,15 +119,21 @@ class OverrideHostTest : public XdsEnd2endTest {
     return listener;
   }
 
+  // Send requests until a desired backend is hit and returns cookie name/value
+  // pairs. Empty collection is returned if the backend was never hit.
+  // For weighted clusters, more than one request per backend may be necessary
+  // to obtain the cookie. max_requests_per_backend argument specifies
+  // the number of requests per backend to send.
   std::vector<std::pair<std::string, std::string>>
   GetAffinityCookieHeaderForBackend(grpc_core::DebugLocation debug_location,
-                                    size_t backend_index) {
+                                    size_t backend_index,
+                                    size_t max_requests_per_backend = 1) {
     EXPECT_LT(backend_index, backends_.size());
     if (backend_index >= backends_.size()) {
       return {};
     }
     const auto& backend = backends_[backend_index];
-    for (size_t i = 0; i < backends_.size() * 10; ++i) {
+    for (size_t i = 0; i < max_requests_per_backend * backends_.size(); ++i) {
       std::multimap<std::string, std::string> server_initial_metadata;
       grpc::Status status =
           SendRpc(RpcOptions(), nullptr, &server_initial_metadata);
@@ -327,7 +333,7 @@ TEST_P(OverrideHostTest, OverrideWithWeightedClusters) {
           {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
   WaitForAllBackends(DEBUG_LOCATION, 0, 3);
   // Get cookie
-  auto session_cookie = GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1);
+  auto session_cookie = GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 3);
   ASSERT_FALSE(session_cookie.empty());
   // All requests go to the backend we requested.
   CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
@@ -359,7 +365,7 @@ TEST_P(OverrideHostTest, ClusterOverrideHonoredButHostGone) {
       BuildRouteConfigurationWithWeightedClusters(
           {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
   WaitForAllBackends(DEBUG_LOCATION, 0, 3);
-  auto session_cookie = GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1);
+  auto session_cookie = GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 3);
   ASSERT_FALSE(session_cookie.empty());
   // Remove backends[1] from cluster2
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(
@@ -375,7 +381,7 @@ TEST_P(OverrideHostTest, ClusterOverrideHonoredButHostGone) {
   EXPECT_THAT(BackendRequestPercentage(backends_[3], kNumEchoRpcs),
               ::testing::DoubleNear(.5, kErrorTolerance));
   EXPECT_NE(session_cookie,
-            GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2));
+            GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2, 3));
 }
 
 TEST_P(OverrideHostTest, ClusterGoneHostStays) {
@@ -403,7 +409,7 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
           {{kNewCluster1Name, kWeight1}, {kNewCluster2Name, kWeight2}}));
   WaitForAllBackends(DEBUG_LOCATION, 0, 2);
   auto backend1_in_cluster2_cookie =
-      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1);
+      GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 5);
   ASSERT_FALSE(backend1_in_cluster2_cookie.empty());
   // Create a new cluster, cluster 3, containing a new backend, backend 2.
   SetCdsAndEdsResources(kNewCluster3Name, kNewEdsService3Name, 2, 3);
@@ -417,7 +423,7 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
       BuildRouteConfigurationWithWeightedClusters(
           {{kNewCluster1Name, kWeight1}, {kNewCluster3Name, kWeight2}}));
   WaitForAllBackends(DEBUG_LOCATION, 2);
-  GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2);
+  GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 2, 5);
   CheckRpcSendOk(DEBUG_LOCATION, kNumEchoRpcs,
                  RpcOptions().set_metadata(backend1_in_cluster2_cookie));
   // Traffic is split between clusters. Cluster1 traffic is sent to backends_[1]
@@ -429,7 +435,7 @@ TEST_P(OverrideHostTest, ClusterGoneHostStays) {
               ::testing::DoubleNear(1 - kPercentage1, kErrorTolerance));
   // backends_[1] cookie is updated with a new cluster
   EXPECT_NE(backend1_in_cluster2_cookie,
-            GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1));
+            GetAffinityCookieHeaderForBackend(DEBUG_LOCATION, 1, 5));
 }
 
 }  // namespace
