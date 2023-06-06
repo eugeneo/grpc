@@ -59,23 +59,6 @@ class PickFirstTest : public LoadBalancingPolicyTest {
     }})}));
   }
 
-  absl::string_view GetConnectingSubchannel(
-      absl::Span<const absl::string_view> addresses,
-      SourceLocation location = SourceLocation()) {
-    for (auto address : addresses) {
-      auto* subchannel = FindSubchannel(
-          address, ChannelArgs().Set(GRPC_ARG_INHIBIT_HEALTH_CHECKING, true));
-      EXPECT_NE(subchannel, nullptr)
-          << location.file() << ":" << location.line();
-      if (subchannel == nullptr) {
-        return absl::string_view();
-      } else if (subchannel->ConnectionRequested()) {
-        return address;
-      }
-    }
-    return absl::string_view();
-  }
-
   // Gets order the addresses are being picked. Return type is void so
   // assertions can be used
   void GetOrderAddressesArePicked(
@@ -281,6 +264,7 @@ TEST_F(PickFirstTest, WithShuffle) {
       BuildUpdate(kAddresses, MakePickFirstConfig(true)), lb_policy_.get());
   EXPECT_TRUE(status.ok()) << status;
   std::vector<absl::string_view> prev_attempt_connect_order;
+  GetOrderAddressesArePicked(kAddresses, &prev_attempt_connect_order);
   // There is 0.1% chance this check fails by design. Not an assert to prevent
   // flake
   if (absl::MakeConstSpan(prev_attempt_connect_order) ==
@@ -289,13 +273,14 @@ TEST_F(PickFirstTest, WithShuffle) {
   }
   constexpr size_t kMaxAttempts = 5;
   bool shuffled = false;
-  for (size_t attempt = 0; attempt < kMaxAttempts && !shuffled; ++attempt) {
+  for (size_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
     std::vector<absl::string_view> address_order;
     GetOrderAddressesArePicked(kAddresses, &address_order);
     if (address_order != prev_attempt_connect_order) {
       shuffled = true;
+      break;
     }
-    std::swap(prev_attempt_connect_order, address_order);
+    prev_attempt_connect_order = std::move(address_order);
   }
   ASSERT_TRUE(shuffled) << "Addresses are not reshuffled";
 }
@@ -307,21 +292,12 @@ TEST_F(PickFirstTest, ShufflingDisabled) {
   absl::Status status = ApplyUpdate(
       BuildUpdate(kAddresses, MakePickFirstConfig(true)), lb_policy_.get());
   EXPECT_TRUE(status.ok()) << status;
-  std::vector<absl::string_view> prev_attempt_connect_order;
-  GetOrderAddressesArePicked(kAddresses, &prev_attempt_connect_order);
-  ASSERT_THAT(absl::MakeConstSpan(prev_attempt_connect_order),
-              ::testing::ContainerEq(absl::MakeConstSpan(kAddresses)));
-  constexpr size_t kMaxAttempts = 5;
-  bool shuffled = false;
-  for (size_t attempt = 0; attempt < kMaxAttempts && !shuffled; ++attempt) {
+  constexpr static size_t kMaxAttempts = 5;
+  for (size_t attempt = 0; attempt < kMaxAttempts; ++attempt) {
     std::vector<absl::string_view> address_order;
     GetOrderAddressesArePicked(kAddresses, &address_order);
-    if (address_order != prev_attempt_connect_order) {
-      shuffled = true;
-    }
-    std::swap(prev_attempt_connect_order, address_order);
+    EXPECT_THAT(address_order, ::testing::ElementsAreArray(kAddresses));
   }
-  ASSERT_FALSE(shuffled) << "Addresses were reshuffled";
 }
 
 }  // namespace

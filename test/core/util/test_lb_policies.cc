@@ -84,9 +84,7 @@ class ForwardingLoadBalancingPolicy : public LoadBalancingPolicy {
         CoreConfiguration::Get().lb_policy_registry().ParseLoadBalancingConfig(
             Json::FromArray({Json::FromObject(
                 {{std::string(delegate_->name()), Json::FromObject({})}})}));
-    if (config.ok()) {
-      args.config = std::move(*config);
-    }
+    GPR_ASSERT(config.ok());
     return delegate_->UpdateLocked(std::move(args));
   }
 
