@@ -78,6 +78,15 @@ class ForwardingLoadBalancingPolicy : public LoadBalancingPolicy {
   ~ForwardingLoadBalancingPolicy() override = default;
 
   absl::Status UpdateLocked(UpdateArgs args) override {
+    // Use correct config for the delegate load balancing policy
+    auto config =
+        grpc_core::CoreConfiguration::Get()
+            .lb_policy_registry()
+            .ParseLoadBalancingConfig(Json::FromArray({Json::FromObject(
+                {{std::string(delegate_->name()), Json::FromObject({})}})}));
+    if (config.ok()) {
+      args.config = std::move(*config);
+    }
     return delegate_->UpdateLocked(std::move(args));
   }
 
