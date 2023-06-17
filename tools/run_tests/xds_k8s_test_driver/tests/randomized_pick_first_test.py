@@ -125,7 +125,6 @@ class RandomizedPickFirstTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
         #     test_client.update_config.configure(rpc_types=rpc_types)
         #     self.assertRpcsEventuallyGoToGivenServers(test_client, test_servers)
 
-    
 
 if __name__ == "__main__":
     absltest.main(failfast=True)
