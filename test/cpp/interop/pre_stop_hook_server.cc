@@ -18,10 +18,45 @@
 
 #include "test/cpp/interop/pre_stop_hook_server.h"
 
+#include <thread>
+
 namespace grpc {
 namespace testing {
 
-class PreStopHookServer {};
+class PreStopHookServer {
+ public:
+  PreStopHookServer(int port, int timeout_s = 15)
+      : thread_(PreStopHookServer::ServerThread, this, port) {
+    grpc_core::MutexLock lock(&mu_);
+    absl::Time deadline = absl::Now() + absl::Seconds(timeout_s);
+    while (!startup_status_.has_value() &&
+           !startup_cv_.WaitWithDeadline(&mu_, deadline)) {
+    }
+  }
+
+  ~PreStopHookServer() { thread_.join(); }
+
+  Status startup_status() {
+    grpc_core::MutexLock lock(&mu_);
+    return startup_status_.value_or(
+        Status(StatusCode::DEADLINE_EXCEEDED, "Server did not start on time"));
+  }
+
+ private:
+  static bool ServerStarting(PreStopHookServer* server) {
+    grpc_core::MutexLock lock(&server->mu_);
+    return !server->startup_status_.has_value();
+  }
+  static void ServerThread(PreStopHookServer* server, int port);
+  std::thread thread_;
+  absl::optional<Status> startup_status_ ABSL_GUARDED_BY(mu_);
+  grpc_core::Mutex mu_;
+  grpc_core::CondVar startup_cv_ ABSL_GUARDED_BY(mu_);
+};
+
+void PreStopHookServer::ServerThread(PreStopHookServer* server, int port) {
+  grpc_core::MutexLock lock(&server->mu_);
+}
 
 Status PreStopHookServerManager::Start(int port) {
   if (server_) {
@@ -30,8 +65,8 @@ Status PreStopHookServerManager::Start(int port) {
   }
   server_ = std::unique_ptr<PreStopHookServer,
                             PreStopHookServerManager::DeleteServer>(
-      new PreStopHookServer(), PreStopHookServerManager::DeleteServer());
-  return Status::OK;
+      new PreStopHookServer(port), PreStopHookServerManager::DeleteServer());
+  return server_->startup_status();
 }
 
 Status PreStopHookServerManager::Stop() {

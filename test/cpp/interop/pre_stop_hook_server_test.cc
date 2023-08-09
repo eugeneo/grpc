@@ -51,7 +51,7 @@ TEST(PreStopHookServer, StartDoRequestStop) {
   Status status;
   int tag = 42;
   call->Finish(&response, &status, &tag);
-  server.Return(StatusCode::INTERNAL, "Just a test");
+  EXPECT_TRUE(server.Return(StatusCode::INTERNAL, "Just a test").ok());
   int* returned_tag;
   bool ok = false;
   cq.Next(reinterpret_cast<void**>(&returned_tag), &ok);
