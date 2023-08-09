@@ -290,7 +290,10 @@ grpc_cc_library(
         "pre_stop_hook_server.cc",
         "xds_interop_server_lib.cc",
     ],
-    hdrs = ["pre_stop_hook_server.h", "xds_interop_server_lib.h"],
+    hdrs = [
+        "pre_stop_hook_server.h",
+        "xds_interop_server_lib.h",
+    ],
     deps = [
         "//:grpc++",
         "//:grpc++_reflection",
