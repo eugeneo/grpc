@@ -8778,7 +8778,6 @@ target_link_libraries(chunked_vector_test
   absl::hash
   absl::type_traits
   absl::statusor
-  absl::utility
   gpr
   upb
 )
@@ -12111,7 +12110,6 @@ target_link_libraries(flow_control_test
   absl::hash
   absl::type_traits
   absl::statusor
-  absl::utility
   gpr
   upb
 )
@@ -15293,7 +15291,6 @@ target_link_libraries(interceptor_list_test
   absl::hash
   absl::type_traits
   absl::statusor
-  absl::utility
   gpr
   upb
 )
@@ -16228,7 +16225,6 @@ target_link_libraries(loop_test
   ${_gRPC_ALLTARGETS_LIBRARIES}
   absl::type_traits
   absl::statusor
-  absl::utility
   gpr
 )
 
@@ -22233,7 +22229,6 @@ target_link_libraries(seq_test
   ${_gRPC_ZLIB_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   absl::type_traits
-  absl::utility
   gpr
 )
 
@@ -26605,7 +26600,6 @@ target_link_libraries(try_seq_test
   ${_gRPC_ALLTARGETS_LIBRARIES}
   absl::type_traits
   absl::statusor
-  absl::utility
   gpr
 )
 
