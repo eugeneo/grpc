@@ -141,12 +141,13 @@ class XdsUpdateHealthServiceImpl : public XdsUpdateHealthService::Service {
       case HookRequestCommand::STOP:
         return pre_stop_hook_server_->Stop();
       case HookRequestCommand::RETURN:
-        return pre_stop_hook_server_->Return(
-            static_cast<grpc::StatusCode>(request->grpc_code_to_return()),
+        pre_stop_hook_server_->Return(
+            static_cast<StatusCode>(request->grpc_code_to_return()),
             request->grpc_status_description());
+        return Status::OK;
       default:
-        return grpc::Status(
-            grpc::INVALID_ARGUMENT,
+        return Status(
+            StatusCode::INVALID_ARGUMENT,
             absl::StrFormat("Invalid command %d", request->command()));
     }
   }

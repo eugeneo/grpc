@@ -20,45 +20,127 @@
 
 #include <thread>
 
+#include "absl/strings/str_format.h"
+
+#include <grpcpp/grpcpp.h>
+
+#include "src/proto/grpc/testing/test.grpc.pb.h"
+
 namespace grpc {
 namespace testing {
+
+namespace {
+
+class HookServiceImpl final : public HookService::CallbackService {
+ public:
+  ServerUnaryReactor* Hook(CallbackServerContext* context, const Empty* request,
+                           Empty* reply) override {
+    grpc_core::MutexLock lock(&mu_);
+    auto reactor = context->DefaultReactor();
+    if (pending_status_) {
+      reactor->Finish(std::move(*pending_status_));
+    } else {
+      pending_requests_.push_back(reactor);
+    }
+    return reactor;
+  }
+
+  void SetReturnStatus(Status status) {
+    grpc_core::MutexLock lock(&mu_);
+    if (pending_requests_.empty()) {
+      pending_status_ = status;
+    }
+    for (auto request : pending_requests_) {
+      request->Finish(status);
+    }
+    pending_requests_.clear();
+  }
+
+ private:
+  grpc_core::Mutex mu_;
+  absl::optional<Status> pending_status_ ABSL_GUARDED_BY(&mu_);
+  std::vector<ServerUnaryReactor*> pending_requests_ ABSL_GUARDED_BY(&mu_);
+};
+
+class ServerHolder {
+ public:
+  enum class State { kNew, kWaiting, kDone, kShuttingDown };
+
+  ServerHolder(int port) {
+    ServerBuilder builder;
+    builder.AddListeningPort(absl::StrFormat("0.0.0.0:%d", port),
+                             grpc::InsecureServerCredentials());
+    builder.RegisterService(&hook_service_);
+    server_ = builder.BuildAndStart();
+  }
+
+  bool WaitForState(State state, absl::Duration timeout) {
+    auto deadline = absl::Now() + timeout;
+    grpc_core::MutexLock lock(&mu_);
+    while (state_ != state && !condition_.WaitWithDeadline(&mu_, deadline)) {
+    }
+    return state_ == state;
+  }
+
+  void Shutdown() { server_->Shutdown(); }
+
+  void SetReturnStatus(Status status) { hook_service_.SetReturnStatus(status); }
+
+  State state() {
+    grpc_core::MutexLock lock(&mu_);
+    return state_;
+  }
+
+  static void RunServer(std::shared_ptr<ServerHolder> server) {
+    {
+      grpc_core::MutexLock lock(&server->mu_);
+      server->state_ = State::kWaiting;
+      server->condition_.SignalAll();
+    }
+    server->server_->Wait();
+    {
+      grpc_core::MutexLock lock(&server->mu_);
+      server->state_ = State::kShuttingDown;
+      server->condition_.SignalAll();
+    }
+  }
+
+ private:
+  grpc_core::Mutex mu_;
+  grpc_core::CondVar condition_ ABSL_GUARDED_BY(mu_);
+  State state_ ABSL_GUARDED_BY(mu_) = State::kNew;
+  std::unique_ptr<Server> server_;
+  HookServiceImpl hook_service_;
+};
+}  // namespace
 
 class PreStopHookServer {
  public:
   PreStopHookServer(int port, int timeout_s = 15)
-      : thread_(PreStopHookServer::ServerThread, this, port) {
-    grpc_core::MutexLock lock(&mu_);
-    absl::Time deadline = absl::Now() + absl::Seconds(timeout_s);
-    while (!startup_status_.has_value() &&
-           !startup_cv_.WaitWithDeadline(&mu_, deadline)) {
-    }
+      : server_(std::make_shared<ServerHolder>(port)),
+        thread_(ServerHolder::RunServer, server_) {
+    server_->WaitForState(ServerHolder::State::kWaiting,
+                          absl::Seconds(timeout_s));
   }
 
-  ~PreStopHookServer() { thread_.join(); }
-
-  Status startup_status() {
-    grpc_core::MutexLock lock(&mu_);
-    return startup_status_.value_or(
-        Status(StatusCode::DEADLINE_EXCEEDED, "Server did not start on time"));
+  ~PreStopHookServer() {
+    server_->Shutdown();
+    thread_.join();
   }
+
+  Status startup_status() const {
+    return server_->state() == ServerHolder::State::kWaiting
+               ? Status::OK
+               : Status(StatusCode::DEADLINE_EXCEEDED,
+                        "Server have not started");
+  }
+
+  void SetReturnStatus(Status status) { server_->SetReturnStatus(status); }
 
  private:
-  static bool ServerStarting(PreStopHookServer* server) {
-    grpc_core::MutexLock lock(&server->mu_);
-    return !server->startup_status_.has_value();
-  }
-  static void ServerThread(PreStopHookServer* server, int port);
+  std::shared_ptr<ServerHolder> server_;
   std::thread thread_;
-  absl::optional<Status> startup_status_ ABSL_GUARDED_BY(mu_);
-  grpc_core::Mutex mu_;
-  grpc_core::CondVar startup_cv_ ABSL_GUARDED_BY(mu_);
 };
-
-void PreStopHookServer::ServerThread(PreStopHookServer* server, int port) {
-  grpc_core::MutexLock lock(&server->mu_);
-  server->startup_status_.emplace(StatusCode::INTERNAL, "Not implemented");
-  server->startup_cv_.Signal();
-}
 
 Status PreStopHookServerManager::Start(int port) {
   if (server_) {
@@ -78,9 +160,10 @@ Status PreStopHookServerManager::Stop() {
   server_.reset();
   return Status::OK;
 }
-Status PreStopHookServerManager::Return(StatusCode code,
-                                        absl::string_view description) {
-  return Status::OK;
+
+void PreStopHookServerManager::Return(StatusCode code,
+                                      absl::string_view description) {
+  server_->SetReturnStatus(Status(code, std::string(description)));
 }
 
 void PreStopHookServerManager::DeleteServer::operator()(

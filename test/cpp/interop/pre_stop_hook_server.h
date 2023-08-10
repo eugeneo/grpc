@@ -34,7 +34,7 @@ class PreStopHookServerManager {
  public:
   Status Start(int port);
   Status Stop();
-  Status Return(StatusCode code, absl::string_view description);
+  void Return(StatusCode code, absl::string_view description);
 
  private:
   struct DeleteServer {
