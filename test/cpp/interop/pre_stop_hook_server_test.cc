@@ -38,7 +38,8 @@ namespace {
 TEST(PreStopHookServer, StartDoRequestStop) {
   int port = grpc_pick_unused_port_or_die();
   PreStopHookServerManager server;
-  ASSERT_TRUE(server.Start(port).ok());
+  Status start_status = server.Start(port);
+  ASSERT_TRUE(start_status.ok()) << start_status.error_message();
   auto channel = CreateChannel(absl::StrFormat("127.0.0.1:%d", port),
                                InsecureChannelCredentials());
   ASSERT_TRUE(channel);

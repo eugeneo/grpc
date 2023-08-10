@@ -56,6 +56,8 @@ class PreStopHookServer {
 
 void PreStopHookServer::ServerThread(PreStopHookServer* server, int port) {
   grpc_core::MutexLock lock(&server->mu_);
+  server->startup_status_.emplace(StatusCode::INTERNAL, "Not implemented");
+  server->startup_cv_.Signal();
 }
 
 Status PreStopHookServerManager::Start(int port) {
