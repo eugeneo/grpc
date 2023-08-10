@@ -66,7 +66,7 @@ class ServerHolder {
  public:
   enum class State { kNew, kWaiting, kDone, kShuttingDown };
 
-  ServerHolder(int port) {
+  explicit ServerHolder(int port) {
     ServerBuilder builder;
     builder.AddListeningPort(absl::StrFormat("0.0.0.0:%d", port),
                              grpc::InsecureServerCredentials());
@@ -116,7 +116,7 @@ class ServerHolder {
 
 class PreStopHookServer {
  public:
-  PreStopHookServer(int port, int timeout_s = 15)
+  explicit PreStopHookServer(int port, int timeout_s = 15)
       : server_(std::make_shared<ServerHolder>(port)),
         thread_(ServerHolder::RunServer, server_) {
     server_->WaitForState(ServerHolder::State::kWaiting,
