@@ -9832,6 +9832,17 @@ targets:
   - gtest
   - grpc_test_util
   uses_polling: false
+- name: http_proxy_test
+  gtest: true
+  build: test
+  language: c++
+  headers:
+  - test/core/util/scoped_env_var.h
+  src:
+  - test/core/ext/filters/client_channel/http_proxy_test.cc
+  deps:
+  - gtest
+  - grpc_test_util
 - name: httpcli_test
   gtest: true
   build: test
