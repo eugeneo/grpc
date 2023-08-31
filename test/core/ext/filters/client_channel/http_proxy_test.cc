@@ -16,18 +16,13 @@
 
 #include "src/core/ext/filters/client_channel/http_proxy.h"
 
-#include <stdio.h>
-
-#include "gmock/gmock.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "gtest/gtest.h"
 
 #include <grpc/grpc.h>
 
 #include "src/core/lib/address_utils/parse_address.h"
-#include "src/core/lib/config/core_configuration.h"
-#include "src/core/lib/gprpp/env.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/validation_errors.h"
 #include "test/core/util/scoped_env_var.h"
 #include "test/core/util/test_config.h"
 
