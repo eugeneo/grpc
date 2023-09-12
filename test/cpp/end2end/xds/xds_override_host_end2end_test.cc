@@ -565,7 +565,7 @@ TEST_P(OverrideHostTest, SetCookieTTL) {
               ::testing::UnorderedElementsAre("Max-Age=42", "HttpOnly"));
 }
 
- }  // namespace
+}  // namespace
 }  // namespace testing
 }  // namespace grpc
 
