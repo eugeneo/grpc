@@ -33,6 +33,7 @@
 #include "upb/mem/arena.h"
 #include "upb/reflection/def.hpp"
 
+#include "src/core/ext/xds/suspend_ads_read_handle.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_client_stats.h"
 #include "src/core/lib/debug/trace.h"
@@ -69,10 +70,10 @@ class XdsApi {
     // Called to parse each individual resource in the ADS response.
     // Note that resource_name is non-empty only when the resource was
     // wrapped in a Resource wrapper proto.
-    virtual void ParseResource(upb_Arena* arena, size_t idx,
-                               absl::string_view type_url,
-                               absl::string_view resource_name,
-                               absl::string_view serialized_resource) = 0;
+    virtual void ParseResource(
+        upb_Arena* arena, size_t idx, absl::string_view type_url,
+        absl::string_view resource_name, absl::string_view serialized_resource,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) = 0;
 
     // Called when a resource is wrapped in a Resource wrapper proto but
     // we fail to parse the Resource wrapper.
@@ -160,8 +161,9 @@ class XdsApi {
 
   // Returns non-OK when failing to deserialize response message.
   // Otherwise, all events are reported to the parser.
-  absl::Status ParseAdsResponse(absl::string_view encoded_response,
-                                AdsResponseParserInterface* parser);
+  absl::Status ParseAdsResponse(
+      absl::string_view encoded_response, AdsResponseParserInterface* parser,
+      RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle);
 
   // Creates an initial LRS request.
   std::string CreateLrsInitialRequest();

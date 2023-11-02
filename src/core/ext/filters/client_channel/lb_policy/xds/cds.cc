@@ -123,11 +123,12 @@ class CdsLb : public LoadBalancingPolicy {
         : parent_(std::move(parent)), name_(std::move(name)) {}
 
     void OnResourceChanged(
-        std::shared_ptr<const XdsClusterResource> cluster_data) override {
+        std::shared_ptr<const XdsClusterResource> cluster_data,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
       RefCountedPtr<ClusterWatcher> self = Ref();
       parent_->work_serializer()->Run(
-          [self = std::move(self),
-           cluster_data = std::move(cluster_data)]() mutable {
+          [self = std::move(self), cluster_data = std::move(cluster_data),
+           suspend_read_handle = std::move(suspend_read_handle)]() mutable {
             self->parent_->OnClusterChanged(self->name_,
                                             std::move(cluster_data));
           },
@@ -141,10 +142,12 @@ class CdsLb : public LoadBalancingPolicy {
           },
           DEBUG_LOCATION);
     }
-    void OnResourceDoesNotExist() override {
+    void OnResourceDoesNotExist(
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
       RefCountedPtr<ClusterWatcher> self = Ref();
       parent_->work_serializer()->Run(
-          [self = std::move(self)]() {
+          [self = std::move(self),
+           suspend_read_handle = std::move(suspend_read_handle)]() {
             self->parent_->OnResourceDoesNotExist(self->name_);
           },
           DEBUG_LOCATION);

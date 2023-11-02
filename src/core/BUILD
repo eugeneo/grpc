@@ -4273,6 +4273,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/base:core_headers",
+        "absl/cleanup",
         "absl/functional:bind_front",
         "absl/memory",
         "absl/random",

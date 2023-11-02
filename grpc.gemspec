@@ -968,6 +968,7 @@ Gem::Specification.new do |s|
   s.files += %w( src/core/ext/xds/certificate_provider_store.h )
   s.files += %w( src/core/ext/xds/file_watcher_certificate_provider_factory.cc )
   s.files += %w( src/core/ext/xds/file_watcher_certificate_provider_factory.h )
+  s.files += %w( src/core/ext/xds/suspend_ads_read_handle.h )
   s.files += %w( src/core/ext/xds/upb_utils.h )
   s.files += %w( src/core/ext/xds/xds_api.cc )
   s.files += %w( src/core/ext/xds/xds_api.h )

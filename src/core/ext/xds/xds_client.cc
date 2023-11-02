@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <type_traits>
 
 #include "absl/strings/match.h"
@@ -148,9 +149,10 @@ class XdsClient::ChannelState::AdsCallState
     absl::Status ProcessAdsResponseFields(AdsResponseFields fields) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
-    void ParseResource(upb_Arena* arena, size_t idx, absl::string_view type_url,
-                       absl::string_view resource_name,
-                       absl::string_view serialized_resource) override
+    void ParseResource(
+        upb_Arena* arena, size_t idx, absl::string_view type_url,
+        absl::string_view resource_name, absl::string_view serialized_resource,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
     void ResourceWrapperParsingFailed(size_t idx,
@@ -259,7 +261,7 @@ class XdsClient::ChannelState::AdsCallState
         ResourceState& state = authority_state.resource_map[type_][name_.key];
         state.meta.client_status = XdsApi::ResourceMetadata::DOES_NOT_EXIST;
         ads_calld_->xds_client()->NotifyWatchersOnResourceDoesNotExist(
-            state.watchers);
+            state.watchers, SuspendAdsReadHandle::NoWait());
       }
       ads_calld_->xds_client()->work_serializer_.DrainQueue();
       ads_calld_.reset();
@@ -287,8 +289,10 @@ class XdsClient::ChannelState::AdsCallState
         : ads_calld_(std::move(ads_calld)) {}
 
     void OnRequestSent(bool ok) override { ads_calld_->OnRequestSent(ok); }
-    void OnRecvMessage(absl::string_view payload) override {
-      ads_calld_->OnRecvMessage(payload);
+    void OnRecvMessage(
+        absl::string_view payload,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+      ads_calld_->OnRecvMessage(payload, std::move(suspend_read_handle));
     }
     void OnStatusReceived(absl::Status status) override {
       ads_calld_->OnStatusReceived(std::move(status));
@@ -313,7 +317,8 @@ class XdsClient::ChannelState::AdsCallState
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
   void OnRequestSent(bool ok);
-  void OnRecvMessage(absl::string_view payload);
+  void OnRecvMessage(absl::string_view payload,
+                     RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle);
   void OnStatusReceived(absl::Status status);
 
   bool IsCurrentCallOnChannel() const;
@@ -366,8 +371,10 @@ class XdsClient::ChannelState::LrsCallState
         : lrs_calld_(std::move(lrs_calld)) {}
 
     void OnRequestSent(bool ok) override { lrs_calld_->OnRequestSent(ok); }
-    void OnRecvMessage(absl::string_view payload) override {
-      lrs_calld_->OnRecvMessage(payload);
+    void OnRecvMessage(
+        absl::string_view payload,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+      lrs_calld_->OnRecvMessage(payload, std::move(suspend_read_handle));
     }
     void OnStatusReceived(absl::Status status) override {
       lrs_calld_->OnStatusReceived(std::move(status));
@@ -414,7 +421,8 @@ class XdsClient::ChannelState::LrsCallState
   };
 
   void OnRequestSent(bool ok);
-  void OnRecvMessage(absl::string_view payload);
+  void OnRecvMessage(absl::string_view payload,
+                     RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle);
   void OnStatusReceived(absl::Status status);
 
   bool IsCurrentCallOnChannel() const;
@@ -742,7 +750,8 @@ void UpdateResourceMetadataNacked(const std::string& version,
 
 void XdsClient::ChannelState::AdsCallState::AdsResponseParser::ParseResource(
     upb_Arena* arena, size_t idx, absl::string_view type_url,
-    absl::string_view resource_name, absl::string_view serialized_resource) {
+    absl::string_view resource_name, absl::string_view serialized_resource,
+    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
   std::string error_prefix = absl::StrCat(
       "resource index ", idx, ": ",
       resource_name.empty() ? "" : absl::StrCat(resource_name, ": "));
@@ -867,10 +876,11 @@ void XdsClient::ChannelState::AdsCallState::AdsResponseParser::ParseResource(
   // Notify watchers.
   auto& watchers_list = resource_state.watchers;
   xds_client()->work_serializer_.Schedule(
-      [watchers_list, value = resource_state.resource]()
+      [watchers_list, value = resource_state.resource,
+       suspend_read_handle = std::move(suspend_read_handle)]()
           ABSL_EXCLUSIVE_LOCKS_REQUIRED(&xds_client()->work_serializer_) {
             for (const auto& p : watchers_list) {
-              p.first->OnGenericResourceChanged(value);
+              p.first->OnGenericResourceChanged(value, suspend_read_handle);
             }
           },
       DEBUG_LOCATION);
@@ -1033,13 +1043,15 @@ void XdsClient::ChannelState::AdsCallState::OnRequestSent(bool ok) {
 }
 
 void XdsClient::ChannelState::AdsCallState::OnRecvMessage(
-    absl::string_view payload) {
+    absl::string_view payload,
+    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
   {
     MutexLock lock(&xds_client()->mu_);
     if (!IsCurrentCallOnChannel()) return;
     // Parse and validate the response.
     AdsResponseParser parser(this);
-    absl::Status status = xds_client()->api_.ParseAdsResponse(payload, &parser);
+    absl::Status status = xds_client()->api_.ParseAdsResponse(
+        payload, &parser, suspend_read_handle);
     if (!status.ok()) {
       // Ignore unparsable response.
       gpr_log(GPR_ERROR,
@@ -1110,7 +1122,7 @@ void XdsClient::ChannelState::AdsCallState::OnRecvMessage(
                 resource_state.meta.client_status =
                     XdsApi::ResourceMetadata::DOES_NOT_EXIST;
                 xds_client()->NotifyWatchersOnResourceDoesNotExist(
-                    resource_state.watchers);
+                    resource_state.watchers, suspend_read_handle);
               }
             }
           }
@@ -1381,7 +1393,8 @@ void XdsClient::ChannelState::LrsCallState::OnRequestSent(bool /*ok*/) {
 }
 
 void XdsClient::ChannelState::LrsCallState::OnRecvMessage(
-    absl::string_view payload) {
+    absl::string_view payload,
+    RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) {
   MutexLock lock(&xds_client()->mu_);
   // If we're no longer the current call, ignore the result.
   if (!IsCurrentCallOnChannel()) return;
@@ -1606,7 +1619,8 @@ void XdsClient::WatchResource(const XdsResourceType* type,
       work_serializer_.Schedule(
           [watcher, value = resource_state.resource]()
               ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
-                watcher->OnGenericResourceChanged(value);
+                watcher->OnGenericResourceChanged(
+                    value, SuspendAdsReadHandle::NoWait());
               },
           DEBUG_LOCATION);
     } else if (resource_state.meta.client_status ==
@@ -1618,7 +1632,7 @@ void XdsClient::WatchResource(const XdsResourceType* type,
       }
       work_serializer_.Schedule(
           [watcher]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
-            watcher->OnResourceDoesNotExist();
+            watcher->OnResourceDoesNotExist(SuspendAdsReadHandle::NoWait());
           },
           DEBUG_LOCATION);
     } else if (resource_state.meta.client_status ==
@@ -1946,13 +1960,15 @@ void XdsClient::NotifyWatchersOnErrorLocked(
 
 void XdsClient::NotifyWatchersOnResourceDoesNotExist(
     const std::map<ResourceWatcherInterface*,
-                   RefCountedPtr<ResourceWatcherInterface>>& watchers) {
+                   RefCountedPtr<ResourceWatcherInterface>>& watchers,
+    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
   work_serializer_.Schedule(
-      [watchers]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
-        for (const auto& p : watchers) {
-          p.first->OnResourceDoesNotExist();
-        }
-      },
+      [watchers, suspend_read_handle = std::move(suspend_read_handle)]()
+          ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
+            for (const auto& p : watchers) {
+              p.first->OnResourceDoesNotExist(std::move(suspend_read_handle));
+            }
+          },
       DEBUG_LOCATION);
 }
 

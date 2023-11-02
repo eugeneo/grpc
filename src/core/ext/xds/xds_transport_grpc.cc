@@ -25,6 +25,7 @@
 #include <string_view>
 #include <utility>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/strings/str_cat.h"
 
 #include <grpc/byte_buffer.h>
@@ -38,6 +39,7 @@
 #include <grpc/support/log.h>
 
 #include "src/core/ext/filters/client_channel/client_channel.h"
+#include "src/core/ext/xds/suspend_ads_read_handle.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/lib/channel/channel_args.h"
@@ -203,17 +205,28 @@ void GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall::
   grpc_byte_buffer_reader_destroy(&bbr);
   grpc_byte_buffer_destroy(self->recv_message_payload_);
   self->recv_message_payload_ = nullptr;
-  self->event_handler_->OnRecvMessage(StringViewFromSlice(response_slice));
+  self->event_handler_->OnRecvMessage(
+      StringViewFromSlice(response_slice),
+      MakeRefCounted<SuspendAdsReadHandle>(self->Ref()));
   CSliceUnref(response_slice);
-  // Keep reading.
+}
+
+void GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall::Read() {
+  // Set the flag, exit if it had already been set to true
+  if (is_reading_.exchange(true)) {
+    return;
+  }
+  // Reset the flag when function exits.
+  auto cleanup_flag =
+      absl::MakeCleanup([this]() { this->is_reading_.store(false); });
   grpc_op op;
   memset(&op, 0, sizeof(op));
   op.op = GRPC_OP_RECV_MESSAGE;
-  op.data.recv_message.recv_message = &self->recv_message_payload_;
-  GPR_ASSERT(self->call_ != nullptr);
+  op.data.recv_message.recv_message = &recv_message_payload_;
+  GPR_ASSERT(call_ != nullptr);
   // Reuses the "OnResponseReceived" ref taken in ctor.
-  const grpc_call_error call_error = grpc_call_start_batch_and_execute(
-      self->call_, &op, 1, &self->on_response_received_);
+  const grpc_call_error call_error =
+      grpc_call_start_batch_and_execute(call_, &op, 1, &on_response_received_);
   GPR_ASSERT(GRPC_CALL_OK == call_error);
 }
 

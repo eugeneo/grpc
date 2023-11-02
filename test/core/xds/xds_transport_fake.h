@@ -32,6 +32,7 @@
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 
+#include "src/core/ext/xds/suspend_ads_read_handle.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_transport.h"
 #include "src/core/lib/gprpp/orphanable.h"
@@ -66,6 +67,10 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
 
     void Orphan() override;
 
+    void Read() override {
+      // no-op for now
+    }
+
     using StreamingCall::Ref;  // Make it public.
 
     bool HaveMessageFromClient();
@@ -79,7 +84,10 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
     // via WaitForMessageFromClient().
     void CompleteSendMessageFromClient(bool ok = true);
 
-    void SendMessageToClient(absl::string_view payload);
+    void SendMessageToClient(
+        absl::string_view payload,
+        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle =
+            SuspendAdsReadHandle::NoWait());
     void MaybeSendStatusToClient(absl::Status status);
 
     bool Orphaned();
@@ -92,8 +100,10 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
           : event_handler_(std::move(event_handler)) {}
 
       void OnRequestSent(bool ok) { event_handler_->OnRequestSent(ok); }
-      void OnRecvMessage(absl::string_view payload) {
-        event_handler_->OnRecvMessage(payload);
+      void OnRecvMessage(
+          absl::string_view payload,
+          RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
+        event_handler_->OnRecvMessage(payload, std::move(suspend_read_handle));
       }
       void OnStatusReceived(absl::Status status) {
         event_handler_->OnStatusReceived(std::move(status));

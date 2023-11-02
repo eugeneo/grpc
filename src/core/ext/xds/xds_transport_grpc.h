@@ -100,6 +100,8 @@ class GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall
 
   void SendMessage(std::string payload) override;
 
+  void Read() override;
+
  private:
   static void OnRequestSent(void* arg, grpc_error_handle error);
   static void OnResponseReceived(void* arg, grpc_error_handle /*error*/);
@@ -108,6 +110,8 @@ class GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall
   RefCountedPtr<GrpcXdsTransportFactory> factory_;
 
   std::unique_ptr<StreamingCall::EventHandler> event_handler_;
+
+  std::atomic_bool is_reading_;
 
   // Always non-NULL.
   grpc_call* call_;

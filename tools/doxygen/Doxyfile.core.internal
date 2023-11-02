@@ -1741,6 +1741,7 @@ src/core/ext/xds/certificate_provider_store.cc \
 src/core/ext/xds/certificate_provider_store.h \
 src/core/ext/xds/file_watcher_certificate_provider_factory.cc \
 src/core/ext/xds/file_watcher_certificate_provider_factory.h \
+src/core/ext/xds/suspend_ads_read_handle.h \
 src/core/ext/xds/upb_utils.h \
 src/core/ext/xds/xds_api.cc \
 src/core/ext/xds/xds_api.h \

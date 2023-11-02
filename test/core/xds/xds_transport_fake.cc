@@ -121,14 +121,15 @@ void FakeXdsTransportFactory::FakeStreamingCall::CompleteSendMessageFromClient(
 }
 
 void FakeXdsTransportFactory::FakeStreamingCall::SendMessageToClient(
-    absl::string_view payload) {
+    absl::string_view payload,
+    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
   ExecCtx exec_ctx;
   RefCountedPtr<RefCountedEventHandler> event_handler;
   {
     MutexLock lock(&mu_);
     event_handler = event_handler_->Ref();
   }
-  event_handler->OnRecvMessage(payload);
+  event_handler->OnRecvMessage(payload, std::move(suspend_read_handle));
 }
 
 void FakeXdsTransportFactory::FakeStreamingCall::MaybeSendStatusToClient(

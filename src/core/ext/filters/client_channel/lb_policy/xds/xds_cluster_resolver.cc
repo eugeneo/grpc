@@ -214,11 +214,14 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
         discovery_mechanism_.reset(DEBUG_LOCATION, "EndpointWatcher");
       }
       void OnResourceChanged(
-          std::shared_ptr<const XdsEndpointResource> update) override {
+          std::shared_ptr<const XdsEndpointResource> update,
+          RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
-            [self = std::move(self), update = std::move(update)]() mutable {
-              self->OnResourceChangedHelper(std::move(update));
+            [self = std::move(self), update = std::move(update),
+             suspend_read_handle = std::move(suspend_read_handle)]() mutable {
+              self->OnResourceChangedHelper(std::move(update),
+                                            std::move(suspend_read_handle));
             },
             DEBUG_LOCATION);
       }
@@ -230,10 +233,12 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
             },
             DEBUG_LOCATION);
       }
-      void OnResourceDoesNotExist() override {
+      void OnResourceDoesNotExist(
+          RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
-            [self = std::move(self)]() {
+            [self = std::move(self),
+             suspend_read_handle = std::move(suspend_read_handle)]() {
               self->OnResourceDoesNotExistHelper();
             },
             DEBUG_LOCATION);
@@ -244,7 +249,8 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
       // in methods of this class rather than in lambdas to work around an MSVC
       // bug.
       void OnResourceChangedHelper(
-          std::shared_ptr<const XdsEndpointResource> update) {
+          std::shared_ptr<const XdsEndpointResource> update,
+          RefCountedPtr<SuspendAdsReadHandle> /*suspend_read_handle*/) {
         std::string resolution_note;
         if (update->priorities.empty()) {
           resolution_note = absl::StrCat(

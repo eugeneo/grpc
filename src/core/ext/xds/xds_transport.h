@@ -31,6 +31,8 @@
 
 namespace grpc_core {
 
+class SuspendAdsReadHandle;
+
 // A factory for creating new XdsTransport instances.
 class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
  public:
@@ -48,7 +50,10 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
         // Called when a SendMessage() operation completes.
         virtual void OnRequestSent(bool ok) = 0;
         // Called when a message is received on the stream.
-        virtual void OnRecvMessage(absl::string_view payload) = 0;
+        // Returns true to immediately resume the read.
+        virtual void OnRecvMessage(
+            absl::string_view payload,
+            RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) = 0;
         // Called when status is received on the stream.
         virtual void OnStatusReceived(absl::Status status) = 0;
       };
@@ -58,6 +63,9 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
       // Only one message will be in flight at a time; subsequent
       // messages will not be sent until this one is done.
       virtual void SendMessage(std::string payload) = 0;
+
+      // Resumes reading messages from the stream.
+      virtual void Read() = 0;
     };
 
     // Create a streaming call on this transport for the specified method.
