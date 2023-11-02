@@ -14,11 +14,17 @@
 // limitations under the License.
 //
 
+#include <memory>
+#include <optional>
+#include <string_view>
+
+#include "absl/status/status.h"
 #include "gtest/gtest.h"
-#include "xds_transport_fake.h"
 
 #include <grpc/grpc.h>
 
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/proto/grpc/testing/xds/v3/discovery.pb.h"
 #include "test/core/util/test_config.h"
 #include "test/core/xds/xds_client_test_lib.h"
 
@@ -52,7 +58,8 @@ TEST_F(XdsClientNotifyWatchersDone, Basic) {
           .set_nonce("A")
           .AddFooResource(XdsFooResource("foo1", 6))
           .Serialize(),
-      SuspendAdsReadHandle::NoWait());
+      XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle ::
+          NoWait());
   // XdsClient should have delivered the response to the watcher.
   auto resource = watcher->WaitForNextResource();
   ASSERT_NE(resource, nullptr);

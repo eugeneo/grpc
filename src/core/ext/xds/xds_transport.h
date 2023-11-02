@@ -19,6 +19,7 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -28,10 +29,9 @@
 
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/lib/gprpp/orphanable.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 
 namespace grpc_core {
-
-class SuspendAdsReadHandle;
 
 // A factory for creating new XdsTransport instances.
 class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
@@ -42,6 +42,18 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
     // Represents a bidi streaming RPC call.
     class StreamingCall : public InternallyRefCounted<StreamingCall> {
      public:
+      class ReadDelayHandle : public InternallyRefCounted<ReadDelayHandle> {
+       public:
+        explicit ReadDelayHandle(RefCountedPtr<StreamingCall> call)
+            : call_(std::move(call)) {}
+        void Orphan() override { call_->Read(); }
+
+        static RefCountedPtr<ReadDelayHandle> NoWait() { return nullptr; }
+
+       private:
+        RefCountedPtr<StreamingCall> call_;
+      };
+
       // An interface for handling events on a streaming call.
       class EventHandler {
        public:
@@ -53,7 +65,7 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
         // Returns true to immediately resume the read.
         virtual void OnRecvMessage(
             absl::string_view payload,
-            RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) = 0;
+            RefCountedPtr<ReadDelayHandle> read_delay_handle) = 0;
         // Called when status is received on the stream.
         virtual void OnStatusReceived(absl::Status status) = 0;
       };

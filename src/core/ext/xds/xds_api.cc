@@ -282,7 +282,9 @@ void MaybeLogDiscoveryResponse(
 
 absl::Status XdsApi::ParseAdsResponse(
     absl::string_view encoded_response, AdsResponseParserInterface* parser,
-    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
+    RefCountedPtr<
+        XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+        read_delay_handle) {
   upb::Arena arena;
   const XdsApiContext context = {client_, tracer_, symtab_->ptr(), arena.ptr()};
   // Decode the response.
@@ -344,7 +346,7 @@ absl::Status XdsApi::ParseAdsResponse(
           envoy_service_discovery_v3_Resource_name(resource_wrapper));
     }
     parser->ParseResource(context.arena, i, type_url, resource_name,
-                          serialized_resource, suspend_read_handle);
+                          serialized_resource, read_delay_handle);
   }
   return absl::OkStatus();
 }

@@ -39,7 +39,6 @@
 #include <grpc/support/log.h>
 
 #include "src/core/ext/filters/client_channel/client_channel.h"
-#include "src/core/ext/xds/suspend_ads_read_handle.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/lib/channel/channel_args.h"
@@ -207,7 +206,7 @@ void GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall::
   self->recv_message_payload_ = nullptr;
   self->event_handler_->OnRecvMessage(
       StringViewFromSlice(response_slice),
-      MakeRefCounted<SuspendAdsReadHandle>(self->Ref()));
+      MakeRefCounted<ReadDelayHandle>(self->Ref()));
   CSliceUnref(response_slice);
 }
 

@@ -22,8 +22,8 @@
 #include <utility>
 
 #include "absl/strings/string_view.h"
+#include "xds_client.h"
 
-#include "src/core/ext/xds/suspend_ads_read_handle.h"
 #include "src/core/ext/xds/xds_client.h"
 #include "src/core/ext/xds/xds_resource_type.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
@@ -44,17 +44,21 @@ class XdsResourceTypeImpl : public XdsResourceType {
    public:
     virtual void OnResourceChanged(
         std::shared_ptr<const ResourceType> resource,
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) = 0;
+        RefCountedPtr<
+            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+            read_delay_handle) = 0;
 
    private:
     // Get result from XdsClient generic watcher interface, perform
     // down-casting, and invoke the caller's OnResourceChanged() method.
     void OnGenericResourceChanged(
         std::shared_ptr<const XdsResourceType::ResourceData> resource,
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+        RefCountedPtr<
+            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+            read_delay_handle) override {
       OnResourceChanged(
           std::static_pointer_cast<const ResourceType>(std::move(resource)),
-          std::move(suspend_read_handle));
+          std::move(read_delay_handle));
     }
   };
 

@@ -91,6 +91,9 @@
 namespace grpc_core {
 namespace {
 
+using ReadDelayHandle =
+    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
+
 TraceFlag grpc_xds_server_config_fetcher_trace(false,
                                                "xds_server_config_fetcher");
 
@@ -152,12 +155,12 @@ class XdsServerConfigFetcher::ListenerWatcher
 
   void OnResourceChanged(
       std::shared_ptr<const XdsListenerResource> listener,
-      RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override;
+      RefCountedPtr<ReadDelayHandle> read_delay_handle) override;
 
   void OnError(absl::Status status) override;
 
   void OnResourceDoesNotExist(
-      RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override;
+      RefCountedPtr<ReadDelayHandle> read_delay_handle) override;
 
   const std::string& listening_address() const { return listening_address_; }
 
@@ -295,7 +298,7 @@ class XdsServerConfigFetcher::ListenerWatcher::FilterChainMatchManager::
 
   void OnResourceChanged(
       std::shared_ptr<const XdsRouteConfigResource> route_config,
-      RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) override {
+      RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) override {
     filter_chain_match_manager_->OnRouteConfigChanged(resource_name_,
                                                       std::move(route_config));
   }
@@ -305,7 +308,7 @@ class XdsServerConfigFetcher::ListenerWatcher::FilterChainMatchManager::
   }
 
   void OnResourceDoesNotExist(
-      RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) override {
+      RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) override {
     filter_chain_match_manager_->OnResourceDoesNotExist(resource_name_);
   }
 
@@ -493,14 +496,14 @@ class XdsServerConfigFetcher::ListenerWatcher::FilterChainMatchManager::
 
   void OnResourceChanged(
       std::shared_ptr<const XdsRouteConfigResource> route_config,
-      RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) override {
+      RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) override {
     parent_->OnRouteConfigChanged(std::move(route_config));
   }
 
   void OnError(absl::Status status) override { parent_->OnError(status); }
 
   void OnResourceDoesNotExist(
-      RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) override {
+      RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) override {
     parent_->OnResourceDoesNotExist();
   }
 
@@ -583,7 +586,7 @@ XdsServerConfigFetcher::ListenerWatcher::ListenerWatcher(
 
 void XdsServerConfigFetcher::ListenerWatcher::OnResourceChanged(
     std::shared_ptr<const XdsListenerResource> listener,
-    RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) {
+    RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_server_config_fetcher_trace)) {
     gpr_log(GPR_INFO,
             "[ListenerWatcher %p] Received LDS update from xds client %p: %s",
@@ -662,7 +665,7 @@ void XdsServerConfigFetcher::ListenerWatcher::OnFatalError(
 }
 
 void XdsServerConfigFetcher::ListenerWatcher::OnResourceDoesNotExist(
-    RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */) {
+    RefCountedPtr<ReadDelayHandle> /* read_delay_handle */) {
   MutexLock lock(&mu_);
   OnFatalError(absl::NotFoundError("Requested listener does not exist"));
 }

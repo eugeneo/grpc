@@ -99,6 +99,9 @@ TraceFlag grpc_xds_resolver_trace(false, "xds_resolver");
 
 namespace {
 
+using ReadDelayHandle =
+    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
+
 //
 // XdsResolver
 //
@@ -142,11 +145,11 @@ class XdsResolver : public Resolver {
         : resolver_(std::move(resolver)) {}
     void OnResourceChanged(
         std::shared_ptr<const XdsListenerResource> listener,
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+        RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
       RefCountedPtr<ListenerWatcher> self = Ref();
       resolver_->work_serializer_->Run(
           [self = std::move(self), listener = std::move(listener),
-           suspend_read_handle = std::move(suspend_read_handle)]() mutable {
+           read_delay_handle = std::move(read_delay_handle)]() mutable {
             self->resolver_->OnListenerUpdate(std::move(listener));
           },
           DEBUG_LOCATION);
@@ -161,11 +164,11 @@ class XdsResolver : public Resolver {
           DEBUG_LOCATION);
     }
     void OnResourceDoesNotExist(
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+        RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
       RefCountedPtr<ListenerWatcher> self = Ref();
       resolver_->work_serializer_->Run(
           [self = std::move(self),
-           suspend_read_handle = std::move(suspend_read_handle)]() {
+           read_delay_handle = std::move(read_delay_handle)]() {
             self->resolver_->OnResourceDoesNotExist(
                 absl::StrCat(self->resolver_->lds_resource_name_,
                              ": xDS listener resource does not exist"));
@@ -184,11 +187,11 @@ class XdsResolver : public Resolver {
         : resolver_(std::move(resolver)) {}
     void OnResourceChanged(
         std::shared_ptr<const XdsRouteConfigResource> route_config,
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+        RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
       RefCountedPtr<RouteConfigWatcher> self = Ref();
       resolver_->work_serializer_->Run(
           [self = std::move(self), route_config = std::move(route_config),
-           suspend_read_handle = std::move(suspend_read_handle)]() mutable {
+           read_delay_handle = std::move(read_delay_handle)]() mutable {
             if (self != self->resolver_->route_config_watcher_) return;
             self->resolver_->OnRouteConfigUpdate(std::move(route_config));
           },
@@ -205,11 +208,11 @@ class XdsResolver : public Resolver {
           DEBUG_LOCATION);
     }
     void OnResourceDoesNotExist(
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+        RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
       RefCountedPtr<RouteConfigWatcher> self = Ref();
       resolver_->work_serializer_->Run(
           [self = std::move(self),
-           suspend_read_handle = std::move(suspend_read_handle)]() {
+           read_delay_handle = std::move(read_delay_handle)]() {
             if (self != self->resolver_->route_config_watcher_) return;
             self->resolver_->OnResourceDoesNotExist(absl::StrCat(
                 self->resolver_->route_config_name_,

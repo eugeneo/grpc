@@ -122,7 +122,7 @@ void FakeXdsTransportFactory::FakeStreamingCall::CompleteSendMessageFromClient(
 
 void FakeXdsTransportFactory::FakeStreamingCall::SendMessageToClient(
     absl::string_view payload,
-    RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) {
+    RefCountedPtr<ReadDelayHandle> suspend_read_handle) {
   ExecCtx exec_ctx;
   RefCountedPtr<RefCountedEventHandler> event_handler;
   {

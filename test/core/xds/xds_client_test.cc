@@ -32,7 +32,6 @@
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "gtest/gtest.h"
-#include "xds_client_test_lib.h"
 
 #include <grpc/grpc.h>
 #include <grpc/support/json.h>
@@ -42,6 +41,7 @@
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "test/core/util/scoped_env_var.h"
 #include "test/core/util/test_config.h"
+#include "test/core/xds/xds_client_test_lib.h"
 #include "test/core/xds/xds_transport_fake.h"
 
 // IWYU pragma: no_include <google/protobuf/message.h>

@@ -81,6 +81,9 @@ TraceFlag grpc_lb_xds_cluster_resolver_trace(false, "xds_cluster_resolver_lb");
 
 namespace {
 
+using ReadDelayHandle =
+    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
+
 constexpr absl::string_view kXdsClusterResolver =
     "xds_cluster_resolver_experimental";
 
@@ -215,13 +218,13 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
       }
       void OnResourceChanged(
           std::shared_ptr<const XdsEndpointResource> update,
-          RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+          RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
             [self = std::move(self), update = std::move(update),
-             suspend_read_handle = std::move(suspend_read_handle)]() mutable {
+             read_delay_handle = std::move(read_delay_handle)]() mutable {
               self->OnResourceChangedHelper(std::move(update),
-                                            std::move(suspend_read_handle));
+                                            std::move(read_delay_handle));
             },
             DEBUG_LOCATION);
       }
@@ -234,11 +237,11 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
             DEBUG_LOCATION);
       }
       void OnResourceDoesNotExist(
-          RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle) override {
+          RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
             [self = std::move(self),
-             suspend_read_handle = std::move(suspend_read_handle)]() {
+             read_delay_handle = std::move(read_delay_handle)]() {
               self->OnResourceDoesNotExistHelper();
             },
             DEBUG_LOCATION);
@@ -250,7 +253,7 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
       // bug.
       void OnResourceChangedHelper(
           std::shared_ptr<const XdsEndpointResource> update,
-          RefCountedPtr<SuspendAdsReadHandle> /*suspend_read_handle*/) {
+          RefCountedPtr<ReadDelayHandle> /*read_delay_handle*/) {
         std::string resolution_note;
         if (update->priorities.empty()) {
           resolution_note = absl::StrCat(

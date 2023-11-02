@@ -148,8 +148,8 @@ class Fuzzer {
 
     void OnResourceChanged(
         std::shared_ptr<const typename ResourceType::ResourceType> resource,
-        RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */)
-        override {
+        RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
+                          ReadDelayHandle> /* read_delay_handle */) override {
       gpr_log(GPR_INFO, "==> OnResourceChanged(%s %s): %s",
               std::string(ResourceType::Get()->type_url()).c_str(),
               resource_name_.c_str(), resource->ToString().c_str());
@@ -162,8 +162,8 @@ class Fuzzer {
     }
 
     void OnResourceDoesNotExist(
-        RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */)
-        override {
+        RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
+                          ReadDelayHandle> /* read_delay_handle */) override {
       gpr_log(GPR_INFO, "==> OnResourceDoesNotExist(%s %s)",
               std::string(ResourceType::Get()->type_url()).c_str(),
               resource_name_.c_str());

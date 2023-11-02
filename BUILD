@@ -3656,7 +3656,6 @@ grpc_cc_library(
         "//src/core:ext/xds/xds_client_stats.cc",
     ],
     hdrs = [
-        "//src/core:ext/xds/suspend_ads_read_handle.h",
         "//src/core:ext/xds/xds_api.h",
         "//src/core:ext/xds/xds_bootstrap.h",
         "//src/core:ext/xds/xds_channel_args.h",

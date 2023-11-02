@@ -291,8 +291,8 @@ class XdsClientTestBase : public ::testing::Test {
 
       void OnResourceChanged(
           std::shared_ptr<const ResourceStruct> foo,
-          RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */)
-          override {
+          RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
+                            ReadDelayHandle> /* read_delay_handle */) override {
         MutexLock lock(&mu_);
         queue_.push_back(std::move(foo));
         cv_.Signal();
@@ -303,8 +303,8 @@ class XdsClientTestBase : public ::testing::Test {
         cv_.Signal();
       }
       void OnResourceDoesNotExist(
-          RefCountedPtr<SuspendAdsReadHandle> /* suspend_read_handle */)
-          override {
+          RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
+                            ReadDelayHandle> /* read_delay_handle */) override {
         MutexLock lock(&mu_);
         queue_.push_back(DoesNotExist());
         cv_.Signal();

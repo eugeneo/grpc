@@ -64,12 +64,16 @@ class XdsClient : public DualRefCounted<XdsClient> {
    public:
     virtual void OnGenericResourceChanged(
         std::shared_ptr<const XdsResourceType::ResourceData> resource,
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle)
+        RefCountedPtr<
+            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+            read_delay_handle)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
     virtual void OnError(absl::Status status)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
     virtual void OnResourceDoesNotExist(
-        RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle)
+        RefCountedPtr<
+            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+            read_delay_handle)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
   };
 
@@ -284,7 +288,9 @@ class XdsClient : public DualRefCounted<XdsClient> {
   void NotifyWatchersOnResourceDoesNotExist(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
-      RefCountedPtr<SuspendAdsReadHandle> suspend_read_handle);
+      RefCountedPtr<
+          XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+          read_delay_handle);
 
   void MaybeRegisterResourceTypeLocked(const XdsResourceType* resource_type)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
