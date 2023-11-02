@@ -633,7 +633,6 @@ libs:
   - src/core/ext/upbdefs-generated/xds/type/v3/typed_struct.upbdefs.h
   - src/core/ext/xds/certificate_provider_store.h
   - src/core/ext/xds/file_watcher_certificate_provider_factory.h
-  - src/core/ext/xds/suspend_ads_read_handle.h
   - src/core/ext/xds/upb_utils.h
   - src/core/ext/xds/xds_api.h
   - src/core/ext/xds/xds_audit_logger_registry.h
