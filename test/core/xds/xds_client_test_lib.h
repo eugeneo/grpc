@@ -17,19 +17,48 @@
 #ifndef GRPC_TEST_CORE_XDS_XDS_CLIENT_TEST_LIB_H
 #define GRPC_TEST_CORE_XDS_XDS_CLIENT_TEST_LIB_H
 
+#include <stdint.h>
+
+#include <algorithm>
+#include <deque>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+
 #include <google/protobuf/any.pb.h>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/time.h"
+#include "absl/types/optional.h"
+#include "absl/types/variant.h"
 #include "gmock/gmock.h"
+#include "google/protobuf/json/json.h"
+#include "google/protobuf/struct.pb.h"
+#include "google/protobuf/util/json_util.h"
 #include "gtest/gtest.h"
+#include "upb/reflection/def.h"
 
+#include <grpc/support/json.h>
+#include <grpc/support/log.h>
 #include <grpcpp/impl/codegen/config_protobuf.h>
 
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_client.h"
+#include "src/core/ext/xds/xds_resource_type.h"
 #include "src/core/ext/xds/xds_resource_type_impl.h"
+#include "src/core/ext/xds/xds_transport.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/gprpp/debug_location.h"
+#include "src/core/lib/gprpp/orphanable.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
+#include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/json/json.h"
 #include "src/core/lib/json/json_args.h"
 #include "src/core/lib/json/json_object_loader.h"

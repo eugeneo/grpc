@@ -23,7 +23,6 @@
 
 #include <grpc/grpc.h>
 
-#include "src/core/ext/xds/xds_transport.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/proto/grpc/testing/xds/v3/discovery.pb.h"
 #include "test/core/util/test_config.h"
