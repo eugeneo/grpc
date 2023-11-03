@@ -20,13 +20,8 @@
 
 #include "src/core/ext/xds/xds_client.h"
 
-#include <stdint.h>
-
 #include <memory>
 #include <string>
-
-#include <google/protobuf/any.pb.h>
-#include <google/protobuf/struct.pb.h>
 
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
@@ -34,11 +29,9 @@
 #include "gtest/gtest.h"
 
 #include <grpc/grpc.h>
-#include <grpc/support/json.h>
-#include <grpc/support/log.h>
-#include <grpcpp/impl/codegen/config_protobuf.h>
 
 #include "src/core/ext/xds/xds_bootstrap.h"
+#include "src/proto/grpc/testing/xds/v3/discovery.pb.h"
 #include "test/core/util/scoped_env_var.h"
 #include "test/core/util/test_config.h"
 #include "test/core/xds/xds_client_test_lib.h"

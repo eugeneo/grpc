@@ -22,10 +22,10 @@
 #include <utility>
 
 #include "absl/strings/string_view.h"
-#include "xds_client.h"
 
 #include "src/core/ext/xds/xds_client.h"
 #include "src/core/ext/xds/xds_resource_type.h"
+#include "src/core/ext/xds/xds_transport.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 
 namespace grpc_core {
