@@ -1968,7 +1968,7 @@ void XdsClient::NotifyWatchersOnResourceDoesNotExist(
       [watchers, read_delay_handle = std::move(read_delay_handle)]()
           ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
             for (const auto& p : watchers) {
-              p.first->OnResourceDoesNotExist(std::move(read_delay_handle));
+              p.first->OnResourceDoesNotExist(read_delay_handle);
             }
           },
       DEBUG_LOCATION);

@@ -171,7 +171,7 @@ grpc_cc_library(
         ":xds_transport_fake",
         "//:xds_client",
         "//src/proto/grpc/testing/xds/v3:discovery_proto",
-    ]
+    ],
 )
 
 grpc_cc_test(
@@ -186,9 +186,9 @@ grpc_cc_test(
         ":xds_client_test_lib",
         ":xds_transport_fake",
         "//:xds_client",
+        "//src/proto/grpc/testing/xds/v3:discovery_proto",
         "//test/core/util:grpc_test_util",
         "//test/core/util:scoped_env_var",
-        "//src/proto/grpc/testing/xds/v3:discovery_proto",
     ],
 )
 

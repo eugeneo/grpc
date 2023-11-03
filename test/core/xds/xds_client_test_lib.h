@@ -21,7 +21,6 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "xds_transport_fake.h"
 
 #include <grpcpp/impl/codegen/config_protobuf.h>
 
@@ -39,6 +38,7 @@
 #include "src/proto/grpc/testing/xds/v3/base.pb.h"
 #include "src/proto/grpc/testing/xds/v3/discovery.pb.h"
 #include "test/core/util/test_config.h"
+#include "test/core/xds/xds_transport_fake.h"
 
 using envoy::service::discovery::v3::DiscoveryRequest;
 using envoy::service::discovery::v3::DiscoveryResponse;
