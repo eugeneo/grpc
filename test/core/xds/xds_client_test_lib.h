@@ -236,6 +236,11 @@ class XdsClientTestBase : public ::testing::Test {
             XdsTestResourceType<ResourceStruct, all_resources_required_in_sotw>,
             ResourceStruct> {
    public:
+    using ResourceAndReadDelayHandle = std::pair<
+        std::shared_ptr<const ResourceStruct>,
+        RefCountedPtr<
+            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>>;
+
     // A watcher implementation that queues delivered watches.
     class Watcher : public XdsResourceTypeImpl<
                         XdsTestResourceType<ResourceStruct,
@@ -253,26 +258,35 @@ class XdsClientTestBase : public ::testing::Test {
         return !queue_.empty();
       }
 
-      std::shared_ptr<const ResourceStruct> WaitForNextResource(
+      absl::optional<ResourceAndReadDelayHandle> WaitForNextResourceAndHandle(
           absl::Duration timeout = absl::Seconds(1),
           SourceLocation location = SourceLocation()) {
         MutexLock lock(&mu_);
-        if (!WaitForEventLocked(timeout)) return nullptr;
+        if (!WaitForEventLocked(timeout)) return absl::nullopt;
         Event& event = queue_.front();
-        if (!absl::holds_alternative<std::shared_ptr<const ResourceStruct>>(
-                event)) {
+        if (!absl::holds_alternative<ResourceAndReadDelayHandle>(event)) {
           EXPECT_TRUE(false)
               << "got unexpected event "
               << (absl::holds_alternative<absl::Status>(event)
                       ? "error"
                       : "does-not-exist")
               << " at " << location.file() << ":" << location.line();
-          return nullptr;
+          return absl::nullopt;
         }
-        auto foo =
-            std::move(absl::get<std::shared_ptr<const ResourceStruct>>(event));
+        auto foo = std::move(absl::get<ResourceAndReadDelayHandle>(event));
         queue_.pop_front();
         return foo;
+      }
+
+      std::shared_ptr<const ResourceStruct> WaitForNextResource(
+          absl::Duration timeout = absl::Seconds(1),
+          SourceLocation location = SourceLocation()) {
+        auto resource_and_handle =
+            WaitForNextResourceAndHandle(timeout, location);
+        if (!resource_and_handle.has_value()) {
+          return nullptr;
+        }
+        return std::move(resource_and_handle->first);
       }
 
       absl::optional<absl::Status> WaitForNextError(
@@ -284,8 +298,7 @@ class XdsClientTestBase : public ::testing::Test {
         if (!absl::holds_alternative<absl::Status>(event)) {
           EXPECT_TRUE(false)
               << "got unexpected event "
-              << (absl::holds_alternative<
-                      std::shared_ptr<const ResourceStruct>>(event)
+              << (absl::holds_alternative<ResourceAndReadDelayHandle>(event)
                       ? "resource"
                       : "does-not-exist")
               << " at " << location.file() << ":" << location.line();
@@ -315,15 +328,17 @@ class XdsClientTestBase : public ::testing::Test {
 
      private:
       struct DoesNotExist {};
-      using Event = absl::variant<std::shared_ptr<const ResourceStruct>,
-                                  absl::Status, DoesNotExist>;
+      using Event =
+          absl::variant<ResourceAndReadDelayHandle, absl::Status, DoesNotExist>;
 
       void OnResourceChanged(
           std::shared_ptr<const ResourceStruct> foo,
-          RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
-                            ReadDelayHandle> /* read_delay_handle */) override {
+          RefCountedPtr<
+              XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
+              read_delay_handle) override {
         MutexLock lock(&mu_);
-        queue_.push_back(std::move(foo));
+        queue_.emplace_back(
+            std::make_pair(std::move(foo), std::move(read_delay_handle)));
         cv_.Signal();
       }
       void OnError(absl::Status status) override {

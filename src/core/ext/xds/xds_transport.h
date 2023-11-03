@@ -44,15 +44,12 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
     // Represents a bidi streaming RPC call.
     class StreamingCall : public InternallyRefCounted<StreamingCall> {
      public:
-      class ReadDelayHandle : public InternallyRefCounted<ReadDelayHandle> {
+      class ReadDelayHandle : public RefCounted<ReadDelayHandle> {
        public:
         explicit ReadDelayHandle(RefCountedPtr<StreamingCall> call)
             : call_(std::move(call)) {}
 
-        void Orphan() override {
-          gpr_log(GPR_ERROR, "Boop!");
-          call_->Read();
-        }
+        ~ReadDelayHandle() override { call_->Read(); }
 
         static RefCountedPtr<ReadDelayHandle> NoWait() { return nullptr; }
 

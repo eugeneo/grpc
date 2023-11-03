@@ -59,10 +59,10 @@ TEST_F(XdsClientNotifyWatchersDone, Basic) {
           .AddFooResource(XdsFooResource("foo1", 6))
           .Serialize());
   // XdsClient should have delivered the response to the watcher.
-  auto resource = watcher->WaitForNextResource();
-  ASSERT_NE(resource, nullptr);
-  EXPECT_EQ(resource->name, "foo1");
-  EXPECT_EQ(resource->value, 6);
+  auto resource = watcher->WaitForNextResourceAndHandle();
+  ASSERT_NE(resource, absl::nullopt);
+  EXPECT_EQ(resource->first->name, "foo1");
+  EXPECT_EQ(resource->first->value, 6);
   // XdsClient should have sent an ACK message to the xDS server.
   request = WaitForRequest(stream.get());
   EXPECT_EQ(stream->read_count(), 0);
@@ -74,6 +74,8 @@ TEST_F(XdsClientNotifyWatchersDone, Basic) {
   // Cancel watch.
   CancelFooWatch(watcher.get(), "foo1");
   EXPECT_TRUE(stream->Orphaned());
+  resource->second.reset();
+  EXPECT_EQ(stream->read_count(), 1);
 }
 
 }  // namespace
