@@ -164,9 +164,9 @@ grpc_cc_library(
 
 grpc_cc_library(
     name = "xds_client_test_lib",
+    testonly = True,
     hdrs = ["xds_client_test_lib.h"],
     external_deps = ["gtest"],
-    testonly = True,
     language = "C++",
     deps = [
         ":xds_transport_fake",
