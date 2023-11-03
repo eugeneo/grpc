@@ -46,7 +46,11 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
        public:
         explicit ReadDelayHandle(RefCountedPtr<StreamingCall> call)
             : call_(std::move(call)) {}
-        void Orphan() override { call_->Read(); }
+
+        void Orphan() override {
+          gpr_log(GPR_ERROR, "Boop!");
+          call_->Read();
+        }
 
         static RefCountedPtr<ReadDelayHandle> NoWait() { return nullptr; }
 

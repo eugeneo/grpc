@@ -66,9 +66,7 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
 
     void Orphan() override;
 
-    void Read() override {
-      // no-op for now
-    }
+    void Read() override { read_count_ += 1; }
 
     using StreamingCall::Ref;  // Make it public.
 
@@ -83,12 +81,12 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
     // via WaitForMessageFromClient().
     void CompleteSendMessageFromClient(bool ok = true);
 
-    void SendMessageToClient(absl::string_view payload,
-                             RefCountedPtr<ReadDelayHandle> read_delay_handle =
-                                 ReadDelayHandle::NoWait());
+    void SendMessageToClient(absl::string_view payload);
     void MaybeSendStatusToClient(absl::Status status);
 
     bool Orphaned();
+
+    size_t read_count() const { return read_count_; }
 
    private:
     class RefCountedEventHandler : public RefCounted<RefCountedEventHandler> {
@@ -124,6 +122,7 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
     std::deque<std::string> from_client_messages_ ABSL_GUARDED_BY(&mu_);
     bool status_sent_ ABSL_GUARDED_BY(&mu_) = false;
     bool orphaned_ ABSL_GUARDED_BY(&mu_) = false;
+    size_t read_count_ = 0;
   };
 
   FakeXdsTransportFactory() = default;

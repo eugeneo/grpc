@@ -58,9 +58,7 @@ TEST_F(XdsClientNotifyWatchersDone, Basic) {
           .set_version_info("1")
           .set_nonce("A")
           .AddFooResource(XdsFooResource("foo1", 6))
-          .Serialize(),
-      XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle ::
-          NoWait());
+          .Serialize());
   // XdsClient should have delivered the response to the watcher.
   auto resource = watcher->WaitForNextResource();
   ASSERT_NE(resource, nullptr);
@@ -68,6 +66,7 @@ TEST_F(XdsClientNotifyWatchersDone, Basic) {
   EXPECT_EQ(resource->value, 6);
   // XdsClient should have sent an ACK message to the xDS server.
   request = WaitForRequest(stream.get());
+  EXPECT_EQ(stream->read_count(), 0);
   ASSERT_TRUE(request.has_value());
   CheckRequest(*request, XdsFooResourceType::Get()->type_url(),
                /*version_info=*/"1", /*response_nonce=*/"A",
