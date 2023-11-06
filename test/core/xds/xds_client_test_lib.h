@@ -72,10 +72,8 @@
 namespace grpc_core {
 namespace testing {
 
-namespace {
 using envoy::service::discovery::v3::DiscoveryRequest;
 using envoy::service::discovery::v3::DiscoveryResponse;
-}  // namespace
 
 class XdsClientTestBase : public ::testing::Test {
  protected:
