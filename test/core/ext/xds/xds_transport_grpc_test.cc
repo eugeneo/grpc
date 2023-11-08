@@ -15,12 +15,17 @@
 #include "src/core/ext/xds/xds_transport_grpc.h"
 
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include <grpc/support/log.h>
+
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
+#include "src/core/lib/iomgr/exec_ctx.h"
 #include "test/core/util/test_config.h"
 
 namespace grpc_core {
@@ -35,7 +40,8 @@ using EventHandlerEvent = absl::variant<
 class TestEventHandler
     : public XdsTransportFactory::XdsTransport::StreamingCall::EventHandler {
  public:
-  TestEventHandler(std::vector<EventHandlerEvent>* events) : events_(events) {}
+  explicit TestEventHandler(std::vector<EventHandlerEvent>* events)
+      : events_(events) {}
 
   void OnRequestSent(bool ok) override { events_->emplace_back(ok); }
 
