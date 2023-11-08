@@ -98,9 +98,8 @@ class FakeXdsTransportFactory : public XdsTransportFactory {
           : event_handler_(std::move(event_handler)) {}
 
       void OnRequestSent(bool ok) { event_handler_->OnRequestSent(ok); }
-      void OnRecvMessage(absl::string_view payload,
-                         RefCountedPtr<ReadDelayHandle> read_delay_handle) {
-        event_handler_->OnRecvMessage(payload, std::move(read_delay_handle));
+      void OnRecvMessage(absl::string_view payload) {
+        event_handler_->OnRecvMessage(payload);
       }
       void OnStatusReceived(absl::Status status) {
         event_handler_->OnStatusReceived(std::move(status));

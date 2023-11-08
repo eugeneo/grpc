@@ -128,7 +128,7 @@ void FakeXdsTransportFactory::FakeStreamingCall::SendMessageToClient(
     MutexLock lock(&mu_);
     event_handler = event_handler_->Ref();
   }
-  event_handler->OnRecvMessage(payload, MakeRefCounted<ReadDelayHandle>(Ref()));
+  event_handler->OnRecvMessage(payload);
 }
 
 void FakeXdsTransportFactory::FakeStreamingCall::MaybeSendStatusToClient(

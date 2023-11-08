@@ -51,6 +51,20 @@ class XdsTransportFactory;
 // - CSDS response generation
 class XdsApi {
  public:
+  class ReadDelayHandle : public InternallyRefCounted<ReadDelayHandle> {
+   public:
+    explicit ReadDelayHandle(absl::AnyInvocable<void()> read)
+        : read_(std::move(read)) {}
+    ~ReadDelayHandle() override { read_(); }
+
+    void Orphan() override {}
+
+    static RefCountedPtr<ReadDelayHandle> NoWait() { return nullptr; }
+
+   private:
+    absl::AnyInvocable<void()> read_;
+  };
+
   // Interface defined by caller and passed to ParseAdsResponse().
   class AdsResponseParserInterface {
    public:
@@ -74,9 +88,7 @@ class XdsApi {
     virtual void ParseResource(
         upb_Arena* arena, size_t idx, absl::string_view type_url,
         absl::string_view resource_name, absl::string_view serialized_resource,
-        RefCountedPtr<
-            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
-            read_delay_handle) = 0;
+        RefCountedPtr<ReadDelayHandle> read_delay_handle) = 0;
 
     // Called when a resource is wrapped in a Resource wrapper proto but
     // we fail to parse the Resource wrapper.
@@ -166,9 +178,7 @@ class XdsApi {
   // Otherwise, all events are reported to the parser.
   absl::Status ParseAdsResponse(
       absl::string_view encoded_response, AdsResponseParserInterface* parser,
-      RefCountedPtr<
-          XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
-          read_delay_handle);
+      RefCountedPtr<ReadDelayHandle> read_delay_handle);
 
   // Creates an initial LRS request.
   std::string CreateLrsInitialRequest();

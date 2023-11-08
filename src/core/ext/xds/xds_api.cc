@@ -282,9 +282,7 @@ void MaybeLogDiscoveryResponse(
 
 absl::Status XdsApi::ParseAdsResponse(
     absl::string_view encoded_response, AdsResponseParserInterface* parser,
-    RefCountedPtr<
-        XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
-        read_delay_handle) {
+    RefCountedPtr<ReadDelayHandle> read_delay_handle) {
   upb::Arena arena;
   const XdsApiContext context = {client_, tracer_, symtab_->ptr(), arena.ptr()};
   // Decode the response.

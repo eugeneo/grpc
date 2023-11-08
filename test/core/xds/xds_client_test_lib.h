@@ -236,10 +236,9 @@ class XdsClientTestBase : public ::testing::Test {
             XdsTestResourceType<ResourceStruct, all_resources_required_in_sotw>,
             ResourceStruct> {
    public:
-    using ResourceAndReadDelayHandle = std::pair<
-        std::shared_ptr<const ResourceStruct>,
-        RefCountedPtr<
-            XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>>;
+    using ResourceAndReadDelayHandle =
+        std::pair<std::shared_ptr<const ResourceStruct>,
+                  RefCountedPtr<XdsApi::ReadDelayHandle>>;
 
     // A watcher implementation that queues delivered watches.
     class Watcher : public XdsResourceTypeImpl<
@@ -333,9 +332,7 @@ class XdsClientTestBase : public ::testing::Test {
 
       void OnResourceChanged(
           std::shared_ptr<const ResourceStruct> foo,
-          RefCountedPtr<
-              XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
-              read_delay_handle) override {
+          RefCountedPtr<XdsApi::ReadDelayHandle> read_delay_handle) override {
         MutexLock lock(&mu_);
         queue_.emplace_back(
             std::make_pair(std::move(foo), std::move(read_delay_handle)));
@@ -347,8 +344,8 @@ class XdsClientTestBase : public ::testing::Test {
         cv_.Signal();
       }
       void OnResourceDoesNotExist(
-          RefCountedPtr<XdsTransportFactory::XdsTransport::StreamingCall::
-                            ReadDelayHandle> /* read_delay_handle */) override {
+          RefCountedPtr<XdsApi::ReadDelayHandle> /* read_delay_handle */)
+          override {
         MutexLock lock(&mu_);
         queue_.push_back(DoesNotExist());
         cv_.Signal();

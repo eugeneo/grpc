@@ -39,6 +39,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
+#include "xds_api.h"
 
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
@@ -92,8 +93,7 @@
 namespace grpc_core {
 namespace {
 
-using ReadDelayHandle =
-    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
+using ReadDelayHandle = XdsApi::ReadDelayHandle;
 
 TraceFlag grpc_xds_server_config_fetcher_trace(false,
                                                "xds_server_config_fetcher");

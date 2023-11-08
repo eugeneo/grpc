@@ -100,8 +100,7 @@ TraceFlag grpc_xds_resolver_trace(false, "xds_resolver");
 
 namespace {
 
-using ReadDelayHandle =
-    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
+using ReadDelayHandle = XdsApi::ReadDelayHandle;
 
 //
 // XdsResolver

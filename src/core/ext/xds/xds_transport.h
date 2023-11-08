@@ -43,19 +43,6 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
     // Represents a bidi streaming RPC call.
     class StreamingCall : public InternallyRefCounted<StreamingCall> {
      public:
-      class ReadDelayHandle : public RefCounted<ReadDelayHandle> {
-       public:
-        explicit ReadDelayHandle(RefCountedPtr<StreamingCall> call)
-            : call_(std::move(call)) {}
-
-        ~ReadDelayHandle() override { call_->Read(); }
-
-        static RefCountedPtr<ReadDelayHandle> NoWait() { return nullptr; }
-
-       private:
-        RefCountedPtr<StreamingCall> call_;
-      };
-
       // An interface for handling events on a streaming call.
       class EventHandler {
        public:
@@ -65,9 +52,7 @@ class XdsTransportFactory : public InternallyRefCounted<XdsTransportFactory> {
         virtual void OnRequestSent(bool ok) = 0;
         // Called when a message is received on the stream.
         // Returns true to immediately resume the read.
-        virtual void OnRecvMessage(
-            absl::string_view payload,
-            RefCountedPtr<ReadDelayHandle> read_delay_handle) = 0;
+        virtual void OnRecvMessage(absl::string_view payload) = 0;
         // Called when status is received on the stream.
         virtual void OnStatusReceived(absl::Status status) = 0;
       };

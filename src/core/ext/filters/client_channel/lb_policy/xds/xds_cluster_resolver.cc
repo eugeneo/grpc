@@ -82,9 +82,6 @@ TraceFlag grpc_lb_xds_cluster_resolver_trace(false, "xds_cluster_resolver_lb");
 
 namespace {
 
-using ReadDelayHandle =
-    XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle;
-
 constexpr absl::string_view kXdsClusterResolver =
     "xds_cluster_resolver_experimental";
 
@@ -219,7 +216,7 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
       }
       void OnResourceChanged(
           std::shared_ptr<const XdsEndpointResource> update,
-          RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
+          RefCountedPtr<XdsApi::ReadDelayHandle> read_delay_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
             [self = std::move(self), update = std::move(update),
@@ -238,7 +235,7 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
             DEBUG_LOCATION);
       }
       void OnResourceDoesNotExist(
-          RefCountedPtr<ReadDelayHandle> read_delay_handle) override {
+          RefCountedPtr<XdsApi::ReadDelayHandle> read_delay_handle) override {
         RefCountedPtr<EndpointWatcher> self = Ref();
         discovery_mechanism_->parent()->work_serializer()->Run(
             [self = std::move(self),
@@ -254,7 +251,7 @@ class XdsClusterResolverLb : public LoadBalancingPolicy {
       // bug.
       void OnResourceChangedHelper(
           std::shared_ptr<const XdsEndpointResource> update,
-          RefCountedPtr<ReadDelayHandle> /*read_delay_handle*/) {
+          RefCountedPtr<XdsApi::ReadDelayHandle> /*read_delay_handle*/) {
         std::string resolution_note;
         if (update->priorities.empty()) {
           resolution_note = absl::StrCat(
