@@ -36,7 +36,8 @@ using EventHandlerEvent = absl::variant<
 class TestEventHandler
     : public XdsTransportFactory::XdsTransport::StreamingCall::EventHandler {
  public:
-  TestEventHandler(std::vector<EventHandlerEvent>* events) : events_(events) {}
+  explicit TestEventHandler(std::vector<EventHandler>* events)
+      : events_(events) {}
 
   void OnRequestSent(bool ok) override { events_->emplace_back(ok); }
 
@@ -54,7 +55,7 @@ class TestEventHandler
   }
 
  private:
-  std::vector<EventHandlerEvent>* events_;
+  std::vector<EventHandler>* events_;
 };
 
 class AdsServer {
@@ -83,7 +84,7 @@ class AdsServer {
   void Run() {
     gpr_log(GPR_INFO, "Starting");
     {
-      grpc_core::MutexLock lock(&mu_);
+      MutexLock lock(&mu_);
       ready_ = true;
     }
     gpr_log(GPR_INFO, "Running");
@@ -96,7 +97,7 @@ class AdsServer {
   bool ready() ABSL_NO_THREAD_SAFETY_ANALYSIS { return ready_; }
 
   std::thread server_thread_;
-  grpc_core::Mutex mu_;
+  Mutex mu_;
   bool ready_ ABSL_GUARDED_BY(mu_) = false;
   bool stop_ ABSL_GUARDED_BY(mu_) = false;
 };
