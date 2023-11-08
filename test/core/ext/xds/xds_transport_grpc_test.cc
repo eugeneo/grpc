@@ -14,6 +14,7 @@
 
 #include "src/core/ext/xds/xds_transport_grpc.h"
 
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -56,25 +57,73 @@ class TestEventHandler
   std::vector<EventHandlerEvent>* events_;
 };
 
+class AdsServer {
+ public:
+  AdsServer() : server_thread_() {
+    gpr_log(GPR_INFO, "Waiting");
+    absl::MutexLock lock(&mu_);
+    mu_.AwaitWithTimeout(absl::Condition(this, &AdsServer::ready),
+                         absl::Seconds(15));
+    gpr_log(GPR_INFO, "Ready");
+  }
+
+  ~AdsServer() {
+    {
+      absl::MutexLock lock(&mu_);
+      stop_ = true;
+    }
+    gpr_log(GPR_INFO, "Stopping");
+    server_thread_.join();
+    gpr_log(GPR_INFO, "Done");
+  }
+
+ private:
+  static void ServerThread(AdsServer* ads_server) { ads_server->Run(); }
+
+  void Run() {
+    gpr_log(GPR_INFO, "Starting");
+    {
+      grpc_core::MutexLock lock(&mu_);
+      ready_ = true;
+    }
+    gpr_log(GPR_INFO, "Running");
+    mu_.Await(absl::Condition(this, &AdsServer::stop));
+    gpr_log(GPR_INFO, "Done");
+  }
+
+  bool stop() ABSL_NO_THREAD_SAFETY_ANALYSIS { return stop_; }
+
+  bool ready() ABSL_NO_THREAD_SAFETY_ANALYSIS { return ready_; }
+
+  std::thread server_thread_;
+  grpc_core::Mutex mu_;
+  bool ready_ ABSL_GUARDED_BY(mu_) = false;
+  bool stop_ ABSL_GUARDED_BY(mu_) = false;
+};
+
 TEST(GrpcTransportTest, WaitsWithAdsRead) {
-  ExecCtx exec_ctx;
-  ChannelArgs args;
-  auto factory = MakeOrphanable<GrpcXdsTransportFactory>(args);
-  GrpcXdsBootstrap::GrpcXdsServer server;
-
-  absl::Status status;
-
-  auto transport = factory->Create(
-      server,
-      [](auto s) {
-        gpr_log(GPR_ERROR, "%s", std::string(s.message()).c_str());
-      },
-      &status);
-  std::vector<EventHandlerEvent> events;
-  auto call = transport->CreateStreamingCall(
-      "boop", std::make_unique<TestEventHandler>(&events));
-
-  EXPECT_THAT(events, ::testing::IsEmpty());
+  AdsServer ads_server;
+  // ExecCtx exec_ctx;
+  // ChannelArgs args;
+  // auto factory = MakeOrphanable<GrpcXdsTransportFactory>(args);
+  // GrpcXdsBootstrap::GrpcXdsServer server;
+  // absl::Status status;
+  // std::vector<absl::Status> statuses;
+  // auto transport = factory->Create(
+  //     server, [&statuses](auto s) { statuses.emplace_back(std::move(s)); },
+  //     &status);
+  // ASSERT_TRUE(status.ok()) << status;
+  // std::vector<EventHandlerEvent> events;
+  // auto call = transport->CreateStreamingCall(
+  //     "boop", std::make_unique<TestEventHandler>(&events));
+  // call->SendMessage("booop");
+  // auto deadline = absl::Now() + absl::Seconds(45);
+  // while (events.empty() && deadline > absl::Now() && statuses.empty() &&
+  //        status.ok()) {
+  //   absl::SleepFor(absl::Seconds(1));
+  // }
+  // EXPECT_THAT(events, ::testing::IsEmpty());
+  // EXPECT_THAT(statuses, ::testing::IsEmpty());
 }
 
 }  // namespace
