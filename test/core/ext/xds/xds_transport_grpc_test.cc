@@ -54,7 +54,7 @@ class AdsServer {
  public:
   AdsServer() : server_thread_() {
     gpr_log(GPR_INFO, "Waiting");
-    absl::MutexLock lock(&mu_);
+    MutexLock lock(&mu_);
     mu_.AwaitWithTimeout(absl::Condition(this, &AdsServer::ready),
                          absl::Seconds(15));
     gpr_log(GPR_INFO, "Ready");
@@ -62,7 +62,7 @@ class AdsServer {
 
   ~AdsServer() {
     {
-      absl::MutexLock lock(&mu_);
+      MutexLock lock(&mu_);
       stop_ = true;
     }
     gpr_log(GPR_INFO, "Stopping");
