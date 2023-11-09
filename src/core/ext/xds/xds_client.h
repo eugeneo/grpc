@@ -24,7 +24,6 @@
 #include <set>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"

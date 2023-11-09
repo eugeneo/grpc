@@ -34,7 +34,6 @@
 #include "absl/strings/strip.h"
 #include "absl/types/optional.h"
 #include "upb/mem/arena.h"
-#include "xds_api.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/log.h>
