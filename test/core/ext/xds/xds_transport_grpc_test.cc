@@ -28,26 +28,18 @@ namespace grpc_core {
 namespace testing {
 namespace {
 
-using EventHandlerEvent = absl::variant<
-    bool, absl::Status,
-    std::pair<std::string, RefCountedPtr<XdsTransportFactory::XdsTransport::
-                                             StreamingCall::ReadDelayHandle>>>;
+using EventHandlerEvent = absl::variant<bool, absl::Status, std::string>;
 
 class TestEventHandler
     : public XdsTransportFactory::XdsTransport::StreamingCall::EventHandler {
  public:
-  explicit TestEventHandler(std::vector<EventHandler>* events)
+  explicit TestEventHandler(std::vector<EventHandlerEvent>* events)
       : events_(events) {}
 
   void OnRequestSent(bool ok) override { events_->emplace_back(ok); }
 
-  void OnRecvMessage(
-      absl::string_view payload,
-      RefCountedPtr<
-          XdsTransportFactory::XdsTransport::StreamingCall::ReadDelayHandle>
-          read_delay_handle) override {
-    events_->emplace_back(
-        std::make_pair(std::string(payload), std::move(read_delay_handle)));
+  void OnRecvMessage(absl::string_view payload) override {
+    events_->emplace_back(std::string(payload));
   }
 
   void OnStatusReceived(absl::Status status) override {
@@ -55,7 +47,7 @@ class TestEventHandler
   }
 
  private:
-  std::vector<EventHandler>* events_;
+  std::vector<EventHandlerEvent>* events_;
 };
 
 class AdsServer {
