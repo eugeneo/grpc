@@ -19,6 +19,7 @@
 #include "src/core/ext/xds/xds_client_grpc.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -28,6 +29,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
+#include "xds_client.h"
+#include "xds_client_grpc.h"
 
 #include <grpc/grpc.h>
 #include <grpc/impl/channel_arg_names.h>
@@ -85,7 +88,8 @@ namespace {
 
 Mutex* g_mu = new Mutex;
 const grpc_channel_args* g_channel_args ABSL_GUARDED_BY(*g_mu) = nullptr;
-GrpcXdsClient* g_xds_client ABSL_GUARDED_BY(*g_mu) = nullptr;
+std::map<std::string, WeakRefCountedPtr<GrpcXdsClient>, std::less<>>*
+    g_xds_client_map ABSL_GUARDED_BY(*g_mu) = nullptr;
 char* g_fallback_bootstrap_config ABSL_GUARDED_BY(*g_mu) = nullptr;
 
 }  // namespace
@@ -136,7 +140,7 @@ absl::StatusOr<std::string> GetBootstrapContents(const char* fallback_config) {
 }  // namespace
 
 absl::StatusOr<RefCountedPtr<GrpcXdsClient>> GrpcXdsClient::GetOrCreate(
-    const ChannelArgs& args, const char* reason) {
+    absl::string_view key, const ChannelArgs& args, const char* reason) {
   // If getting bootstrap from channel args, create a local XdsClient
   // instance for the channel or server instead of using the global instance.
   absl::optional<absl::string_view> bootstrap_config = args.GetString(
@@ -148,13 +152,19 @@ absl::StatusOr<RefCountedPtr<GrpcXdsClient>> GrpcXdsClient::GetOrCreate(
         GRPC_ARG_TEST_ONLY_DO_NOT_USE_IN_PROD_XDS_CLIENT_CHANNEL_ARGS);
     auto channel_args = ChannelArgs::FromC(xds_channel_args);
     return MakeRefCounted<GrpcXdsClient>(
-        std::move(*bootstrap), channel_args,
+        key, std::move(*bootstrap), channel_args,
         MakeOrphanable<GrpcXdsTransportFactory>(channel_args));
   }
   // Otherwise, use the global instance.
   MutexLock lock(g_mu);
-  if (g_xds_client != nullptr) {
-    auto xds_client = g_xds_client->RefIfNonZero(DEBUG_LOCATION, reason);
+  if (g_xds_client_map == nullptr) {
+    g_xds_client_map =
+        new std::map<std::string, WeakRefCountedPtr<GrpcXdsClient>,
+                     std::less<>>;
+  }
+  auto it = g_xds_client_map->find(key);
+  if (it != g_xds_client_map->end()) {
+    auto xds_client = it->second->RefIfNonZero(DEBUG_LOCATION, reason);
     if (xds_client != nullptr) {
       return xds_client.TakeAsSubclass<GrpcXdsClient>();
     }
@@ -172,14 +182,20 @@ absl::StatusOr<RefCountedPtr<GrpcXdsClient>> GrpcXdsClient::GetOrCreate(
   // Instantiate XdsClient.
   auto channel_args = ChannelArgs::FromC(g_channel_args);
   auto xds_client = MakeRefCounted<GrpcXdsClient>(
-      std::move(*bootstrap), channel_args,
+      key, std::move(*bootstrap), channel_args,
       MakeOrphanable<GrpcXdsTransportFactory>(channel_args));
-  g_xds_client = xds_client.get();
+  g_xds_client_map->emplace(key,
+                            xds_client->WeakRefAsSubclass<GrpcXdsClient>());
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+    gpr_log(GPR_INFO, "xDS client for key: %s was created",
+            std::string(key).c_str());
+  }
   return xds_client;
 }
 
 GrpcXdsClient::GrpcXdsClient(
-    std::unique_ptr<GrpcXdsBootstrap> bootstrap, const ChannelArgs& args,
+    absl::string_view key, std::unique_ptr<GrpcXdsBootstrap> bootstrap,
+    const ChannelArgs& args,
     OrphanablePtr<XdsTransportFactory> transport_factory)
     : XdsClient(
           std::move(bootstrap), std::move(transport_factory),
@@ -193,13 +209,18 @@ GrpcXdsClient::GrpcXdsClient(
                    args.GetDurationFromIntMillis(
                            GRPC_ARG_XDS_RESOURCE_DOES_NOT_EXIST_TIMEOUT_MS)
                        .value_or(Duration::Seconds(15)))),
+      key_(key),
       certificate_provider_store_(MakeOrphanable<CertificateProviderStore>(
           static_cast<const GrpcXdsBootstrap&>(this->bootstrap())
               .certificate_providers())) {}
 
-GrpcXdsClient::~GrpcXdsClient() {
+void GrpcXdsClient::Orphan() {
   MutexLock lock(g_mu);
-  if (g_xds_client == this) g_xds_client = nullptr;
+  if (g_xds_client_map != nullptr && g_xds_client_map->size() > 1) {
+    g_xds_client_map->erase(g_xds_client_map->find(key_));
+  } else {
+    delete g_xds_client_map;
+  }
 }
 
 grpc_pollset_set* GrpcXdsClient::interested_parties() const {
@@ -214,9 +235,10 @@ void SetXdsChannelArgsForTest(grpc_channel_args* args) {
   g_channel_args = args;
 }
 
-void UnsetGlobalXdsClientForTest() {
+void UnsetGlobalXdsClientsForTest() {
   MutexLock lock(g_mu);
-  g_xds_client = nullptr;
+  delete g_xds_client_map;
+  g_xds_client_map = nullptr;
 }
 
 void SetXdsFallbackBootstrapConfig(const char* config) {
@@ -230,11 +252,11 @@ void SetXdsFallbackBootstrapConfig(const char* config) {
 }  // namespace grpc_core
 
 // The returned bytes may contain NULL(0), so we can't use c-string.
-grpc_slice grpc_dump_xds_configs(void) {
+grpc_slice grpc_dump_xds_configs(absl::string_view key) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   auto xds_client = grpc_core::GrpcXdsClient::GetOrCreate(
-      grpc_core::ChannelArgs(), "grpc_dump_xds_configs()");
+      key, grpc_core::ChannelArgs(), "grpc_dump_xds_configs()");
   if (!xds_client.ok()) {
     // If we aren't using xDS, just return an empty string.
     return grpc_empty_slice();
