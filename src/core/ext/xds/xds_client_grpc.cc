@@ -252,11 +252,11 @@ void SetXdsFallbackBootstrapConfig(const char* config) {
 }  // namespace grpc_core
 
 // The returned bytes may contain NULL(0), so we can't use c-string.
-grpc_slice grpc_dump_xds_configs(absl::string_view key) {
+grpc_slice grpc_dump_xds_configs(void) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   auto xds_client = grpc_core::GrpcXdsClient::GetOrCreate(
-      key, grpc_core::ChannelArgs(), "grpc_dump_xds_configs()");
+      "", grpc_core::ChannelArgs(), "grpc_dump_xds_configs()");
   if (!xds_client.ok()) {
     // If we aren't using xDS, just return an empty string.
     return grpc_empty_slice();

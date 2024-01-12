@@ -94,6 +94,8 @@ namespace {
 
 using ReadDelayHandle = XdsClient::ReadDelayHandle;
 
+constexpr absl::string_view kServerXdsClientKey = "server";
+
 TraceFlag grpc_xds_server_config_fetcher_trace(false,
                                                "xds_server_config_fetcher");
 
@@ -1361,8 +1363,7 @@ void XdsServerConfigFetcher::ListenerWatcher::FilterChainMatchManager::
 }  // namespace grpc_core
 
 grpc_server_config_fetcher* grpc_server_config_fetcher_xds_create(
-    const char* xds_client_key, grpc_server_xds_status_notifier notifier,
-    const grpc_channel_args* args) {
+    grpc_server_xds_status_notifier notifier, const grpc_channel_args* args) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   grpc_core::ChannelArgs channel_args = grpc_core::CoreConfiguration::Get()
@@ -1373,7 +1374,7 @@ grpc_server_config_fetcher* grpc_server_config_fetcher_xds_create(
       "update=%p, user_data=%p}, args=%p)",
       3, (notifier.on_serving_status_update, notifier.user_data, args));
   auto xds_client = grpc_core::GrpcXdsClient::GetOrCreate(
-      xds_client_key, channel_args, "XdsServerConfigFetcher");
+      grpc_core::kServerXdsClientKey, channel_args, "XdsServerConfigFetcher");
   if (!xds_client.ok()) {
     gpr_log(GPR_ERROR, "Failed to create xds client: %s",
             xds_client.status().ToString().c_str());
