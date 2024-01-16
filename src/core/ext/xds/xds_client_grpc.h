@@ -57,7 +57,7 @@ class GrpcXdsClient : public XdsClient {
   // work for callers that use interested_parties() but not for callers
   // that also use certificate_provider_store(), but we should consider
   // alternatives for that case as well.
-  GrpcXdsClient(absl::string_view key,
+  GrpcXdsClient(const std::string& key,
                 std::unique_ptr<GrpcXdsBootstrap> bootstrap,
                 const ChannelArgs& args,
                 OrphanablePtr<XdsTransportFactory> transport_factory);
@@ -78,8 +78,10 @@ class GrpcXdsClient : public XdsClient {
     return *certificate_provider_store_;
   }
 
+  absl::string_view key() const { return key_; }
+
  private:
-  absl::string_view key_;  // String bytes live in the global map
+  std::string key_;
   OrphanablePtr<CertificateProviderStore> certificate_provider_store_;
 };
 

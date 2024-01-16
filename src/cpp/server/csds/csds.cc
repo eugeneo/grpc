@@ -42,7 +42,7 @@ namespace {
 
 absl::StatusOr<ClientConfig> DumpClientConfig() {
   ClientConfig client_config;
-  grpc_slice serialized_client_config = grpc_dump_xds_configs();
+  grpc_slice serialized_client_config = grpc_dump_xds_config();
   std::string bytes = StringFromCopiedSlice(serialized_client_config);
   grpc_slice_unref(serialized_client_config);
   if (!client_config.ParseFromString(bytes)) {

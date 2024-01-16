@@ -120,6 +120,11 @@ message ClientConfig {
     // Is static resource is true if it is specified in the config supplied
     // through the file at the startup.
     bool is_static_resource = 9;
+
+    // For xDS clients, the scope in which the data is used.
+    // For example, gRPC indicates the data plane target or that the data is
+    // associated with gRPC server(s).
+    string client_scope = 10;
   }
 
   // Node for a particular client.
