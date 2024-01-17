@@ -32,6 +32,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 #include "envoy/service/status/v3/csds.upb.h"
+#include "upb/base/string_view.h"
 #include "xds_client.h"
 #include "xds_client_grpc.h"
 
@@ -277,5 +278,18 @@ grpc_slice grpc_dump_xds_config(void) {
   if (xds_clients.empty()) {
     return grpc_empty_slice();
   }
+  // upb::Arena arena;
+  // envoy_service_status_v3_ClientConfig* config = nullptr;
+  // for (const auto& client : xds_clients) {
+  //   envoy_service_status_v3_ClientConfig* client_config =
+  //       envoy_service_status_v3_ClientConfig_new(arena.ptr());
+  //   client->FillClientConfig(client_config, arena.ptr());
+  //   envoy_service_status_v3_ClientConfig_set_client_scope(
+  //       client_config, upb_StringView_FromDataAndSize(client->key().data(),
+  //                                                     client->key().size()));
+  //   if (config == nullptr) {
+  //     config = client_config;
+  //   }
+  // }
   return grpc_slice_from_cpp_string(xds_clients[0]->DumpClientConfigBinary());
 }

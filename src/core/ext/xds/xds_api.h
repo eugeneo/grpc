@@ -30,6 +30,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "envoy/admin/v3/config_dump_shared.upb.h"
+#include "envoy/service/status/v3/csds.upb.h"
 #include "upb/mem/arena.h"
 #include "upb/reflection/def.hpp"
 
@@ -42,6 +43,13 @@
 namespace grpc_core {
 
 class XdsClient;
+
+struct XdsApiContext {
+  XdsClient* client;
+  TraceFlag* tracer;
+  upb_DefPool* def_pool;
+  upb_Arena* arena;
+};
 
 // TODO(roth): When we have time, split this into multiple pieces:
 // - ADS request/response handling
@@ -179,6 +187,11 @@ class XdsApi {
   // Assemble the client config proto message and return the serialized result.
   std::string AssembleClientConfig(
       const ResourceTypeMetadataMap& resource_type_metadata_map);
+
+  envoy_service_status_v3_ClientConfig* FillGenericXdsConfig(
+      std::vector<std::string>* type_url_storage,
+      const ResourceTypeMetadataMap& resource_type_metadata_map,
+      upb_Arena* arena);
 
  private:
   XdsClient* client_;

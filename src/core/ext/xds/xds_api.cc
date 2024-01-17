@@ -68,13 +68,6 @@ XdsApi::XdsApi(XdsClient* client, TraceFlag* tracer,
 
 namespace {
 
-struct XdsApiContext {
-  XdsClient* client;
-  TraceFlag* tracer;
-  upb_DefPool* def_pool;
-  upb_Arena* arena;
-};
-
 void PopulateMetadataValue(const XdsApiContext& context,
                            google_protobuf_Value* value_pb, const Json& value);
 
@@ -592,29 +585,41 @@ google_protobuf_Timestamp* EncodeTimestamp(const XdsApiContext& context,
 std::string XdsApi::AssembleClientConfig(
     const ResourceTypeMetadataMap& resource_type_metadata_map) {
   upb::Arena arena;
+  std::vector<std::string> type_url_storage;
+  auto client_config = FillGenericXdsConfig(
+      &type_url_storage, resource_type_metadata_map, arena.ptr());
+  // Serialize the upb message to bytes
+  size_t output_length;
+  char* output = envoy_service_status_v3_ClientConfig_serialize(
+      client_config, arena.ptr(), &output_length);
+  return std::string(output, output_length);
+}
+
+envoy_service_status_v3_ClientConfig* XdsApi::FillGenericXdsConfig(
+    std::vector<std::string>* type_url_storage,
+    const ResourceTypeMetadataMap& resource_type_metadata_map,
+    upb_Arena* arena) {
   // Create the ClientConfig for resource metadata from XdsClient
-  auto* client_config = envoy_service_status_v3_ClientConfig_new(arena.ptr());
+  auto* client_config = envoy_service_status_v3_ClientConfig_new(arena);
   // Fill-in the node information
-  auto* node = envoy_service_status_v3_ClientConfig_mutable_node(client_config,
-                                                                 arena.ptr());
-  const XdsApiContext context = {client_, tracer_, def_pool_->ptr(),
-                                 arena.ptr()};
+  auto* node =
+      envoy_service_status_v3_ClientConfig_mutable_node(client_config, arena);
+  const XdsApiContext context = {client_, tracer_, def_pool_->ptr(), arena};
   PopulateNode(context, node_, user_agent_name_, user_agent_version_, node);
   // Dump each resource.
-  std::vector<std::string> type_url_storage;
   for (const auto& p : resource_type_metadata_map) {
     absl::string_view type_url = p.first;
     const ResourceMetadataMap& resource_metadata_map = p.second;
-    type_url_storage.emplace_back(
+    type_url_storage->emplace_back(
         absl::StrCat("type.googleapis.com/", type_url));
     for (const auto& q : resource_metadata_map) {
       absl::string_view resource_name = q.first;
       const ResourceMetadata& metadata = *q.second;
-      auto* entry =
+      envoy_service_status_v3_ClientConfig_GenericXdsConfig* entry =
           envoy_service_status_v3_ClientConfig_add_generic_xds_configs(
               client_config, context.arena);
       envoy_service_status_v3_ClientConfig_GenericXdsConfig_set_type_url(
-          entry, StdStringToUpbString(type_url_storage.back()));
+          entry, StdStringToUpbString(type_url_storage->back()));
       envoy_service_status_v3_ClientConfig_GenericXdsConfig_set_name(
           entry, StdStringToUpbString(resource_name));
       envoy_service_status_v3_ClientConfig_GenericXdsConfig_set_client_status(
@@ -628,7 +633,7 @@ std::string XdsApi::AssembleClientConfig(
             envoy_service_status_v3_ClientConfig_GenericXdsConfig_mutable_xds_config(
                 entry, context.arena);
         google_protobuf_Any_set_type_url(
-            any_field, StdStringToUpbString(type_url_storage.back()));
+            any_field, StdStringToUpbString(type_url_storage->back()));
         google_protobuf_Any_set_value(
             any_field, StdStringToUpbString(metadata.serialized_proto));
       }
@@ -649,11 +654,7 @@ std::string XdsApi::AssembleClientConfig(
       }
     }
   }
-  // Serialize the upb message to bytes
-  size_t output_length;
-  char* output = envoy_service_status_v3_ClientConfig_serialize(
-      client_config, arena.ptr(), &output_length);
-  return std::string(output, output_length);
+  return client_config;
 }
 
 }  // namespace grpc_core

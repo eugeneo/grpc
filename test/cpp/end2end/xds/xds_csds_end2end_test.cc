@@ -344,7 +344,7 @@ TEST_P(ClientStatusDiscoveryServiceTest, XdsConfigDumpVanilla) {
   // Fetches the client config
   auto csds_response = FetchCsdsResponse();
   gpr_log(GPR_INFO, "xDS config dump: %s", csds_response.DebugString().c_str());
-  EXPECT_EQ(1, csds_response.config_size());
+  ASSERT_EQ(1, csds_response.config_size());
   const auto& client_config = csds_response.config(0);
   // Validate the Node information
   EXPECT_THAT(client_config.node(),
