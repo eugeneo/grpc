@@ -147,14 +147,19 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // Resets connection backoff state.
   void ResetBackoff();
 
-  // Dumps the active xDS config in JSON format.
+  // Dumps the active xDS config.
   // Individual xDS resource is encoded as envoy.admin.v3.*ConfigDump. Returns
   // envoy.service.status.v3.ClientConfig which also includes the config
   // status (e.g., CLIENT_REQUESTED, CLIENT_ACKED, CLIENT_NACKED).
   //
   // Expected to be invoked by wrapper languages in their CSDS service
   // implementation.
-  std::string DumpClientConfigBinary();
+  void DumpClientConfig(
+      envoy_service_status_v3_ClientConfig* client_config,
+      const XdsApi::ResourceTypeMetadataMap& resource_type_metadata_map,
+      std::vector<std::string>* strings_holder, upb_Arena* arena);
+
+  XdsApi::ResourceTypeMetadataMap BuildResourceTypeMetadataMap();
 
   grpc_event_engine::experimental::EventEngine* engine() {
     return engine_.get();
@@ -235,7 +240,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
     OrphanablePtr<RetryableCall<AdsCallState>> ads_calld_;
     OrphanablePtr<RetryableCall<LrsCallState>> lrs_calld_;
 
-    // Stores the most recent accepted resource version for each resource type.
+    // Stores the most recent accepted resource version for each resource
+    // type.
     std::map<const XdsResourceType*, std::string /*version*/>
         resource_type_version_map_;
 
@@ -286,7 +292,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
       absl::Status status, RefCountedPtr<ReadDelayHandle> read_delay_handle);
-  // Sends a resource-does-not-exist notification to a specific set of watchers.
+  // Sends a resource-does-not-exist notification to a specific set of
+  // watchers.
   void NotifyWatchersOnResourceDoesNotExist(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,

@@ -33,6 +33,7 @@
 #include "absl/types/optional.h"
 #include "envoy/service/status/v3/csds.upb.h"
 #include "upb/base/string_view.h"
+#include "xds_api.h"
 #include "xds_client.h"
 #include "xds_client_grpc.h"
 
@@ -43,6 +44,7 @@
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
+#include "src/core/ext/xds/upb_utils.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/ext/xds/xds_channel_args.h"
@@ -271,25 +273,28 @@ void SetXdsFallbackBootstrapConfig(const char* config) {
 }  // namespace grpc_core
 
 // The returned bytes may contain NULL(0), so we can't use c-string.
-grpc_slice grpc_dump_xds_config(void) {
+grpc_slice grpc_dump_xds_configs(void) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
-  auto xds_clients = grpc_core::GetAllClients();
-  if (xds_clients.empty()) {
-    return grpc_empty_slice();
+  upb::Arena arena;
+  // Following two containers should survive till serialization
+  std::vector<std::string> type_url_storage;
+  std::vector<grpc_core::XdsApi::ResourceTypeMetadataMap> metadata_maps;
+  auto response = envoy_service_status_v3_ClientStatusResponse_new(arena.ptr());
+  for (const auto& xds_client : grpc_core::GetAllClients()) {
+    metadata_maps.emplace_back(xds_client->BuildResourceTypeMetadataMap());
+    auto client_config =
+        envoy_service_status_v3_ClientStatusResponse_add_config(response,
+                                                                arena.ptr());
+    xds_client->DumpClientConfig(client_config, metadata_maps.back(),
+                                 &type_url_storage, arena.ptr());
+    absl::string_view key = xds_client->key();
+    envoy_service_status_v3_ClientConfig_set_client_scope(
+        client_config, upb_StringView_FromDataAndSize(key.data(), key.size()));
   }
-  // upb::Arena arena;
-  // envoy_service_status_v3_ClientConfig* config = nullptr;
-  // for (const auto& client : xds_clients) {
-  //   envoy_service_status_v3_ClientConfig* client_config =
-  //       envoy_service_status_v3_ClientConfig_new(arena.ptr());
-  //   client->FillClientConfig(client_config, arena.ptr());
-  //   envoy_service_status_v3_ClientConfig_set_client_scope(
-  //       client_config, upb_StringView_FromDataAndSize(client->key().data(),
-  //                                                     client->key().size()));
-  //   if (config == nullptr) {
-  //     config = client_config;
-  //   }
-  // }
-  return grpc_slice_from_cpp_string(xds_clients[0]->DumpClientConfigBinary());
+  // Serialize the upb message to bytes
+  size_t output_length;
+  char* output = envoy_service_status_v3_ClientStatusResponse_serialize(
+      response, arena.ptr(), &output_length);
+  return grpc_slice_from_cpp_string(std::string(output, output_length));
 }

@@ -44,13 +44,6 @@ namespace grpc_core {
 
 class XdsClient;
 
-struct XdsApiContext {
-  XdsClient* client;
-  TraceFlag* tracer;
-  upb_DefPool* def_pool;
-  upb_Arena* arena;
-};
-
 // TODO(roth): When we have time, split this into multiple pieces:
 // - ADS request/response handling
 // - LRS request/response handling
@@ -184,14 +177,11 @@ class XdsApi {
                                 std::set<std::string>* cluster_names,
                                 Duration* load_reporting_interval);
 
-  // Assemble the client config proto message and return the serialized result.
-  std::string AssembleClientConfig(
-      const ResourceTypeMetadataMap& resource_type_metadata_map);
-
-  envoy_service_status_v3_ClientConfig* FillGenericXdsConfig(
-      std::vector<std::string>* type_url_storage,
+  // Assemble and return the client config proto message.
+  envoy_service_status_v3_ClientConfig* AssembleClientConfig(
+      envoy_service_status_v3_ClientConfig* client_config,
       const ResourceTypeMetadataMap& resource_type_metadata_map,
-      upb_Arena* arena);
+      std::vector<std::string>* type_url_storage, upb_Arena* arena);
 
  private:
   XdsClient* client_;

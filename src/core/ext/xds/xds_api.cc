@@ -68,6 +68,13 @@ XdsApi::XdsApi(XdsClient* client, TraceFlag* tracer,
 
 namespace {
 
+struct XdsApiContext {
+  XdsClient* client;
+  TraceFlag* tracer;
+  upb_DefPool* def_pool;
+  upb_Arena* arena;
+};
+
 void PopulateMetadataValue(const XdsApiContext& context,
                            google_protobuf_Value* value_pb, const Json& value);
 
@@ -582,25 +589,10 @@ google_protobuf_Timestamp* EncodeTimestamp(const XdsApiContext& context,
 
 }  // namespace
 
-std::string XdsApi::AssembleClientConfig(
-    const ResourceTypeMetadataMap& resource_type_metadata_map) {
-  upb::Arena arena;
-  std::vector<std::string> type_url_storage;
-  auto client_config = FillGenericXdsConfig(
-      &type_url_storage, resource_type_metadata_map, arena.ptr());
-  // Serialize the upb message to bytes
-  size_t output_length;
-  char* output = envoy_service_status_v3_ClientConfig_serialize(
-      client_config, arena.ptr(), &output_length);
-  return std::string(output, output_length);
-}
-
-envoy_service_status_v3_ClientConfig* XdsApi::FillGenericXdsConfig(
-    std::vector<std::string>* type_url_storage,
+envoy_service_status_v3_ClientConfig* XdsApi::AssembleClientConfig(
+    envoy_service_status_v3_ClientConfig* client_config,
     const ResourceTypeMetadataMap& resource_type_metadata_map,
-    upb_Arena* arena) {
-  // Create the ClientConfig for resource metadata from XdsClient
-  auto* client_config = envoy_service_status_v3_ClientConfig_new(arena);
+    std::vector<std::string>* type_url_storage, upb_Arena* arena) {
   // Fill-in the node information
   auto* node =
       envoy_service_status_v3_ClientConfig_mutable_node(client_config, arena);
