@@ -33,9 +33,6 @@
 #include "absl/types/optional.h"
 #include "envoy/service/status/v3/csds.upb.h"
 #include "upb/base/string_view.h"
-#include "xds_api.h"
-#include "xds_client.h"
-#include "xds_client_grpc.h"
 
 #include <grpc/grpc.h>
 #include <grpc/impl/channel_arg_names.h>
@@ -45,10 +42,12 @@
 #include <grpc/support/string_util.h>
 
 #include "src/core/ext/xds/upb_utils.h"
+#include "src/core/ext/xds/xds_api.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/ext/xds/xds_channel_args.h"
 #include "src/core/ext/xds/xds_client.h"
+#include "src/core/ext/xds/xds_client_grpc.h"
 #include "src/core/ext/xds/xds_transport.h"
 #include "src/core/ext/xds/xds_transport_grpc.h"
 #include "src/core/lib/channel/channel_args.h"
@@ -102,7 +101,7 @@ char* g_fallback_bootstrap_config ABSL_GUARDED_BY(*g_mu) = nullptr;
 
 std::vector<RefCountedPtr<GrpcXdsClient>> GetAllClients() {
   std::vector<RefCountedPtr<GrpcXdsClient>> clients;
-  grpc_core::MutexLock lock(g_mu);
+  MutexLock lock(g_mu);
   if (g_xds_client_map == nullptr) {
     return {};
   }
@@ -289,7 +288,7 @@ grpc_slice grpc_dump_xds_configs(void) {
     xds_client->DumpClientConfig(client_config, metadata_maps.back(),
                                  &type_url_storage, arena.ptr());
     absl::string_view key = xds_client->key();
-    envoy_service_status_v3_ClientConfig_set_client_scope(
+    envoy_service_status_v3_ClientConfig_set_node(
         client_config, upb_StringView_FromDataAndSize(key.data(), key.size()));
   }
   // Serialize the upb message to bytes
