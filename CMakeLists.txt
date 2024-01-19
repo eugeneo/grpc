@@ -409,6 +409,16 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencensus-proto/src)
     opencensus-proto-0.3.0/src
   )
 endif()
+# Setup external proto library at third_party/xds if it doesn't exist
+if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds)
+  # Download the archive via HTTP, validate the checksum, and extract to third_party/xds.
+  download_archive(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds
+    https://github.com/cncf/xds/archive/46e39c7b9b4321731ebe247f2e176fdf0518d76e.tar.gz
+    a39bc06b1b420629643e3e49795004522c2b6439709fd98adccb4930e2b2c197
+    xds-46e39c7b9b4321731ebe247f2e176fdf0518d76e
+  )
+endif()
 # Setup external proto library at third_party/xds with 2 download URLs
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/xds.
