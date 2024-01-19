@@ -357,18 +357,18 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/envoy-api.
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api
-    https://storage.googleapis.com/grpc-bazel-mirror/github.com/envoyproxy/data-plane-api/archive/9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz
-    fff067a5d6d776fc88549b5dd4773a6f8f0187b26a859de8b29bd4226a28ee63
-    data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4
+    https://storage.googleapis.com/grpc-bazel-mirror/github.com/envoyproxy/data-plane-api/archive/6de4caa0dd97995bc77e314a579ffcce4ddf97c5.tar.gz
+    0062282dc1b404826b85e48bf87273d73083e6f7884d379d19e6c6f11b8bd5a6
+    data-plane-api-6de4caa0dd97995bc77e314a579ffcce4ddf97c5
   )
 endif()
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/envoy-api.
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api
-    https://github.com/envoyproxy/data-plane-api/archive/9d6ffa70677c4dbf23f6ed569676206c4e2edff4.tar.gz
-    fff067a5d6d776fc88549b5dd4773a6f8f0187b26a859de8b29bd4226a28ee63
-    data-plane-api-9d6ffa70677c4dbf23f6ed569676206c4e2edff4
+    https://github.com/envoyproxy/data-plane-api/archive/6de4caa0dd97995bc77e314a579ffcce4ddf97c5.tar.gz
+    0062282dc1b404826b85e48bf87273d73083e6f7884d379d19e6c6f11b8bd5a6
+    data-plane-api-6de4caa0dd97995bc77e314a579ffcce4ddf97c5
   )
 endif()
 # Setup external proto library at third_party/googleapis with 2 download URLs
@@ -414,9 +414,9 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/xds.
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds
-    https://github.com/cncf/xds/archive/46e39c7b9b4321731ebe247f2e176fdf0518d76e.tar.gz
-    a39bc06b1b420629643e3e49795004522c2b6439709fd98adccb4930e2b2c197
-    xds-46e39c7b9b4321731ebe247f2e176fdf0518d76e
+    https://github.com/cncf/xds/archive/3a472e524827f72d1ad621c4983dd5af54c46776.tar.gz
+    dc305e20c9fa80822322271b50aa2ffa917bf4fd3973bcec52bfc28dc32c5927
+    xds-3a472e524827f72d1ad621c4983dd5af54c46776
   )
 endif()
 # Setup external proto library at third_party/xds with 2 download URLs
@@ -1932,6 +1932,7 @@ add_library(grpc
   src/core/ext/upb-gen/envoy/config/core/v3/grpc_method_list.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/grpc_service.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/health_check.upb_minitable.c
+  src/core/ext/upb-gen/envoy/config/core/v3/http_service.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/http_uri.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/protocol.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/proxy_protocol.upb_minitable.c
@@ -2096,6 +2097,7 @@ add_library(grpc
   src/core/ext/upbdefs-gen/envoy/config/core/v3/grpc_method_list.upbdefs.c
   src/core/ext/upbdefs-gen/envoy/config/core/v3/grpc_service.upbdefs.c
   src/core/ext/upbdefs-gen/envoy/config/core/v3/health_check.upbdefs.c
+  src/core/ext/upbdefs-gen/envoy/config/core/v3/http_service.upbdefs.c
   src/core/ext/upbdefs-gen/envoy/config/core/v3/http_uri.upbdefs.c
   src/core/ext/upbdefs-gen/envoy/config/core/v3/protocol.upbdefs.c
   src/core/ext/upbdefs-gen/envoy/config/core/v3/proxy_protocol.upbdefs.c
@@ -9107,6 +9109,7 @@ add_executable(cel_authorization_engine_test
   src/core/ext/upb-gen/envoy/config/core/v3/grpc_method_list.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/grpc_service.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/health_check.upb_minitable.c
+  src/core/ext/upb-gen/envoy/config/core/v3/http_service.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/http_uri.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/protocol.upb_minitable.c
   src/core/ext/upb-gen/envoy/config/core/v3/proxy_protocol.upb_minitable.c
