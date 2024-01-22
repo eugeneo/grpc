@@ -402,7 +402,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencensus-proto/src AND 
   )
 endif()
 # Setup external proto library at third_party/xds if it doesn't exist
-if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds)
+if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/xds.
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds
