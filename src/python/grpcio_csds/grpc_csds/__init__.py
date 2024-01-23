@@ -26,7 +26,9 @@ class ClientStatusDiscoveryServiceServicer(
 
     @staticmethod
     def FetchClientStatus(request, unused_context):
-        return csds_pb2.ClientStatusResponse.FromString(cygrpc.dump_xds_configs())
+        return csds_pb2.ClientStatusResponse.FromString(
+            cygrpc.dump_xds_configs()
+        )
 
     @staticmethod
     def StreamClientStatus(request_iterator, context):
