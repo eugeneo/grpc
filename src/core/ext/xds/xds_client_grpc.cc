@@ -100,7 +100,7 @@ char* g_fallback_bootstrap_config ABSL_GUARDED_BY(*g_mu) = nullptr;
 
 std::vector<RefCountedPtr<GrpcXdsClient>> GetAllClients() {
   std::vector<RefCountedPtr<GrpcXdsClient>> clients;
-  grpc_core::MutexLock lock(g_mu);
+  MutexLock lock(g_mu);
   if (g_xds_client_map == nullptr) {
     return {};
   }
@@ -278,8 +278,9 @@ grpc_slice grpc_dump_xds_configs(void) ABSL_NO_THREAD_SAFETY_ANALYSIS {
   // // Following two containers should survive till serialization
   // std::vector<std::string> type_url_storage;
   // std::vector<grpc_core::XdsApi::ResourceTypeMetadataMap> metadata_maps;
-  // auto response = envoy_service_status_v3_ClientStatusResponse_new(arena.ptr());
-  // for (const auto& xds_client : grpc_core::GetAllClients()) {
+  // auto response =
+  // envoy_service_status_v3_ClientStatusResponse_new(arena.ptr()); for (const
+  // auto& xds_client : grpc_core::GetAllClients()) {
   //   metadata_maps.emplace_back(xds_client->BuildResourceTypeMetadataMap());
   //   auto client_config =
   //       envoy_service_status_v3_ClientStatusResponse_add_config(response,
@@ -288,7 +289,8 @@ grpc_slice grpc_dump_xds_configs(void) ABSL_NO_THREAD_SAFETY_ANALYSIS {
   //                                &type_url_storage, arena.ptr());
   //   absl::string_view key = xds_client->key();
   //   envoy_service_status_v3_ClientConfig_set_client_scope(
-  //       client_config, upb_StringView_FromDataAndSize(key.data(), key.size()));
+  //       client_config, upb_StringView_FromDataAndSize(key.data(),
+  //       key.size()));
   auto xds_client = grpc_core::GrpcXdsClient::GetOrCreate(
       "", grpc_core::ChannelArgs(), "grpc_dump_xds_configs()");
   upb::Arena arena;
