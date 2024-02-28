@@ -18,8 +18,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "xds_utils.h"
-
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/status.h>
@@ -36,6 +34,7 @@
 #include "test/core/util/resolve_localhost_ip46.h"
 #include "test/core/util/test_config.h"
 #include "test/cpp/end2end/xds/xds_end2end_test_lib.h"
+#include "test/cpp/end2end/xds/xds_utils.h"
 
 #ifndef DISABLED_XDS_PROTO_IN_CC
 
