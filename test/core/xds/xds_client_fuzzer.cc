@@ -241,8 +241,9 @@ class Fuzzer {
         static_cast<const GrpcXdsBootstrap::GrpcAuthority*>(
             bootstrap.LookupAuthority(authority));
     if (authority_entry == nullptr) return nullptr;
-    if (authority_entry->server(0) != nullptr)
+    if (authority_entry->server(0) != nullptr) {
       return authority_entry->server(0);
+    }
     return bootstrap.server(0);
   }
 
