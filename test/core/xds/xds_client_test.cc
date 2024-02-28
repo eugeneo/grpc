@@ -149,9 +149,11 @@ class XdsClientTest : public ::testing::Test {
 
     class FakeAuthority : public Authority {
      public:
-      const XdsServer* server() const override {
+      const XdsServer* server(size_t /* index */) const override {
         return server_.has_value() ? &*server_ : nullptr;
       }
+
+      size_t server_count() const override { return 1; }
 
       void set_server(absl::optional<FakeXdsServer> server) {
         server_ = std::move(server);
@@ -194,7 +196,11 @@ class XdsClientTest : public ::testing::Test {
 
     std::string ToString() const override { return "<fake>"; }
 
-    const XdsServer& server() const override { return server_; }
+    const XdsServer* server(size_t index) const override {
+      return index == 0 ? &server_ : nullptr;
+    }
+
+    size_t server_count() const override { return 1; }
     const Node* node() const override {
       return node_.has_value() ? &*node_ : nullptr;
     }
@@ -659,7 +665,7 @@ class XdsClientTest : public ::testing::Test {
 
   RefCountedPtr<FakeXdsTransportFactory::FakeStreamingCall> WaitForAdsStream(
       absl::Duration timeout = absl::Seconds(5)) {
-    return WaitForAdsStream(xds_client_->bootstrap().server(), timeout);
+    return WaitForAdsStream(*xds_client_->bootstrap().server(0), timeout);
   }
 
   // Gets the latest request sent to the fake xDS server.
@@ -1809,7 +1815,7 @@ TEST_F(XdsClientTest, ConnectionFails) {
                /*resource_names=*/{"foo1"});
   CheckRequestNode(*request);  // Should be present on the first request.
   // Transport reports connection failure.
-  TriggerConnectionFailure(xds_client_->bootstrap().server(),
+  TriggerConnectionFailure(*xds_client_->bootstrap().server(0),
                            absl::UnavailableError("connection failed"));
   // XdsClient should report an error to the watcher.
   auto error = watcher->WaitForNextError();
@@ -2364,7 +2370,7 @@ TEST_F(XdsClientTest, Federation) {
   // Watcher should initially not see any resource reported.
   EXPECT_FALSE(watcher->HasEvent());
   // XdsClient should have created an ADS stream to the top-level xDS server.
-  auto stream = WaitForAdsStream(xds_client_->bootstrap().server());
+  auto stream = WaitForAdsStream(*xds_client_->bootstrap().server(0));
   ASSERT_TRUE(stream != nullptr);
   // XdsClient should have sent a subscription request on the ADS stream.
   auto request = WaitForRequest(stream.get());
@@ -2450,7 +2456,7 @@ TEST_F(XdsClientTest, FederationAuthorityDefaultsToTopLevelXdsServer) {
   // Watcher should initially not see any resource reported.
   EXPECT_FALSE(watcher->HasEvent());
   // XdsClient should have created an ADS stream to the top-level xDS server.
-  auto stream = WaitForAdsStream(xds_client_->bootstrap().server());
+  auto stream = WaitForAdsStream(*xds_client_->bootstrap().server(0));
   ASSERT_TRUE(stream != nullptr);
   // XdsClient should have sent a subscription request on the ADS stream.
   auto request = WaitForRequest(stream.get());
@@ -2620,7 +2626,7 @@ TEST_F(XdsClientTest, FederationChannelFailureReportedToWatchers) {
   // Watcher should initially not see any resource reported.
   EXPECT_FALSE(watcher->HasEvent());
   // XdsClient should have created an ADS stream to the top-level xDS server.
-  auto stream = WaitForAdsStream(xds_client_->bootstrap().server());
+  auto stream = WaitForAdsStream(*xds_client_->bootstrap().server(0));
   ASSERT_TRUE(stream != nullptr);
   // XdsClient should have sent a subscription request on the ADS stream.
   auto request = WaitForRequest(stream.get());

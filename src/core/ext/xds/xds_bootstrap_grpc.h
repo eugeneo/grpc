@@ -105,7 +105,10 @@ class GrpcXdsBootstrap : public XdsBootstrap {
   class GrpcAuthority : public Authority {
    public:
     const XdsServer* server(size_t index) const override {
-      return servers_.empty() ? nullptr : &servers_[index];
+      if (index >= servers_.size()) {
+        return nullptr;
+      }
+      return &servers_[index];
     }
 
     size_t server_count() const override { return servers_.size(); }
@@ -132,6 +135,9 @@ class GrpcXdsBootstrap : public XdsBootstrap {
   std::string ToString() const override;
 
   const XdsServer* server(size_t index) const override {
+    if (index >= servers_.size()) {
+      return nullptr;
+    }
     return &servers_[index];
   }
 
