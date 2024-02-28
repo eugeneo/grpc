@@ -461,14 +461,14 @@ XdsClient::XdsChannel::XdsChannel(WeakRefCountedPtr<XdsClient> xds_client,
             xds_client_.get(), this, server.server_uri().c_str());
   }
   absl::Status status;
-  transport_ = xds_client_->transport_factory_->Create(
+  transports_.emplace_back(xds_client_->transport_factory_->Create(
       server,
       [self = WeakRef(DEBUG_LOCATION, "OnConnectivityFailure")](
           absl::Status status) {
         self->OnConnectivityFailure(std::move(status));
       },
-      &status);
-  GPR_ASSERT(transport_ != nullptr);
+      &status));
+  GPR_ASSERT(transports_.back() != nullptr);
   if (!status.ok()) SetChannelStatusLocked(std::move(status));
 }
 
@@ -490,7 +490,7 @@ void XdsClient::XdsChannel::Orphan() ABSL_NO_THREAD_SAFETY_ANALYSIS {
             xds_client(), this, server_.server_uri().c_str());
   }
   shutting_down_ = true;
-  transport_.reset();
+  transports_.clear();
   // At this time, all strong refs are removed, remove from channel map to
   // prevent subsequent subscription from trying to use this XdsChannel as
   // it is shutting down.
@@ -499,7 +499,9 @@ void XdsClient::XdsChannel::Orphan() ABSL_NO_THREAD_SAFETY_ANALYSIS {
   lrs_call_.reset();
 }
 
-void XdsClient::XdsChannel::ResetBackoff() { transport_->ResetBackoff(); }
+void XdsClient::XdsChannel::ResetBackoff() {
+  transports_.back()->ResetBackoff();
+}
 
 XdsClient::XdsChannel::AdsCall* XdsClient::XdsChannel::ads_call() const {
   return ads_call_->call();
@@ -643,7 +645,7 @@ void XdsClient::XdsChannel::RetryableCall<T>::OnCallFinishedLocked() {
 template <typename T>
 void XdsClient::XdsChannel::RetryableCall<T>::StartNewCallLocked() {
   if (shutting_down_) return;
-  GPR_ASSERT(xds_channel_->transport_ != nullptr);
+  GPR_ASSERT(xds_channel_->transports_.back() != nullptr);
   GPR_ASSERT(call_ == nullptr);
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
     gpr_log(GPR_INFO,
@@ -931,7 +933,7 @@ XdsClient::XdsChannel::AdsCall::AdsCall(
   const char* method =
       "/envoy.service.discovery.v3.AggregatedDiscoveryService/"
       "StreamAggregatedResources";
-  streaming_call_ = xds_channel()->transport_->CreateStreamingCall(
+  streaming_call_ = xds_channel()->transports_.back()->CreateStreamingCall(
       method, std::make_unique<StreamEventHandler>(
                   // Passing the initial ref here.  This ref will go away when
                   // the StreamEventHandler is destroyed.
@@ -1282,7 +1284,7 @@ XdsClient::XdsChannel::LrsCall::LrsCall(
   GPR_ASSERT(xds_client() != nullptr);
   const char* method =
       "/envoy.service.load_stats.v3.LoadReportingService/StreamLoadStats";
-  streaming_call_ = xds_channel()->transport_->CreateStreamingCall(
+  streaming_call_ = xds_channel()->transports_.back()->CreateStreamingCall(
       method, std::make_unique<StreamEventHandler>(
                   // Passing the initial ref here.  This ref will go away when
                   // the StreamEventHandler is destroyed.
@@ -1584,9 +1586,9 @@ void XdsClient::WatchResource(const XdsResourceType* type,
                        "\" not present in bootstrap config")));
       return;
     }
-    xds_server = authority->server();
+    xds_server = authority->server(0);
   }
-  if (xds_server == nullptr) xds_server = &bootstrap_->server();
+  if (xds_server == nullptr) xds_server = bootstrap_->server(0);
   {
     MutexLock lock(&mu_);
     MaybeRegisterResourceTypeLocked(type);

@@ -456,7 +456,7 @@ class XdsEnd2endTest : public ::testing::TestWithParam<XdsTestType>,
   // A convenient wrapper for setting the Listener and
   // RouteConfiguration resources on the server side.
   void SetServerListenerNameAndRouteConfiguration(
-      BalancerServerThread* balancer, Listener listener, int port,
+      BalancerServerThread* balancer, const Listener& listener, int port,
       const RouteConfiguration& route_config) {
     SetListenerAndRouteConfiguration(
         balancer, PopulateServerListenerNameAndPort(listener, port),
@@ -481,7 +481,8 @@ class XdsEnd2endTest : public ::testing::TestWithParam<XdsTestType>,
       size_t backend_idx,
       ::envoy::config::core::v3::HealthStatus health_status =
           ::envoy::config::core::v3::HealthStatus::UNKNOWN,
-      int lb_weight = 1, std::vector<size_t> additional_backend_indxees = {}) {
+      int lb_weight = 1,
+      const std::vector<size_t>& additional_backend_indxees = {}) {
     std::vector<int> additional_ports;
     additional_ports.reserve(additional_backend_indxees.size());
     for (size_t idx : additional_backend_indxees) {
@@ -801,7 +802,7 @@ class XdsEnd2endTest : public ::testing::TestWithParam<XdsTestType>,
       const WaitForBackendOptions& wait_options = WaitForBackendOptions(),
       const RpcOptions& rpc_options = RpcOptions()) {
     WaitForAllBackends(debug_location, backend_idx, backend_idx + 1,
-                       check_status, wait_options, rpc_options);
+                       std::move(check_status), wait_options, rpc_options);
   }
 
   //

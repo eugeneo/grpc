@@ -721,7 +721,7 @@ std::vector<XdsEnd2endTest::ConcurrentRpc> XdsEnd2endTest::SendConcurrentRpcs(
     grpc_core::Timestamp t0 = NowFromCycleCounter();
     stub->async()->Echo(&rpc->context, &request, &rpc->response,
                         [rpc, &mu, &completed, &cv, num_rpcs, t0](Status s) {
-                          rpc->status = s;
+                          rpc->status = std::move(s);
                           rpc->elapsed_time = NowFromCycleCounter() - t0;
                           bool done;
                           {

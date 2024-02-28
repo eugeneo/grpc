@@ -234,7 +234,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
     const XdsBootstrap::XdsServer& server_;  // Owned by bootstrap.
 
-    OrphanablePtr<XdsTransportFactory::XdsTransport> transport_;
+    std::vector<OrphanablePtr<XdsTransportFactory::XdsTransport>> transports_;
 
     bool shutting_down_ = false;
 
