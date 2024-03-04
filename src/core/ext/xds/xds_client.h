@@ -288,12 +288,27 @@ class XdsClient : public DualRefCounted<XdsClient> {
     LoadReportMap load_report_map;
   };
 
+  // Checks if it is possible to perform fallback when the primary channel
+  // fails
+  bool PerformFallback();
+
+  // Get XdsServer for an authority
+  absl::StatusOr<const XdsBootstrap::XdsServer*> GetXdsServer(
+      absl::string_view authority_name);
+
+  void DoTheChannelStuff(XdsResourceName* resource_name,
+                         const XdsResourceType* type,
+                         const XdsBootstrap::XdsServer& xds_server,
+                         RefCountedPtr<ResourceWatcherInterface> watcher,
+                         absl::string_view name);
+
   // Sends an error notification to a specific set of watchers.
   void NotifyWatchersOnErrorLocked(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
       absl::Status status, RefCountedPtr<ReadDelayHandle> read_delay_handle);
-  // Sends a resource-does-not-exist notification to a specific set of watchers.
+  // Sends a resource-does-not-exist notification to a specific set of
+  // watchers.
   void NotifyWatchersOnResourceDoesNotExist(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
