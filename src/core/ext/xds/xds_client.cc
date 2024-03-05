@@ -1579,10 +1579,100 @@ void XdsClient::WatchResource(const XdsResourceType* type,
         absl::StrCat("Unable to parse resource name ", name)));
     return;
   }
-  auto xds_server = GetXdsServer(resource_name->authority);
-  if (!xds_server.ok()) {
-    fail(xds_server.status());
-    return;
+  // Find server to use.
+  const XdsBootstrap::XdsServer* xds_server = nullptr;
+  absl::string_view authority_name = resource_name->authority;
+  if (absl::ConsumePrefix(&authority_name, "xdstp:")) {
+    auto* authority = bootstrap_->LookupAuthority(std::string(authority_name));
+    if (authority == nullptr) {
+      fail(absl::UnavailableError(
+          absl::StrCat("authority \"", authority_name,
+                       "\" not present in bootstrap config")));
+      return;
+    }
+    xds_server = authority->servers().front();
+  }
+  if (xds_server == nullptr) xds_server = bootstrap_->servers().front();
+  {
+    MutexLock lock(&mu_);
+    MaybeRegisterResourceTypeLocked(type);
+    AuthorityState& authority_state =
+        authority_state_map_[resource_name->authority];
+    ResourceState& resource_state =
+        authority_state.resource_map[type][resource_name->key];
+    resource_state.watchers[w] = watcher;
+    // If we already have a cached value for the resource, notify the new
+    // watcher immediately.
+    if (resource_state.resource != nullptr) {
+      if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+        gpr_log(GPR_INFO,
+                "[xds_client %p] returning cached listener data for %s", this,
+                std::string(name).c_str());
+      }
+      work_serializer_.Schedule(
+          [watcher, value = resource_state.resource]()
+              ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
+                watcher->OnGenericResourceChanged(value,
+                                                  ReadDelayHandle::NoWait());
+              },
+          DEBUG_LOCATION);
+    } else if (resource_state.meta.client_status ==
+               XdsApi::ResourceMetadata::DOES_NOT_EXIST) {
+      if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+        gpr_log(GPR_INFO,
+                "[xds_client %p] reporting cached does-not-exist for %s", this,
+                std::string(name).c_str());
+      }
+      work_serializer_.Schedule(
+          [watcher]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
+            watcher->OnResourceDoesNotExist(ReadDelayHandle::NoWait());
+          },
+          DEBUG_LOCATION);
+    } else if (resource_state.meta.client_status ==
+               XdsApi::ResourceMetadata::NACKED) {
+      if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+        gpr_log(
+            GPR_INFO,
+            "[xds_client %p] reporting cached validation failure for %s: %s",
+            this, std::string(name).c_str(),
+            resource_state.meta.failed_details.c_str());
+      }
+      std::string details = resource_state.meta.failed_details;
+      const auto* node = bootstrap_->node();
+      if (node != nullptr) {
+        absl::StrAppend(&details, " (node ID:", bootstrap_->node()->id(), ")");
+      }
+      work_serializer_.Schedule(
+          [watcher, details = std::move(details)]()
+              ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) {
+                watcher->OnError(absl::UnavailableError(absl::StrCat(
+                                     "invalid resource: ", details)),
+                                 ReadDelayHandle::NoWait());
+              },
+          DEBUG_LOCATION);
+    }
+    // If the authority doesn't yet have a channel, set it, creating it if
+    // needed.
+    if (authority_state.xds_channel == nullptr) {
+      authority_state.xds_channel =
+          GetOrCreateXdsChannelLocked(*xds_server, "start watch");
+    }
+    absl::Status channel_status = authority_state.xds_channel->status();
+    if (!channel_status.ok()) {
+      if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
+        gpr_log(GPR_INFO,
+                "[xds_client %p] returning cached channel error for %s: %s",
+                this, std::string(name).c_str(),
+                channel_status.ToString().c_str());
+      }
+      work_serializer_.Schedule(
+          [watcher = std::move(watcher), status = std::move(channel_status)]()
+              ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) mutable {
+                watcher->OnError(std::move(status), ReadDelayHandle::NoWait());
+              },
+          DEBUG_LOCATION);
+    }
+    authority_state.xds_channel->SubscribeLocked(type, *resource_name);
   }
   DoTheChannelStuff(&resource_name.value(), type, *xds_server.value(),
                     std::move(watcher), name);
