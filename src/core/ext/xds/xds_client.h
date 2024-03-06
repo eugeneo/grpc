@@ -288,12 +288,26 @@ class XdsClient : public DualRefCounted<XdsClient> {
     LoadReportMap load_report_map;
   };
 
+  // Checks if it is possible to perform fallback when the primary channel
+  // fails
+  bool PerformFallback();
+
+  // Get XdsServer for an authority
+  absl::StatusOr<std::vector<const XdsBootstrap::XdsServer*>> GetXdsServers(
+      absl::string_view authority_name) const;
+
+  void DoTheChannelStuff(
+      XdsResourceName* resource_name, const XdsResourceType* type,
+      absl::Span<const XdsBootstrap::XdsServer* const> xds_servers,
+      RefCountedPtr<ResourceWatcherInterface> watcher, absl::string_view name);
+
   // Sends an error notification to a specific set of watchers.
   void NotifyWatchersOnErrorLocked(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
       absl::Status status, RefCountedPtr<ReadDelayHandle> read_delay_handle);
-  // Sends a resource-does-not-exist notification to a specific set of watchers.
+  // Sends a resource-does-not-exist notification to a specific set of
+  // watchers.
   void NotifyWatchersOnResourceDoesNotExist(
       const std::map<ResourceWatcherInterface*,
                      RefCountedPtr<ResourceWatcherInterface>>& watchers,
@@ -317,8 +331,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
       const std::set<std::string>& clusters) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   RefCountedPtr<XdsChannel> GetOrCreateXdsChannelLocked(
-      const XdsBootstrap::XdsServer& server, const char* reason)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+      absl::Span<const XdsBootstrap::XdsServer* const> servers,
+      const char* reason) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   std::unique_ptr<XdsBootstrap> bootstrap_;
   OrphanablePtr<XdsTransportFactory> transport_factory_;
