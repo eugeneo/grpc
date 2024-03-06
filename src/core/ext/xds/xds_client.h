@@ -293,14 +293,13 @@ class XdsClient : public DualRefCounted<XdsClient> {
   bool PerformFallback();
 
   // Get XdsServer for an authority
-  absl::StatusOr<const XdsBootstrap::XdsServer*> GetXdsServer(
-      absl::string_view authority_name);
+  absl::StatusOr<std::vector<const XdsBootstrap::XdsServer*>> GetXdsServers(
+      absl::string_view authority_name) const;
 
-  void DoTheChannelStuff(XdsResourceName* resource_name,
-                         const XdsResourceType* type,
-                         const XdsBootstrap::XdsServer& xds_server,
-                         RefCountedPtr<ResourceWatcherInterface> watcher,
-                         absl::string_view name);
+  void DoTheChannelStuff(
+      XdsResourceName* resource_name, const XdsResourceType* type,
+      absl::Span<const XdsBootstrap::XdsServer* const> xds_servers,
+      RefCountedPtr<ResourceWatcherInterface> watcher, absl::string_view name);
 
   // Sends an error notification to a specific set of watchers.
   void NotifyWatchersOnErrorLocked(
@@ -332,8 +331,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
       const std::set<std::string>& clusters) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   RefCountedPtr<XdsChannel> GetOrCreateXdsChannelLocked(
-      const XdsBootstrap::XdsServer& server, const char* reason)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+      absl::Span<const XdsBootstrap::XdsServer* const> servers,
+      const char* reason) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   std::unique_ptr<XdsBootstrap> bootstrap_;
   OrphanablePtr<XdsTransportFactory> transport_factory_;

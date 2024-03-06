@@ -1542,15 +1542,16 @@ void XdsClient::Orphan() {
 }
 
 RefCountedPtr<XdsClient::XdsChannel> XdsClient::GetOrCreateXdsChannelLocked(
-    const XdsBootstrap::XdsServer& server, const char* reason) {
-  std::string key = server.Key();
+    absl::Span<const XdsBootstrap::XdsServer* const> servers,
+    const char* reason) {
+  std::string key = servers.front()->Key();
   auto it = xds_channel_map_.find(key);
   if (it != xds_channel_map_.end()) {
     return it->second->Ref(DEBUG_LOCATION, reason);
   }
   // Channel not found, so create a new one.
-  auto xds_channel =
-      MakeRefCounted<XdsChannel>(WeakRef(DEBUG_LOCATION, "XdsChannel"), server);
+  auto xds_channel = MakeRefCounted<XdsChannel>(
+      WeakRef(DEBUG_LOCATION, "XdsChannel"), *servers.front());
   xds_channel_map_[std::move(key)] = xds_channel.get();
   return xds_channel;
 }
@@ -1580,19 +1581,12 @@ void XdsClient::WatchResource(const XdsResourceType* type,
     return;
   }
   // Find server to use.
-  const XdsBootstrap::XdsServer* xds_server = nullptr;
   absl::string_view authority_name = resource_name->authority;
-  if (absl::ConsumePrefix(&authority_name, "xdstp:")) {
-    auto* authority = bootstrap_->LookupAuthority(std::string(authority_name));
-    if (authority == nullptr) {
-      fail(absl::UnavailableError(
-          absl::StrCat("authority \"", authority_name,
-                       "\" not present in bootstrap config")));
-      return;
-    }
-    xds_server = authority->servers().front();
+  auto xds_servers = GetXdsServers(authority_name);
+  if (!xds_servers.ok()) {
+    fail(xds_servers.status());
+    return;
   }
-  if (xds_server == nullptr) xds_server = bootstrap_->servers().front();
   {
     MutexLock lock(&mu_);
     MaybeRegisterResourceTypeLocked(type);
@@ -1655,7 +1649,7 @@ void XdsClient::WatchResource(const XdsResourceType* type,
     // needed.
     if (authority_state.xds_channel == nullptr) {
       authority_state.xds_channel =
-          GetOrCreateXdsChannelLocked(*xds_server, "start watch");
+          GetOrCreateXdsChannelLocked(*xds_servers, "start watch");
     }
     absl::Status channel_status = authority_state.xds_channel->status();
     if (!channel_status.ok()) {
@@ -1674,7 +1668,7 @@ void XdsClient::WatchResource(const XdsResourceType* type,
     }
     authority_state.xds_channel->SubscribeLocked(type, *resource_name);
   }
-  DoTheChannelStuff(&resource_name.value(), type, *xds_server.value(),
+  DoTheChannelStuff(&resource_name.value(), type, *xds_servers,
                     std::move(watcher), name);
   work_serializer_.DrainQueue();
 }
@@ -1802,7 +1796,7 @@ RefCountedPtr<XdsClusterDropStats> XdsClient::AddClusterDropStats(
                          .first;
     if (server_it->second.xds_channel == nullptr) {
       server_it->second.xds_channel = GetOrCreateXdsChannelLocked(
-          xds_server, "load report map (drop stats)");
+          {&xds_server}, "load report map (drop stats)");
     }
     auto load_report_it = server_it->second.load_report_map
                               .emplace(std::move(key), LoadReportState())
@@ -1866,7 +1860,7 @@ RefCountedPtr<XdsClusterLocalityStats> XdsClient::AddClusterLocalityStats(
                          .first;
     if (server_it->second.xds_channel == nullptr) {
       server_it->second.xds_channel = GetOrCreateXdsChannelLocked(
-          xds_server, "load report map (locality stats)");
+          {&xds_server}, "load report map (locality stats)");
     }
     auto load_report_it = server_it->second.load_report_map
                               .emplace(std::move(key), LoadReportState())
@@ -2134,8 +2128,8 @@ bool XdsClient::PerformFallback() {
   return false;
 }
 
-absl::StatusOr<const XdsBootstrap::XdsServer*> XdsClient::GetXdsServer(
-    absl::string_view authority_name) {
+absl::StatusOr<std::vector<const XdsBootstrap::XdsServer*>>
+XdsClient::GetXdsServers(absl::string_view authority_name) const {
   // Find server to use.
   if (absl::ConsumePrefix(&authority_name, "xdstp:")) {
     auto* authority = bootstrap_->LookupAuthority(std::string(authority_name));
@@ -2144,14 +2138,17 @@ absl::StatusOr<const XdsBootstrap::XdsServer*> XdsClient::GetXdsServer(
           absl::StrCat("authority \"", authority_name,
                        "\" not present in bootstrap config"));
     }
-    return authority->server(0);
+    auto servers = authority->servers();
+    if (!servers.empty()) {
+      return servers;
+    }
   }
-  return bootstrap_->server(0);
+  return bootstrap_->servers();
 }
 
 void XdsClient::DoTheChannelStuff(
     XdsResourceName* resource_name, const XdsResourceType* type,
-    const XdsBootstrap::XdsServer& xds_server,
+    absl::Span<const XdsBootstrap::XdsServer* const> xds_servers,
     RefCountedPtr<ResourceWatcherInterface> watcher, absl::string_view name) {
   MutexLock lock(&mu_);
   MaybeRegisterResourceTypeLocked(type);
@@ -2212,7 +2209,7 @@ void XdsClient::DoTheChannelStuff(
   // needed.
   if (authority_state.xds_channel == nullptr) {
     authority_state.xds_channel =
-        GetOrCreateXdsChannelLocked(xds_server, "start watch");
+        GetOrCreateXdsChannelLocked(xds_servers, "start watch");
   }
   absl::Status channel_status = authority_state.xds_channel->status();
   if (!channel_status.ok()) {
