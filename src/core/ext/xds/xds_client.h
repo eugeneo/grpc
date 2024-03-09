@@ -288,13 +288,13 @@ class XdsClient : public DualRefCounted<XdsClient> {
     LoadReportMap load_report_map;
   };
 
-  // Checks if it is possible to perform fallback when the primary channel
-  // fails
-  bool PerformFallback();
-
   // Get XdsServer for an authority
   absl::StatusOr<std::vector<const XdsBootstrap::XdsServer*>> GetXdsServers(
       absl::string_view authority_name) const;
+
+  void HandleChannelFailure(RefCountedPtr<XdsClient::XdsChannel> channel,
+                            const absl::Status& status)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
   void DoTheChannelStuff(
       XdsResourceName* resource_name, const XdsResourceType* type,
@@ -331,8 +331,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
       const std::set<std::string>& clusters) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   RefCountedPtr<XdsChannel> GetOrCreateXdsChannelLocked(
-      absl::Span<const XdsBootstrap::XdsServer* const> servers,
-      const char* reason) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+      const XdsBootstrap::XdsServer* server, const char* reason)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   std::unique_ptr<XdsBootstrap> bootstrap_;
   OrphanablePtr<XdsTransportFactory> transport_factory_;

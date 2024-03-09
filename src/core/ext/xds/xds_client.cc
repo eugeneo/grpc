@@ -40,6 +40,7 @@
 #include "google/protobuf/timestamp.upb.h"
 #include "upb/base/string_view.h"
 #include "upb/mem/arena.h"
+#include "xds_client.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/log.h>
@@ -580,30 +581,7 @@ void XdsClient::XdsChannel::SetChannelStatusLocked(absl::Status status) {
   // Save status in channel, so that we can immediately generate an
   // error for any new watchers that may be started.
   status_ = status;
-  if (xds_client_->PerformFallback()) {
-    return;
-  }
-  // Find all watchers for this channel.
-  std::set<RefCountedPtr<ResourceWatcherInterface>> watchers;
-  for (const auto& a : xds_client_->authority_state_map_) {  // authority
-    if (a.second.xds_channel != this) continue;
-    for (const auto& t : a.second.resource_map) {  // type
-      for (const auto& r : t.second) {             // resource id
-        for (const auto& w : r.second.watchers) {  // watchers
-          watchers.insert(w.second);
-        }
-      }
-    }
-  }
-  // Enqueue notification for the watchers.
-  xds_client_->work_serializer_.Schedule(
-      [watchers = std::move(watchers), status = std::move(status)]()
-          ABSL_EXCLUSIVE_LOCKS_REQUIRED(xds_client_->work_serializer_) {
-            for (const auto& watcher : watchers) {
-              watcher->OnError(status, ReadDelayHandle::NoWait());
-            }
-          },
-      DEBUG_LOCATION);
+  xds_client_->HandleChannelFailure(Ref(), status);
 }
 
 //
@@ -1540,16 +1518,15 @@ void XdsClient::Orphan() {
 }
 
 RefCountedPtr<XdsClient::XdsChannel> XdsClient::GetOrCreateXdsChannelLocked(
-    absl::Span<const XdsBootstrap::XdsServer* const> servers,
-    const char* reason) {
-  std::string key = servers.front()->Key();
+    const XdsBootstrap::XdsServer* server, const char* reason) {
+  std::string key = server->Key();
   auto it = xds_channel_map_.find(key);
   if (it != xds_channel_map_.end()) {
     return it->second->Ref(DEBUG_LOCATION, reason);
   }
   // Channel not found, so create a new one.
   auto xds_channel = MakeRefCounted<XdsChannel>(
-      WeakRef(DEBUG_LOCATION, "XdsChannel"), *servers.front());
+      WeakRef(DEBUG_LOCATION, "XdsChannel"), *server);
   xds_channel_map_[std::move(key)] = xds_channel.get();
   return xds_channel;
 }
@@ -1643,13 +1620,17 @@ void XdsClient::WatchResource(const XdsResourceType* type,
               },
           DEBUG_LOCATION);
     }
+
     // If the authority doesn't yet have a channel, set it, creating it if
     // needed.
     if (authority_state.xds_channel == nullptr) {
       authority_state.xds_channel =
-          GetOrCreateXdsChannelLocked(*xds_servers, "start watch");
+          GetOrCreateXdsChannelLocked(xds_servers->front(), "start watch");
     }
     absl::Status channel_status = authority_state.xds_channel->status();
+    gpr_log(GPR_INFO, "[%d] %s %p", channel_status.code(),
+            std::string(channel_status.message()).c_str(),
+            xds_servers->front());
     if (!channel_status.ok()) {
       if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
         gpr_log(GPR_INFO,
@@ -1734,6 +1715,31 @@ const XdsResourceType* XdsClient::GetResourceTypeLocked(
   return nullptr;
 }
 
+void XdsClient::HandleChannelFailure(
+    RefCountedPtr<XdsClient::XdsChannel> channel, const absl::Status& status) {
+  // Find all watchers for this channel.
+  std::set<RefCountedPtr<ResourceWatcherInterface>> watchers;
+  for (const auto& a : authority_state_map_) {  // authority
+    if (a.second.xds_channel != channel.get()) continue;
+    for (const auto& t : a.second.resource_map) {  // type
+      for (const auto& r : t.second) {             // resource id
+        for (const auto& w : r.second.watchers) {  // watchers
+          watchers.insert(w.second);
+        }
+      }
+    }
+  }
+  // Enqueue notification for the watchers.
+  work_serializer_.Schedule(
+      [watchers = std::move(watchers), status = status]()
+          ABSL_EXCLUSIVE_LOCKS_REQUIRED(work_serializer_) {
+            for (const auto& watcher : watchers) {
+              watcher->OnError(status, ReadDelayHandle::NoWait());
+            }
+          },
+      DEBUG_LOCATION);
+}
+
 absl::StatusOr<XdsClient::XdsResourceName> XdsClient::ParseXdsResourceName(
     absl::string_view name, const XdsResourceType* type) {
   // Old-style names use the empty string for authority.
@@ -1794,7 +1800,7 @@ RefCountedPtr<XdsClusterDropStats> XdsClient::AddClusterDropStats(
                          .first;
     if (server_it->second.xds_channel == nullptr) {
       server_it->second.xds_channel = GetOrCreateXdsChannelLocked(
-          {&xds_server}, "load report map (drop stats)");
+          &xds_server, "load report map (drop stats)");
     }
     auto load_report_it = server_it->second.load_report_map
                               .emplace(std::move(key), LoadReportState())
@@ -1858,7 +1864,7 @@ RefCountedPtr<XdsClusterLocalityStats> XdsClient::AddClusterLocalityStats(
                          .first;
     if (server_it->second.xds_channel == nullptr) {
       server_it->second.xds_channel = GetOrCreateXdsChannelLocked(
-          {&xds_server}, "load report map (locality stats)");
+          &xds_server, "load report map (locality stats)");
     }
     auto load_report_it = server_it->second.load_report_map
                               .emplace(std::move(key), LoadReportState())
@@ -2120,12 +2126,6 @@ void XdsClient::DumpClientConfig(
   }
 }
 
-bool XdsClient::PerformFallback() {
-  gpr_log(GPR_ERROR, "[xds_client %p] is performing a fallback", this);
-
-  return false;
-}
-
 absl::StatusOr<std::vector<const XdsBootstrap::XdsServer*>>
 XdsClient::GetXdsServers(absl::string_view authority_name) const {
   // Find server to use.
@@ -2207,7 +2207,7 @@ void XdsClient::DoTheChannelStuff(
   // needed.
   if (authority_state.xds_channel == nullptr) {
     authority_state.xds_channel =
-        GetOrCreateXdsChannelLocked(xds_servers, "start watch");
+        GetOrCreateXdsChannelLocked(xds_servers.front(), "start watch");
   }
   absl::Status channel_status = authority_state.xds_channel->status();
   if (!channel_status.ok()) {

@@ -18,6 +18,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "absl/strings/str_format.h"
+
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/status.h>
@@ -49,8 +51,9 @@ class XdsClientTest : public XdsEnd2endTest {};
 
 TEST_P(XdsClientTest, FallbackToSecondaryAndTertiary) {
   std::unique_ptr<BalancerServerThread> balancer2 = CreateAndStartBalancer();
-  InitClient(XdsBootstrapBuilder().AddServer(
-      absl::StrCat("localhost:", balancer2->port())));
+  InitClient(XdsBootstrapBuilder()
+                 .AddServer(absl::StrCat("localhost:", balancer_->port()))
+                 .AddServer(absl::StrCat("localhost:", balancer2->port())));
   const std::string kErrorMessage = "test forced ADS stream failure";
   balancer_->ads_service()->ForceADSFailure(
       Status(StatusCode::RESOURCE_EXHAUSTED, kErrorMessage));
@@ -58,6 +61,7 @@ TEST_P(XdsClientTest, FallbackToSecondaryAndTertiary) {
   gpr_log(GPR_INFO,
           "XdsStreamErrorPropagation test: RPC got error: code=%d message=%s",
           status.error_code(), status.error_message().c_str());
+  // EXPECT_TRUE(status.ok()) << status.error_message();
   EXPECT_THAT(status.error_code(), StatusCode::UNAVAILABLE);
   EXPECT_THAT(status.error_message(), ::testing::HasSubstr(kErrorMessage));
   EXPECT_THAT(status.error_message(),
