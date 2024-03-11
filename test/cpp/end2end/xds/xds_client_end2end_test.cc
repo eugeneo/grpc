@@ -61,7 +61,7 @@ TEST_P(XdsClientTest, FallbackToSecondaryAndTertiary) {
   gpr_log(GPR_INFO,
           "XdsStreamErrorPropagation test: RPC got error: code=%d message=%s",
           status.error_code(), status.error_message().c_str());
-  // EXPECT_TRUE(status.ok()) << status.error_message();
+  EXPECT_TRUE(status.ok()) << status.error_message();
   EXPECT_THAT(status.error_code(), StatusCode::UNAVAILABLE);
   EXPECT_THAT(status.error_message(), ::testing::HasSubstr(kErrorMessage));
   EXPECT_THAT(status.error_message(),

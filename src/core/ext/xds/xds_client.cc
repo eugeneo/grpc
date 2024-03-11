@@ -1567,6 +1567,7 @@ void XdsClient::WatchResource(const XdsResourceType* type,
     MaybeRegisterResourceTypeLocked(type);
     AuthorityState& authority_state =
         authority_state_map_[resource_name->authority];
+    gpr_log(GPR_INFO, "%s", resource_name->authority.c_str());
     ResourceState& resource_state =
         authority_state.resource_map[type][resource_name->key];
     resource_state.watchers[w] = watcher;
@@ -1620,7 +1621,6 @@ void XdsClient::WatchResource(const XdsResourceType* type,
               },
           DEBUG_LOCATION);
     }
-
     // If the authority doesn't yet have a channel, set it, creating it if
     // needed.
     if (authority_state.xds_channel == nullptr) {
@@ -1628,9 +1628,6 @@ void XdsClient::WatchResource(const XdsResourceType* type,
           GetOrCreateXdsChannelLocked(xds_servers->front(), "start watch");
     }
     absl::Status channel_status = authority_state.xds_channel->status();
-    gpr_log(GPR_INFO, "[%d] %s %p", channel_status.code(),
-            std::string(channel_status.message()).c_str(),
-            xds_servers->front());
     if (!channel_status.ok()) {
       if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_client_trace)) {
         gpr_log(GPR_INFO,
@@ -1729,6 +1726,8 @@ void XdsClient::HandleChannelFailure(
       }
     }
   }
+  gpr_log(GPR_INFO, "Channel %p with %ld watchers failed", channel.get(),
+          watchers.size());
   // Enqueue notification for the watchers.
   work_serializer_.Schedule(
       [watchers = std::move(watchers), status = status]()
