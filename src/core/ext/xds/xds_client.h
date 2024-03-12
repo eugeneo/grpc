@@ -31,6 +31,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "upb/reflection/def.hpp"
+#include "xds_bootstrap.h"
 
 #include <grpc/event_engine/event_engine.h>
 
@@ -221,6 +222,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
                            bool delay_unsubscription)
         ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
+    const XdsBootstrap::XdsServer* server() const { return &server_; }
+
    private:
     void OnConnectivityFailure(absl::Status status);
 
@@ -296,10 +299,15 @@ class XdsClient : public DualRefCounted<XdsClient> {
                             const absl::Status& status)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
-  void DoTheChannelStuff(
-      XdsResourceName* resource_name, const XdsResourceType* type,
-      absl::Span<const XdsBootstrap::XdsServer* const> xds_servers,
-      RefCountedPtr<ResourceWatcherInterface> watcher, absl::string_view name);
+  const XdsBootstrap::XdsServer* GetNextServer(
+      absl::string_view authority, const XdsBootstrap::XdsServer* server) const
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
+
+  absl::Status EstablishChannelAndSubscribe(
+      AuthorityState* authority_state,
+      const XdsBootstrap::XdsServer* xds_server, const XdsResourceType* type,
+      absl::string_view name, RefCountedPtr<ResourceWatcherInterface> watcher)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
   // Sends an error notification to a specific set of watchers.
   void NotifyWatchersOnErrorLocked(
