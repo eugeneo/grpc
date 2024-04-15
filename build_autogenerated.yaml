@@ -6249,6 +6249,17 @@ targets:
   deps:
   - gtest
   uses_polling: false
+- name: buffer_hint_hang_test
+  gtest: true
+  build: test
+  language: c++
+  headers: []
+  src:
+  - test/cpp/end2end/helloworld.proto
+  - test/cpp/end2end/buffer_hint_hang_test.cc
+  deps:
+  - gtest
+  - grpc++_test_util
 - name: buffer_list_test
   gtest: true
   build: test

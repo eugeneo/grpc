@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//bazel:cc_grpc_library.bzl", "cc_grpc_library")
 load("//bazel:grpc_build_system.bzl", "grpc_cc_binary", "grpc_cc_library", "grpc_cc_test", "grpc_package")
 
 licenses(["notice"])
@@ -1142,6 +1144,35 @@ grpc_cc_test(
         "//src/proto/grpc/testing:echo_messages_proto",
         "//src/proto/grpc/testing:echo_proto",
         "//test/core/util:grpc_test_util",
+        "//test/cpp/util:test_util",
+    ],
+)
+
+proto_library(
+    name = "helloworld_proto",
+    srcs = ["helloworld.proto"],
+)
+
+cc_proto_library(
+    name = "helloworld_cc_proto",
+    deps = [":helloworld_proto"],
+)
+
+cc_grpc_library(
+    name = "helloworld_cc_grpc",
+    srcs = [":helloworld_proto"],
+    grpc_only = True,
+    deps = [":helloworld_cc_proto"],
+)
+
+grpc_cc_test(
+    name = "buffer_hint_hang_test",
+    srcs = ["buffer_hint_hang_test.cc"],
+    external_deps = [
+        "gtest",
+    ],
+    deps = [
+        ":helloworld_cc_grpc",
         "//test/cpp/util:test_util",
     ],
 )
