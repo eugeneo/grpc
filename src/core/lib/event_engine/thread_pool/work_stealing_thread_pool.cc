@@ -520,6 +520,7 @@ void WorkStealingThreadPool::ThreadState::SleepIfRunning() {
 }
 
 namespace {
+
 class WorkStealingThreadPoolEvenQueue {
  public:
   explicit WorkStealingThreadPoolEvenQueue(
@@ -531,42 +532,43 @@ class WorkStealingThreadPoolEvenQueue {
                      .set_max_backoff(kWorkerThreadMaxSleepBetweenChecks)
                      .set_multiplier(1.3)) {}
 
-  bool should_run_again() const { return should_run_again_; }
-  bool timed_out() const { return timed_out_; }
-  EventEngine::Closure* closure() const { return closure_; }
-
-  bool Step() {
-    if (pool_->IsForking()) {
-      return false;
-    }
-    // Pull from the global queue next
-    // TODO(hork): consider an empty check for performance wins. Depends on the
-    // queue implementation, the BasicWorkQueue takes two locks when you do an
-    // empty check then pop.
-    closure_ = pool_->queue()->PopMostRecent();
-    if (closure_ != nullptr) {
-      should_run_again_ = true;
-      return false;
-    };
-    // Try stealing if the queue is empty
-    closure_ = pool_->theft_registry()->StealOne();
-    if (closure_ != nullptr) {
-      should_run_again_ = true;
-      return false;
-    }
-    // No closures were retrieved from anywhere.
-    // Quit the thread if the pool has been shut down.
-    if (pool_->IsShutdown()) return false;
-    bool timed_out = pool_->work_signal()->WaitWithTimeout(
-        backoff_.NextAttemptTime() - grpc_core::Timestamp::Now());
-    if (pool_->IsForking() || pool_->IsShutdown()) return false;
-    // Quit a thread if the pool has more than it requires, and this thread
-    // has been idle long enough.
-    if (timed_out &&
-        pool_->living_thread_count()->count() > pool_->reserve_threads() &&
-        std::chrono::steady_clock::now() > deadline_) {
-      timed_out_ = true;
-      return false;
+  bool Loop(EventEngine::Closure** closure) {
+    *closure = nullptr;
+    // Thread shutdown exit condition (ignoring fork). All must be true:
+    // * shutdown was called
+    // * the local queue is empty
+    // * the global queue is empty
+    // * the steal pool returns nullptr
+    while (true) {
+      if (pool_->IsForking()) {
+        return true;
+      }
+      // Pull from the global queue next
+      // TODO(hork): consider an empty check for performance wins. Depends on
+      // the queue implementation, the BasicWorkQueue takes two locks when you
+      // do an empty check then pop.
+      *closure = pool_->queue()->PopMostRecent();
+      if (*closure != nullptr) {
+        return true;
+      };
+      // Try stealing if the queue is empty
+      *closure = pool_->theft_registry()->StealOne();
+      if (*closure != nullptr) {
+        return true;
+      }
+      // No closures were retrieved from anywhere.
+      // Quit the thread if the pool has been shut down.
+      if (pool_->IsShutdown()) return true;
+      bool timed_out = pool_->work_signal()->WaitWithTimeout(
+          backoff_.NextAttemptTime() - grpc_core::Timestamp::Now());
+      if (pool_->IsForking() || pool_->IsShutdown()) return true;
+      // Quit a thread if the pool has more than it requires, and this thread
+      // has been idle long enough.
+      if (timed_out &&
+          pool_->living_thread_count()->count() > pool_->reserve_threads() &&
+          std::chrono::steady_clock::now() > deadline_) {
+        return false;
+      }
     }
     return true;
   }
@@ -576,15 +578,8 @@ class WorkStealingThreadPoolEvenQueue {
   std::chrono::time_point<std::chrono::steady_clock, std::chrono::nanoseconds>
       deadline_;
   grpc_core::BackOff backoff_;
-  // Thread shutdown exit condition (ignoring fork). All must be true:
-  // * shutdown was called
-  // * the local queue is empty
-  // * the global queue is empty
-  // * the steal pool returns nullptr
-  bool should_run_again_ = false;
-  bool timed_out_ = false;
-  EventEngine::Closure* closure_ = nullptr;
 };
+
 }  // namespace
 
 bool WorkStealingThreadPool::ThreadState::Step() {
@@ -599,10 +594,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
   }
   WorkStealingThreadPoolEvenQueue queue(pool_);
   // Wait until work is available or until shut down.
-  while (queue.Step()) {
-  }
-  if (queue.timed_out()) return false;
-  closure = queue.closure();
+  if (!queue.Loop(&closure)) return false;
   if (pool_->IsForking()) {
     // save the closure since we aren't going to execute it.
     if (closure != nullptr) g_local_queue->Add(closure);
@@ -613,7 +605,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
         pool_->busy_thread_count()->MakeAutoThreadCounter(busy_count_idx_);
     closure->Run();
   }
-  return queue.should_run_again();
+  return closure != nullptr;
 }
 
 void WorkStealingThreadPool::ThreadState::FinishDraining() {
