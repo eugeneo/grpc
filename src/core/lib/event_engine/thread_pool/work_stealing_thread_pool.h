@@ -97,6 +97,7 @@ class WorkStealingThreadPool final : public ThreadPool {
     absl::flat_hash_set<WorkQueue*> queues_ ABSL_GUARDED_BY(mu_);
   };
 
+ public:
   // An implementation of the ThreadPool
   // This object is held as a shared_ptr between the owning ThreadPool and each
   // worker thread. This design allows a ThreadPool worker thread to be the last
@@ -174,7 +175,6 @@ class WorkStealingThreadPool final : public ThreadPool {
       std::unique_ptr<grpc_core::Notification> lifeguard_is_shut_down_;
       std::atomic<bool> lifeguard_running_{false};
     };
-
     void DumpStacksAndCrash();
 
     const size_t reserve_threads_;
@@ -200,6 +200,7 @@ class WorkStealingThreadPool final : public ThreadPool {
     absl::flat_hash_set<gpr_thd_id> thds_ ABSL_GUARDED_BY(thd_set_mu_);
   };
 
+ private:
   class ThreadState {
    public:
     explicit ThreadState(std::shared_ptr<WorkStealingThreadPoolImpl> pool);
@@ -218,7 +219,6 @@ class WorkStealingThreadPool final : public ThreadPool {
     // auto_thread_counter_ must be declared after pool_, so that the thread
     // count is decremented after all other pool state is cleaned up.
     LivingThreadCount::AutoThreadCounter auto_thread_counter_;
-    grpc_core::BackOff backoff_;
     size_t busy_count_idx_;
   };
 
