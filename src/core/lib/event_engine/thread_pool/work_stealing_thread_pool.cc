@@ -182,7 +182,13 @@ WorkStealingThreadPool::WorkStealingThreadPool(size_t reserve_threads)
   pool_->Start();
 }
 
-void WorkStealingThreadPool::Quiesce() { pool_->Quiesce(); }
+void WorkStealingThreadPool::Quiesce() {
+  gpr_log(GPR_INFO, "WorkStealingThreadPool::Quiesce 1 pid %d tid %d, pre",
+          getpid(), gettid());
+  pool_->Quiesce();
+  gpr_log(GPR_INFO, "WorkStealingThreadPool::Quiesce 2 pid %d tid %d, pre",
+          getpid(), gettid());
+}
 
 WorkStealingThreadPool::~WorkStealingThreadPool() {
   CHECK(pool_->IsQuiesced());
@@ -239,7 +245,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Run(
     EventEngine::Closure* closure) {
-  DCHECK(quiesced_.load(std::memory_order_relaxed) == false);
+  DCHECK(!IsQuiesced());
   if (g_local_queue != nullptr && g_local_queue->owner() == this) {
     g_local_queue->Add(closure);
   } else {
@@ -267,7 +273,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::StartThread() {
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
-  gpr_log(GPR_INFO, "WorkStealingThreadPoolImpl::Quiesce");
+  gpr_log(GPR_INFO, "WorkStealingThreadPoolImpl::Quiesce, pid: %d", getpid());
   SetShutdown(true);
   // Wait until all threads have exited.
   // Note that if this is a threadpool thread then we won't exit this thread
@@ -282,7 +288,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Quiesce() {
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
-  CHECK(queue_.Empty());
+  DCHECK_EQ(queue_.Size(), 0) << absl::StrFormat("pid: %d", getpid());
   quiesced_.store(true, std::memory_order_relaxed);
   lifeguard_.BlockUntilShutdownAndReset();
 }
@@ -532,7 +538,7 @@ class WorkStealingThreadPoolEvenQueue {
                      .set_max_backoff(kWorkerThreadMaxSleepBetweenChecks)
                      .set_multiplier(1.3)) {}
 
-  bool Loop(EventEngine::Closure** closure) {
+  bool NextEvent(EventEngine::Closure** closure) {
     *closure = nullptr;
     // Thread shutdown exit condition (ignoring fork). All must be true:
     // * shutdown was called
@@ -594,7 +600,7 @@ bool WorkStealingThreadPool::ThreadState::Step() {
   }
   WorkStealingThreadPoolEvenQueue queue(pool_);
   // Wait until work is available or until shut down.
-  if (!queue.Loop(&closure)) return false;
+  if (!queue.NextEvent(&closure)) return false;
   if (pool_->IsForking()) {
     // save the closure since we aren't going to execute it.
     if (closure != nullptr) g_local_queue->Add(closure);

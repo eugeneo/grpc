@@ -79,6 +79,7 @@ TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
       GTEST_FAIL() << "failure forking";
     case 0:  // post-fork child
     {
+      gpr_log(GPR_INFO, "Server pid: %d", getpid());
       ServiceImpl impl;
       grpc::ServerBuilder builder;
       builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
@@ -88,6 +89,7 @@ TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
       return;
     }
     default:  // post-fork parent
+      gpr_log(GPR_INFO, "Test pid: %d", getpid());
       break;
   }
 
@@ -109,6 +111,7 @@ TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
   }
   // Fork and do round trips in the post-fork parent and child.
   pid_t child_client_pid = fork();
+  gpr_log(GPR_INFO, "After fork 2 (%d)", getpid());
   switch (child_client_pid) {
     case -1:  // fork failed
       GTEST_FAIL() << "fork failed";
@@ -131,7 +134,8 @@ TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
     }
     default:  // post-fork parent
     {
-      gpr_log(GPR_DEBUG, "In post-fork parent");
+      gpr_log(GPR_DEBUG, "In post-fork parent (%d), child (%d)", getpid(),
+              child_client_pid);
       EchoRequest request;
       EchoResponse response;
       ClientContext context;
