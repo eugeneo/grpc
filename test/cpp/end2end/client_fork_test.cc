@@ -67,97 +67,63 @@ std::unique_ptr<EchoTestService::Stub> MakeStub(const std::string& addr) {
       grpc::CreateChannel(addr, InsecureChannelCredentials()));
 }
 
+void RunServer(const std::string& addr) {
+  gpr_log(GPR_INFO, "Server pid: %d", getpid());
+  ServiceImpl impl;
+  grpc::ServerBuilder builder;
+  builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
+  builder.RegisterService(&impl);
+  std::unique_ptr<Server> server(builder.BuildAndStart());
+  server->Wait();
+}
+
+void SendMessage(const std::string& addr, const std::string& message) {
+  std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
+  EchoRequest request;
+  EchoResponse response;
+  ClientContext context;
+  context.set_wait_for_ready(true);
+  auto stream = stub->BidiStream(&context);
+  request.set_message(message);
+  ASSERT_TRUE(stream->Write(request));
+  ASSERT_TRUE(stream->Read(&response));
+  ASSERT_EQ(response.message(), request.message());
+}
+
 TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
   grpc_core::Fork::Enable(true);
-
   int port = grpc_pick_unused_port_or_die();
   std::string addr = absl::StrCat("localhost:", port);
+  gpr_log(GPR_INFO, "Test pid: %d", getpid());
 
   pid_t server_pid = fork();
-  switch (server_pid) {
-    case -1:  // fork failed
-      GTEST_FAIL() << "failure forking";
-    case 0:  // post-fork child
-    {
-      gpr_log(GPR_INFO, "Server pid: %d", getpid());
-      ServiceImpl impl;
-      grpc::ServerBuilder builder;
-      builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
-      builder.RegisterService(&impl);
-      std::unique_ptr<Server> server(builder.BuildAndStart());
-      server->Wait();
-      return;
-    }
-    default:  // post-fork parent
-      gpr_log(GPR_INFO, "Test pid: %d", getpid());
-      break;
+  ASSERT_NE(server_pid, -1) << "fork failed";
+  // Run server in child
+  if (server_pid == 0) {
+    gpr_log(GPR_INFO, "Server pid: %d", getpid());
+    sleep(2);
+    RunServer(addr);
+    exit(0);
   }
+  SendMessage(addr, "Hello");
 
-  // Do a round trip before we fork.
-  // NOTE: without this scope, test running with the epoll1 poller will fail.
-  {
-    std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-    EchoRequest request;
-    EchoResponse response;
-    ClientContext context;
-    context.set_wait_for_ready(true);
-
-    auto stream = stub->BidiStream(&context);
-
-    request.set_message("Hello");
-    ASSERT_TRUE(stream->Write(request));
-    ASSERT_TRUE(stream->Read(&response));
-    ASSERT_EQ(response.message(), request.message());
-  }
+  sleep(1);
   // Fork and do round trips in the post-fork parent and child.
+  gpr_log(GPR_INFO, "About to fork (%d)", getpid());
   pid_t child_client_pid = fork();
+  ASSERT_NE(child_client_pid, -1) << "fork failed";
   gpr_log(GPR_INFO, "After fork 2 (%d)", getpid());
-  switch (child_client_pid) {
-    case -1:  // fork failed
-      GTEST_FAIL() << "fork failed";
-    case 0:  // post-fork child
-    {
-      gpr_log(GPR_DEBUG, "In post-fork child");
-      EchoRequest request;
-      EchoResponse response;
-      ClientContext context;
-      context.set_wait_for_ready(true);
-
-      std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-      auto stream = stub->BidiStream(&context);
-
-      request.set_message("Hello again from child");
-      ASSERT_TRUE(stream->Write(request));
-      ASSERT_TRUE(stream->Read(&response));
-      ASSERT_EQ(response.message(), request.message());
-      exit(0);
-    }
-    default:  // post-fork parent
-    {
-      gpr_log(GPR_DEBUG, "In post-fork parent (%d), child (%d)", getpid(),
-              child_client_pid);
-      EchoRequest request;
-      EchoResponse response;
-      ClientContext context;
-      context.set_wait_for_ready(true);
-
-      std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-      auto stream = stub->BidiStream(&context);
-
-      request.set_message("Hello again from parent");
-      EXPECT_TRUE(stream->Write(request));
-      EXPECT_TRUE(stream->Read(&response));
-      EXPECT_EQ(response.message(), request.message());
-
-      // Wait for the post-fork child to exit; ensure it exited cleanly.
-      int child_status;
-      ASSERT_EQ(waitpid(child_client_pid, &child_status, 0), child_client_pid)
-          << "failed to get status of child client";
-      ASSERT_EQ(WEXITSTATUS(child_status), 0) << "child did not exit cleanly";
-    }
+  SendMessage(addr, child_client_pid == 0 ? "Hello again from child"
+                                          : "Hello again from parent");
+  // Cleanup childe processes from parent
+  if (child_client_pid != 0) {
+    // Wait for the post-fork child to exit; ensure it exited cleanly.
+    int child_status;
+    ASSERT_EQ(waitpid(child_client_pid, &child_status, 0), child_client_pid)
+        << "failed to get status of child client";
+    ASSERT_EQ(WEXITSTATUS(child_status), 0) << "child did not exit cleanly";
+    kill(server_pid, SIGINT);
   }
-
-  kill(server_pid, SIGINT);
 }
 
 }  // namespace

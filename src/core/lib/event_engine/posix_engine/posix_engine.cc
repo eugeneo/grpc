@@ -13,6 +13,8 @@
 // limitations under the License.
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
 
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -476,7 +478,9 @@ PosixEventEngine::~PosixEventEngine() {
     poller_manager_->TriggerShutdown();
   }
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+  gpr_log(GPR_ERROR, "~PosixEventEngine 1 PID (%d)", getpid());
   executor_->Quiesce();
+  gpr_log(GPR_ERROR, "~PosixEventEngine 2 PID (%d)", getpid());
 }
 
 bool PosixEventEngine::Cancel(EventEngine::TaskHandle handle) {

@@ -182,13 +182,7 @@ WorkStealingThreadPool::WorkStealingThreadPool(size_t reserve_threads)
   pool_->Start();
 }
 
-void WorkStealingThreadPool::Quiesce() {
-  gpr_log(GPR_INFO, "WorkStealingThreadPool::Quiesce 1 pid %d tid %d, pre",
-          getpid(), gettid());
-  pool_->Quiesce();
-  gpr_log(GPR_INFO, "WorkStealingThreadPool::Quiesce 2 pid %d tid %d, pre",
-          getpid(), gettid());
-}
+void WorkStealingThreadPool::Quiesce() { pool_->Quiesce(); }
 
 WorkStealingThreadPool::~WorkStealingThreadPool() {
   CHECK(pool_->IsQuiesced());
@@ -324,15 +318,16 @@ bool WorkStealingThreadPool::WorkStealingThreadPoolImpl::IsQuiesced() {
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::PrepareFork() {
-  gpr_log(GPR_INFO, "WorkStealingThreadPoolImpl::PrepareFork");
   SetForking(true);
   work_signal_.SignalAll();
+  gpr_log(GPR_INFO, "WorkStealingThreadPoolImpl::PrepareFork start");
   auto threads_were_shut_down = living_thread_count_.BlockUntilThreadCount(
       0, "forking", kBlockUntilThreadCountTimeout);
   if (!threads_were_shut_down.ok() && g_log_verbose_failures) {
     DumpStacksAndCrash();
   }
   lifeguard_.BlockUntilShutdownAndReset();
+  gpr_log(GPR_INFO, "WorkStealingThreadPoolImpl::PrepareFork done");
 }
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Postfork() {
