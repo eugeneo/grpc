@@ -744,9 +744,9 @@ void Subchannel::OnConnectingFinishedLocked(grpc_error_handle error) {
     const Duration time_until_next_attempt =
         next_attempt_time_ - Timestamp::Now();
     gpr_log(GPR_INFO,
-            "pid %d tid %d subchannel %p: connect failed (%s), backing off "
+            "pid %d subchannel %p: connect failed (%s), backing off "
             "for %" PRId64 " ms",
-            getpid(), gettid(), this, StatusToString(error).c_str(),
+            getpid(), this, StatusToString(error).c_str(),
             time_until_next_attempt.millis());
     SetConnectivityStateLocked(GRPC_CHANNEL_TRANSIENT_FAILURE,
                                grpc_error_to_absl_status(error));

@@ -478,9 +478,7 @@ PosixEventEngine::~PosixEventEngine() {
     poller_manager_->TriggerShutdown();
   }
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
-  gpr_log(GPR_ERROR, "~PosixEventEngine 1 PID (%d)", getpid());
   executor_->Quiesce();
-  gpr_log(GPR_ERROR, "~PosixEventEngine 2 PID (%d)", getpid());
 }
 
 bool PosixEventEngine::Cancel(EventEngine::TaskHandle handle) {
