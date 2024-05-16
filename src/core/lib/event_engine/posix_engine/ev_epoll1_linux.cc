@@ -68,6 +68,7 @@ class Epoll1EventHandle : public EventHandle {
         write_closure_(std::make_unique<LockfreeEvent>(poller->GetScheduler())),
         error_closure_(
             std::make_unique<LockfreeEvent>(poller->GetScheduler())) {
+    gpr_log(GPR_INFO, "pid [%d] Created %p", getpid(), this);
     read_closure_->InitEvent();
     write_closure_->InitEvent();
     error_closure_->InitEvent();
@@ -138,7 +139,9 @@ class Epoll1EventHandle : public EventHandle {
   LockfreeEvent* WriteClosure() { return write_closure_.get(); }
   LockfreeEvent* ErrorClosure() { return error_closure_.get(); }
   Epoll1Poller::HandlesList& ForkFdListPos() { return list_; }
-  ~Epoll1EventHandle() override = default;
+  ~Epoll1EventHandle() override {
+    gpr_log(GPR_INFO, "pid [%d] Deleted %p", getpid(), this);
+  }
 
  private:
   void HandleShutdownInternal(absl::Status why, bool releasing_fd);
@@ -241,10 +244,11 @@ bool InitEpoll1PollerLinux();
 void ResetEventManagerOnFork() {
   // Delete all pending Epoll1EventHandles.
   gpr_mu_lock(&fork_fd_list_mu);
+  auto pid = getpid();
   while (fork_fd_list_head != nullptr) {
+    gpr_log(GPR_INFO, "pid: [%d], Closing %p", pid, fork_fd_list_head);
     close(fork_fd_list_head->WrappedFd());
     Epoll1EventHandle* next = fork_fd_list_head->ForkFdListPos().next;
-    delete fork_fd_list_head;
     fork_fd_list_head = next;
   }
   // Delete all registered pollers. This also closes all open epoll_sets
