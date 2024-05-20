@@ -14,6 +14,7 @@
 
 #ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EVENT_POLLER_H
 #define GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EVENT_POLLER_H
+#include <memory>
 #include <string>
 
 #include "absl/functional/any_invocable.h"
@@ -49,7 +50,8 @@ class EventHandle {
   // should only be called after ShutdownHandle and after all existing NotifyXXX
   // closures have run and there is no waiting NotifyXXX closure.
   virtual void OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
-                            absl::string_view reason) = 0;
+                            absl::string_view reason,
+                            std::unique_ptr<EventHandle> self_ref) = 0;
   // Shutdown a handle. If there is an attempt to call NotifyXXX operations
   // after Shutdown handle, those closures will be run immediately with the
   // absl::Status provided here being passed to the callbacks enclosed within
@@ -90,8 +92,9 @@ class PosixEventPoller : public grpc_event_engine::experimental::Poller,
                          public Forkable {
  public:
   // Return an opaque handle to perform actions on the provided file descriptor.
-  virtual EventHandle* CreateHandle(int fd, absl::string_view name,
-                                    bool track_err) = 0;
+  virtual std::unique_ptr<EventHandle> CreateHandle(int fd,
+                                                    absl::string_view name,
+                                                    bool track_err) = 0;
   virtual bool CanTrackErrors() const = 0;
   virtual std::string Name() = 0;
   // Shuts down and deletes the poller. It is legal to call this function

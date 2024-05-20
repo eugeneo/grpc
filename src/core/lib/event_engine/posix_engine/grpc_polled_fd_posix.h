@@ -52,17 +52,19 @@ namespace experimental {
 
 class GrpcPolledFdPosix : public GrpcPolledFd {
  public:
-  GrpcPolledFdPosix(ares_socket_t as, EventHandle* handle)
+  GrpcPolledFdPosix(ares_socket_t as, std::unique_ptr<EventHandle> handle)
       : name_(absl::StrCat("c-ares fd: ", static_cast<int>(as))),
         as_(as),
-        handle_(handle) {}
+        handle_(std::move(handle)) {}
 
   ~GrpcPolledFdPosix() override {
     // c-ares library will close the fd. This fd may be picked up immediately by
     // another thread and should not be closed by the following OrphanHandle.
     int phony_release_fd;
-    handle_->OrphanHandle(/*on_done=*/nullptr, &phony_release_fd,
-                          "c-ares query finished");
+    // Avoid relying on argument evaluation 2 lines below
+    auto pointer = handle_.get();
+    pointer->OrphanHandle(/*on_done=*/nullptr, &phony_release_fd,
+                          "c-ares query finished", std::move(handle_));
   }
 
   void RegisterForOnReadableLocked(
@@ -95,7 +97,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
  private:
   const std::string name_;
   const ares_socket_t as_;
-  EventHandle* handle_;
+  std::unique_ptr<EventHandle> handle_;
 };
 
 class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
