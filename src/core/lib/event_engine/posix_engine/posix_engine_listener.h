@@ -93,7 +93,7 @@ class PosixEngineListenerImpl
                   ResolvedAddressToNormalizedString(socket_.addr),
               listener_->poller_->CanTrackErrors())),
           notify_on_accept_(PosixEngineClosure::ToPermanentClosure(
-              [this](absl::Status status) { NotifyOnAccept(status); })){};
+              [this](absl::Status status) { NotifyOnAccept(status); })) {};
     // Start listening for incoming connections on the socket.
     void Start();
     // Internal callback invoked when the socket has incoming connections to
@@ -114,7 +114,7 @@ class PosixEngineListenerImpl
       // Making sure std::move two lines below does not reset before the address
       // is used.
       auto* keep_ptr = handle_.get();
-      keep_ptr->OrphanHandle(nullptr, nullptr, "", std::move(handle_));
+      keep_ptr->OrphanHandle(nullptr, nullptr, "", handle_.release());
       delete notify_on_accept_;
     }
 
@@ -123,7 +123,7 @@ class PosixEngineListenerImpl
     std::shared_ptr<EventEngine> engine_;
     std::shared_ptr<PosixEngineListenerImpl> listener_;
     ListenerSocketsContainer::ListenerSocket socket_;
-    std::unique_ptr<EventHandle> handle_;
+    EventHandleRef handle_;
     PosixEngineClosure* notify_on_accept_;
     // Tracks the status of a backup timer to retry accept4 calls after file
     // descriptor exhaustion.

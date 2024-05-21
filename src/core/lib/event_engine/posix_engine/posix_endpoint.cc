@@ -1247,7 +1247,7 @@ PosixEndpointImpl::~PosixEndpointImpl() {
   auto pointer = handle_.get();
   pointer->OrphanHandle(on_done_,
                         on_release_fd_ == nullptr ? nullptr : &release_fd, "",
-                        std::move(handle_));
+                        handle_.release());
   if (on_release_fd_ != nullptr) {
     engine_->Run([on_release_fd = std::move(on_release_fd_),
                   release_fd]() mutable { on_release_fd(release_fd); });

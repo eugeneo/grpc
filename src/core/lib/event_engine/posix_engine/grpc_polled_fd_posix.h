@@ -17,6 +17,8 @@
 
 #include <memory>
 
+#include "event_poller.h"
+
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
 
@@ -64,7 +66,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
     // Avoid relying on argument evaluation 2 lines below
     auto pointer = handle_.get();
     pointer->OrphanHandle(/*on_done=*/nullptr, &phony_release_fd,
-                          "c-ares query finished", std::move(handle_));
+                          "c-ares query finished", handle_.release());
   }
 
   void RegisterForOnReadableLocked(
@@ -97,7 +99,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
  private:
   const std::string name_;
   const ares_socket_t as_;
-  std::unique_ptr<EventHandle> handle_;
+  EventHandleRef handle_;
 };
 
 class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {

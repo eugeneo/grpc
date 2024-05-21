@@ -88,6 +88,25 @@ class EventHandle {
   virtual ~EventHandle() = default;
 };
 
+// Contains a reference to an event handle with a special logic to support fork
+class EventHandleRef {
+ public:
+  EventHandleRef() = default;
+  explicit EventHandleRef(std::unique_ptr<EventHandle> event)
+      : event_(std::move(event)) {}
+  EventHandleRef(EventHandleRef&& other) = delete;
+  EventHandleRef& operator=(std::unique_ptr<EventHandle> event) {
+    event_ = std::move(event);
+    return *this;
+  }
+  EventHandle* operator->() { return event_.get(); }
+  std::unique_ptr<EventHandle> release() { return std::move(event_); }
+  EventHandle* get() { return event_.get(); }
+
+ private:
+  std::unique_ptr<EventHandle> event_;
+};
+
 class PosixEventPoller : public grpc_event_engine::experimental::Poller,
                          public Forkable {
  public:

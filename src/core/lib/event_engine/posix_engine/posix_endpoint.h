@@ -598,7 +598,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
   int min_progress_size_ = 1;
   TracedBufferList traced_buffers_;
   // The handle is owned by the PosixEndpointImpl object.
-  std::unique_ptr<EventHandle> handle_;
+  EventHandleRef handle_;
   PosixEventPoller* poller_;
   std::shared_ptr<grpc_event_engine::experimental::EventEngine> engine_;
 };
