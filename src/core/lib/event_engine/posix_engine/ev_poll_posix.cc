@@ -27,7 +27,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
-#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>

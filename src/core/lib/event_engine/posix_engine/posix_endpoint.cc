@@ -1350,7 +1350,8 @@ std::unique_ptr<PosixEndpoint> CreatePosixEndpoint(
     std::shared_ptr<EventEngine> engine, MemoryAllocator&& allocator,
     const PosixTcpOptions& options) {
   DCHECK_NE(handle.get(), nullptr);
-  return std::make_unique<PosixEndpoint>(std::move(handle), on_shutdown, std::move(engine),
+  return std::make_unique<PosixEndpoint>(std::move(handle), on_shutdown,
+                                         std::move(engine),
                                          std::move(allocator), options);
 }
 
