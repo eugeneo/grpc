@@ -22,7 +22,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
-#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>
@@ -31,6 +30,7 @@
 #include <grpc/support/sync.h>
 
 #include "src/core/lib/event_engine/poller.h"
+#include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/time_util.h"
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/port.h"
