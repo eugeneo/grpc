@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>
@@ -389,8 +390,8 @@ void Epoll1Poller::Close() {
 
 Epoll1Poller::~Epoll1Poller() { Close(); }
 
-EventHandle* Epoll1Poller::CreateHandle(int fd, absl::string_view /*name*/,
-                                        bool track_err) {
+EventHandleRef Epoll1Poller::CreateHandle(int fd, absl::string_view /*name*/,
+                                          bool track_err) {
   Epoll1EventHandle* new_handle = nullptr;
   {
     grpc_core::MutexLock lock(&mu_);
@@ -418,7 +419,7 @@ EventHandle* Epoll1Poller::CreateHandle(int fd, absl::string_view /*name*/,
             grpc_core::StrError(errno).c_str());
   }
 
-  return new_handle;
+  return EventHandleRef(new_handle);
 }
 
 // Process the epoll events found by DoEpollWait() function.

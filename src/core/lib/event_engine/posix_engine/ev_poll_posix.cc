@@ -27,6 +27,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>
@@ -336,8 +337,8 @@ bool InitPollPollerPosix() {
 
 }  // namespace
 
-EventHandle* PollPoller::CreateHandle(int fd, absl::string_view /*name*/,
-                                      bool track_err) {
+EventHandleRef PollPoller::CreateHandle(int fd, absl::string_view /*name*/,
+                                        bool track_err) {
   // Avoid unused-parameter warning for debug-only parameter
   (void)track_err;
   DCHECK(track_err == false);
@@ -346,7 +347,7 @@ EventHandle* PollPoller::CreateHandle(int fd, absl::string_view /*name*/,
   // We need to send a kick to the thread executing Work(..) so that it can
   // add this new Fd into the list of Fds to poll.
   KickExternal(false);
-  return handle;
+  return EventHandleRef(handle);
 }
 
 void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
