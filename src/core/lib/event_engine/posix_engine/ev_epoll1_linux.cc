@@ -598,8 +598,9 @@ void Epoll1Poller::Shutdown() { grpc_core::Crash("unimplemented"); }
 
 Epoll1Poller::~Epoll1Poller() { grpc_core::Crash("unimplemented"); }
 
-EventHandle* Epoll1Poller::CreateHandle(int /*fd*/, absl::string_view /*name*/,
-                                        bool /*track_err*/) {
+EventHandleRef Epoll1Poller::CreateHandle(int /*fd*/,
+                                          absl::string_view /*name*/,
+                                          bool /*track_err*/) {
   grpc_core::Crash("unimplemented");
 }
 

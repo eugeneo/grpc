@@ -867,8 +867,8 @@ void PollPoller::Shutdown() { grpc_core::Crash("unimplemented"); }
 
 PollPoller::~PollPoller() { grpc_core::Crash("unimplemented"); }
 
-EventHandle* PollPoller::CreateHandle(int /*fd*/, absl::string_view /*name*/,
-                                      bool /*track_err*/) {
+EventHandleRef PollPoller::CreateHandle(int /*fd*/, absl::string_view /*name*/,
+                                        bool /*track_err*/) {
   grpc_core::Crash("unimplemented");
 }
 
