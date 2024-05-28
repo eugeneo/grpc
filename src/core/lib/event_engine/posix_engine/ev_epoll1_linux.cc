@@ -15,13 +15,19 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <type_traits>
+#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "ev_epoll1_linux.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>
@@ -57,6 +63,13 @@
 
 namespace grpc_event_engine {
 namespace experimental {
+
+namespace {
+constexpr int kBlockSize = 16;
+// Might break if kBlockSize is > 63
+static_assert(kBlockSize < 63, "Will not fit in mask");
+constexpr uint64_t kAllSetMask = (1 << (kBlockSize + 1)) - 1;
+}  // namespace
 
 class Epoll1EventHandle : public EventHandle {
  public:
@@ -141,6 +154,18 @@ class Epoll1EventHandle : public EventHandle {
   ~Epoll1EventHandle() override = default;
 
  private:
+  // Mutex and atomics are not mutable so the pool needs a way to separate
+  // allocation and initialization
+  friend class std::array<Epoll1EventHandle, 16>;
+  Epoll1EventHandle() : list_(this) {}
+  friend class Epoll1EventHandlePool;
+  void SetPoller(Epoll1Poller* poller) {
+    poller_ = poller;
+    read_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
+    write_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
+    error_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
+    ReInit(0);
+  }
   void HandleShutdownInternal(absl::Status why, bool releasing_fd);
   // See Epoll1Poller::ShutdownHandle for explanation on why a mutex is
   // required.
@@ -156,6 +181,68 @@ class Epoll1EventHandle : public EventHandle {
   std::unique_ptr<LockfreeEvent> read_closure_;
   std::unique_ptr<LockfreeEvent> write_closure_;
   std::unique_ptr<LockfreeEvent> error_closure_;
+};
+
+class Epoll1EventHandlePool {
+ public:
+  explicit Epoll1EventHandlePool(Epoll1Poller* poller) {
+    for (Epoll1EventHandle& handle : events_) {
+      handle.SetPoller(poller);
+    }
+  }
+
+  Epoll1EventHandle* GetFreeEvent() {
+    grpc_core::MutexLock lock(&mu_);
+    Epoll1EventHandle* handle = GetFreeEventFromBlock();
+    if (handle != nullptr) {
+      return handle;
+    }
+    if (next_block_ == nullptr) {  // Check next block
+      next_block_ =
+          std::make_unique<Epoll1EventHandlePool>(events_[0].Poller());
+    }
+    return next_block_->GetFreeEvent();
+  }
+
+  void ReturnEventHandle(Epoll1EventHandle* handle) {
+    grpc_core::MutexLock lock(&mu_);
+    if (handle >= &events_.front() && handle <= &events_.back()) {
+      int ind = handle - events_.data();
+      uint64_t old = used_events_mask_;
+      used_events_mask_ -= 1 << ind;
+      gpr_log(GPR_INFO, "[%p] Returning event %d, mask was %lx is now %lx",
+              this, ind, old, used_events_mask_);
+    } else if (next_block_ != nullptr) {
+      next_block_->ReturnEventHandle(handle);
+    } else {
+      gpr_log(GPR_ERROR, "No block containing event %p", handle);
+    }
+  }
+
+ private:
+  Epoll1EventHandle* GetFreeEventFromBlock()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+    if (used_events_mask_ == kAllSetMask) {
+      return nullptr;
+    }
+    int i;
+    for (i = 0; (used_events_mask_ & (1 << i)) != 0; ++i) {
+      // Nothing, just looking for leftmost set bit
+    }
+    if (i > kBlockSize) {
+      return nullptr;
+    }
+    uint64_t old = used_events_mask_;
+    used_events_mask_ += 1 << i;
+    gpr_log(GPR_INFO, "[%p] Getting event %d, mask was %lx is now %lx", this, i,
+            old, used_events_mask_);
+    return &events_[i];
+  }
+
+  grpc_core::Mutex mu_;
+  std::array<Epoll1EventHandle, kBlockSize> events_ ABSL_GUARDED_BY(&mu_);
+  uint64_t used_events_mask_ ABSL_GUARDED_BY(&mu_) = 0;
+  std::unique_ptr<Epoll1EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
 };
 
 namespace {
@@ -319,10 +406,7 @@ void Epoll1EventHandle::OrphanHandle(PosixEngineClosure* on_done,
   pending_read_.store(false, std::memory_order_release);
   pending_write_.store(false, std::memory_order_release);
   pending_error_.store(false, std::memory_order_release);
-  {
-    grpc_core::MutexLock lock(&poller_->mu_);
-    poller_->free_epoll1_handles_list_.push_back(this);
-  }
+  poller_->handles_->ReturnEventHandle(this);
   if (on_done != nullptr) {
     on_done->SetStatus(absl::OkStatus());
     poller_->GetScheduler()->Run(on_done);
@@ -351,7 +435,10 @@ void Epoll1EventHandle::HandleShutdownInternal(absl::Status why,
 }
 
 Epoll1Poller::Epoll1Poller(Scheduler* scheduler)
-    : scheduler_(scheduler), was_kicked_(false), closed_(false) {
+    : scheduler_(scheduler),
+      was_kicked_(false),
+      handles_(std::make_unique<Epoll1EventHandlePool>(this)),
+      closed_(false) {
   g_epoll_set_.epfd = EpollCreateAndCloexec();
   wakeup_fd_ = *CreateWakeupFd();
   CHECK(wakeup_fd_ != nullptr);
@@ -377,13 +464,7 @@ void Epoll1Poller::Close() {
     close(g_epoll_set_.epfd);
     g_epoll_set_.epfd = -1;
   }
-
-  while (!free_epoll1_handles_list_.empty()) {
-    Epoll1EventHandle* handle =
-        reinterpret_cast<Epoll1EventHandle*>(free_epoll1_handles_list_.front());
-    free_epoll1_handles_list_.pop_front();
-    delete handle;
-  }
+  handles_.reset();
   closed_ = true;
 }
 
@@ -391,18 +472,8 @@ Epoll1Poller::~Epoll1Poller() { Close(); }
 
 EventHandleRef Epoll1Poller::CreateHandle(int fd, absl::string_view /*name*/,
                                           bool track_err) {
-  Epoll1EventHandle* new_handle = nullptr;
-  {
-    grpc_core::MutexLock lock(&mu_);
-    if (free_epoll1_handles_list_.empty()) {
-      new_handle = new Epoll1EventHandle(fd, this);
-    } else {
-      new_handle = reinterpret_cast<Epoll1EventHandle*>(
-          free_epoll1_handles_list_.front());
-      free_epoll1_handles_list_.pop_front();
-      new_handle->ReInit(fd);
-    }
-  }
+  Epoll1EventHandle* new_handle = handles_->GetFreeEvent();
+  new_handle->ReInit(fd);
   ForkFdListAddHandle(new_handle);
   struct epoll_event ev;
   ev.events = static_cast<uint32_t>(EPOLLIN | EPOLLOUT | EPOLLET);

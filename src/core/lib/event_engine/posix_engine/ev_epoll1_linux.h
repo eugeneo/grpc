@@ -14,6 +14,7 @@
 
 #ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EV_EPOLL1_LINUX_H
 #define GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EV_EPOLL1_LINUX_H
+#include <cstddef>
 #include <list>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "absl/strings/string_view.h"
+#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
@@ -43,6 +45,8 @@ namespace grpc_event_engine {
 namespace experimental {
 
 class Epoll1EventHandle;
+
+class Epoll1EventHandlePool;
 
 // Definition of epoll1 based poller.
 class Epoll1Poller : public PosixEventPoller {
@@ -122,7 +126,7 @@ class Epoll1Poller : public PosixEventPoller {
   // A singleton epoll set
   EpollSet g_epoll_set_;
   bool was_kicked_ ABSL_GUARDED_BY(mu_);
-  std::list<EventHandle*> free_epoll1_handles_list_ ABSL_GUARDED_BY(mu_);
+  std::unique_ptr<Epoll1EventHandlePool> handles_;
   std::unique_ptr<WakeupFd> wakeup_fd_;
   bool closed_;
 };
