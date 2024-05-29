@@ -47,6 +47,76 @@ namespace experimental {
 
 class Epoll1Poller;
 
+template <typename EventHandle>
+class EventHandlePool {
+ public:
+  explicit EventHandlePool(Epoll1Poller* poller) {
+    for (EventHandle& handle : events_) {
+      handle.SetPoller(poller);
+    }
+  }
+
+  EventHandle* GetFreeEvent() {
+    grpc_core::MutexLock lock(&mu_);
+    EventHandle* handle = GetFreeEventFromBlock();
+    if (handle != nullptr) {
+      return handle;
+    }
+    if (next_block_ == nullptr) {  // Check next block
+      next_block_ =
+          std::make_unique<EventHandlePool>(events_[0].epoll_poller());
+    }
+    return next_block_->GetFreeEvent();
+  }
+
+  void ReturnEventHandle(EventHandle* handle) {
+    grpc_core::MutexLock lock(&mu_);
+    if (handle >= &events_.front() && handle <= &events_.back()) {
+      int ind = handle - events_.data();
+      GPR_ASSERT(events_in_use_[ind]);
+      events_in_use_[ind] = false;
+      gpr_log(GPR_INFO, "[%p] Returning event %d", this, ind);
+    } else if (next_block_ != nullptr) {
+      next_block_->ReturnEventHandle(handle);
+    } else {
+      gpr_log(GPR_ERROR, "No block containing event %p", handle);
+    }
+  }
+
+  void CloseAllOnFork() {
+    grpc_core::MutexLock lock(&mu_);
+    for (size_t i = 0; i < events_in_use_.size(); ++i) {
+      if (events_in_use_[i]) {
+        close(events_[0].WrappedFd());
+      }
+    }
+    if (next_block_ != nullptr) {
+      next_block_->CloseAllOnFork();
+    }
+  }
+
+ private:
+  EventHandle* GetFreeEventFromBlock() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+    // Short circuit
+    if (events_in_use_.all()) {
+      return nullptr;
+    }
+    for (size_t i = 0; i < events_in_use_.size(); ++i) {
+      if (!events_in_use_[i]) {
+        events_in_use_[i] = true;
+        return &events_[i];
+      }
+    }
+    return nullptr;
+  }
+
+  grpc_core::Mutex mu_;
+  std::array<EventHandle, EventHandle::kBlockSize> events_
+      ABSL_GUARDED_BY(&mu_);
+  std::bitset<EventHandle::kBlockSize> events_in_use_ ABSL_GUARDED_BY(&mu_);
+  std::unique_ptr<EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
+};
+
 class Epoll1EventHandle : public EventHandle {
  public:
   void ReInit(int fd);
@@ -74,14 +144,14 @@ class Epoll1EventHandle : public EventHandle {
   ~Epoll1EventHandle() override = default;
 
  private:
-  // This really belongs to Epoll1EventHandlePool class but then there would
+  // This really belongs to EventHandlePool class but then there would
   // be a circular dependency...
   static constexpr size_t kBlockSize = 16;
   // These events are only created inside the pool. Need to have a default
   // constructor as the class is non-movable and is allocated in the array
   friend class std::array<Epoll1EventHandle, kBlockSize>;
   Epoll1EventHandle() = default;
-  friend class Epoll1EventHandlePool;
+  friend class EventHandlePool<Epoll1EventHandle>;
   void SetPoller(Epoll1Poller* poller);
   void HandleShutdownInternal(absl::Status why, bool releasing_fd);
   // See Epoll1Poller::ShutdownHandle for explanation on why a mutex is
@@ -97,68 +167,6 @@ class Epoll1EventHandle : public EventHandle {
   std::unique_ptr<LockfreeEvent> read_closure_;
   std::unique_ptr<LockfreeEvent> write_closure_;
   std::unique_ptr<LockfreeEvent> error_closure_;
-};
-
-template <typename EventHandle>
-class Epoll1EventHandlePool {
- public:
-  explicit Epoll1EventHandlePool(Epoll1Poller* poller) {
-    for (Epoll1EventHandle& handle : events_) {
-      handle.SetPoller(poller);
-    }
-  }
-
-  Epoll1EventHandle* GetFreeEvent() {
-    grpc_core::MutexLock lock(&mu_);
-    Epoll1EventHandle* handle = GetFreeEventFromBlock();
-    if (handle != nullptr) {
-      return handle;
-    }
-    if (next_block_ == nullptr) {  // Check next block
-      next_block_ =
-          std::make_unique<Epoll1EventHandlePool>(events_[0].epoll_poller());
-    }
-    return next_block_->GetFreeEvent();
-  }
-
-  void ReturnEventHandle(Epoll1EventHandle* handle) {
-    grpc_core::MutexLock lock(&mu_);
-    if (handle >= &events_.front() && handle <= &events_.back()) {
-      int ind = handle - events_.data();
-      GPR_ASSERT(events_in_use_[ind]);
-      events_in_use_[ind] = false;
-      gpr_log(GPR_INFO, "[%p] Returning event %d", this, ind);
-    } else if (next_block_ != nullptr) {
-      next_block_->ReturnEventHandle(handle);
-    } else {
-      gpr_log(GPR_ERROR, "No block containing event %p", handle);
-    }
-  }
-
-  void CloseAllOnFork();
-
- private:
-  Epoll1EventHandle* GetFreeEventFromBlock()
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
-    // Short circuit
-    if (events_in_use_.all()) {
-      return nullptr;
-    }
-    for (size_t i = 0; i < events_in_use_.size(); ++i) {
-      if (!events_in_use_[i]) {
-        events_in_use_[i] = true;
-        return &events_[i];
-      }
-    }
-    return nullptr;
-  }
-
-  grpc_core::Mutex mu_;
-  std::array<Epoll1EventHandle, Epoll1EventHandle::kBlockSize> events_
-      ABSL_GUARDED_BY(&mu_);
-  std::bitset<Epoll1EventHandle::kBlockSize> events_in_use_
-      ABSL_GUARDED_BY(&mu_);
-  std::unique_ptr<Epoll1EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
 };
 
 // Definition of epoll1 based poller.
@@ -233,7 +241,7 @@ class Epoll1Poller : public PosixEventPoller {
   // A singleton epoll set
   EpollSet g_epoll_set_;
   bool was_kicked_ ABSL_GUARDED_BY(mu_);
-  Epoll1EventHandlePool events_;
+  EventHandlePool<Epoll1EventHandle> events_;
   std::unique_ptr<WakeupFd> wakeup_fd_;
   bool closed_;
 };
