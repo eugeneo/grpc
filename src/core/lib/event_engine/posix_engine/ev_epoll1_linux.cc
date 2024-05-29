@@ -539,6 +539,7 @@ Epoll1EventHandle* Epoll1EventHandlePool::GetFreeEventFromBlock()
   }
   for (size_t i = 0; i < events_in_use_.size(); ++i) {
     if (!events_in_use_[i]) {
+      gpr_log(GPR_INFO, "[%p] Getting event %zu", this, i);
       events_in_use_[i] = true;
       return &events_[i];
     }

@@ -98,6 +98,7 @@ class Epoll1EventHandle : public EventHandle {
   std::unique_ptr<LockfreeEvent> error_closure_;
 };
 
+template <typename EventHandle>
 class Epoll1EventHandlePool {
  public:
   explicit Epoll1EventHandlePool(Epoll1Poller* poller);
