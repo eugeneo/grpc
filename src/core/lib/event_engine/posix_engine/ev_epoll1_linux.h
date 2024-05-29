@@ -101,14 +101,66 @@ class Epoll1EventHandle : public EventHandle {
 
 class Epoll1EventHandlePool {
  public:
-  explicit Epoll1EventHandlePool(Epoll1Poller* poller);
-  Epoll1EventHandle* GetFreeEvent();
-  void ReturnEventHandle(Epoll1EventHandle* handle);
-  void CloseAllOnFork();
+  explicit Epoll1EventHandlePool(Epoll1Poller* poller) {
+    for (Epoll1EventHandle& handle : events_) {
+      handle.SetPoller(poller);
+    }
+  }
+
+  Epoll1EventHandle* GetFreeEvent() {
+    grpc_core::MutexLock lock(&mu_);
+    Epoll1EventHandle* handle = GetFreeEventFromBlock();
+    if (handle != nullptr) {
+      return handle;
+    }
+    if (next_block_ == nullptr) {  // Check next block
+      next_block_ =
+          std::make_unique<Epoll1EventHandlePool>(events_[0].epoll_poller());
+    }
+    return next_block_->GetFreeEvent();
+  }
+
+  void ReturnEventHandle(Epoll1EventHandle* handle) {
+    grpc_core::MutexLock lock(&mu_);
+    if (handle >= &events_.front() && handle <= &events_.back()) {
+      int ind = handle - events_.data();
+      GPR_ASSERT(events_in_use_[ind]);
+      events_in_use_[ind] = false;
+      gpr_log(GPR_INFO, "[%p] Returning event %d", this, ind);
+    } else if (next_block_ != nullptr) {
+      next_block_->ReturnEventHandle(handle);
+    } else {
+      gpr_log(GPR_ERROR, "No block containing event %p", handle);
+    }
+  }
+
+  void CloseAllOnFork() {
+    grpc_core::MutexLock lock(&mu_);
+    for (size_t i = 0; i < events_in_use_.size(); ++i) {
+      if (events_in_use_[i]) {
+        close(events_[0].WrappedFd());
+      }
+    }
+    if (next_block_ != nullptr) {
+      next_block_->CloseAllOnFork();
+    }
+  }
 
  private:
   Epoll1EventHandle* GetFreeEventFromBlock()
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_);
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+    // Short circuit
+    if (events_in_use_.all()) {
+      return nullptr;
+    }
+    for (size_t i = 0; i < events_in_use_.size(); ++i) {
+      if (!events_in_use_[i]) {
+        events_in_use_[i] = true;
+        return &events_[i];
+      }
+    }
+    return nullptr;
+  }
 
   grpc_core::Mutex mu_;
   std::array<Epoll1EventHandle, Epoll1EventHandle::kBlockSize> events_

@@ -486,66 +486,6 @@ void Epoll1Poller::PostforkParent() {}
 // TODO(vigneshbabu): implement
 void Epoll1Poller::PostforkChild() {}
 
-Epoll1EventHandlePool::Epoll1EventHandlePool(Epoll1Poller* poller) {
-  for (Epoll1EventHandle& handle : events_) {
-    handle.SetPoller(poller);
-  }
-}
-
-Epoll1EventHandle* Epoll1EventHandlePool::GetFreeEvent() {
-  grpc_core::MutexLock lock(&mu_);
-  Epoll1EventHandle* handle = GetFreeEventFromBlock();
-  if (handle != nullptr) {
-    return handle;
-  }
-  if (next_block_ == nullptr) {  // Check next block
-    next_block_ =
-        std::make_unique<Epoll1EventHandlePool>(events_[0].epoll_poller());
-  }
-  return next_block_->GetFreeEvent();
-}
-
-void Epoll1EventHandlePool::ReturnEventHandle(Epoll1EventHandle* handle) {
-  grpc_core::MutexLock lock(&mu_);
-  if (handle >= &events_.front() && handle <= &events_.back()) {
-    int ind = handle - events_.data();
-    GPR_ASSERT(events_in_use_[ind]);
-    events_in_use_[ind] = false;
-    gpr_log(GPR_INFO, "[%p] Returning event %d", this, ind);
-  } else if (next_block_ != nullptr) {
-    next_block_->ReturnEventHandle(handle);
-  } else {
-    gpr_log(GPR_ERROR, "No block containing event %p", handle);
-  }
-}
-
-void Epoll1EventHandlePool::CloseAllOnFork() {
-  grpc_core::MutexLock lock(&mu_);
-  for (size_t i = 0; i < events_in_use_.size(); ++i) {
-    if (events_in_use_[i]) {
-      close(events_[0].WrappedFd());
-    }
-  }
-  if (next_block_ != nullptr) {
-    next_block_->CloseAllOnFork();
-  }
-}
-
-Epoll1EventHandle* Epoll1EventHandlePool::GetFreeEventFromBlock()
-    ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
-  // Short circuit
-  if (events_in_use_.all()) {
-    return nullptr;
-  }
-  for (size_t i = 0; i < events_in_use_.size(); ++i) {
-    if (!events_in_use_[i]) {
-      events_in_use_[i] = true;
-      return &events_[i];
-    }
-  }
-  return nullptr;
-}
-
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
@@ -600,6 +540,43 @@ void Epoll1Poller::PrepareFork() {}
 void Epoll1Poller::PostforkParent() {}
 
 void Epoll1Poller::PostforkChild() {}
+
+void Epoll1EventHandle::SetPoller(Epoll1Poller* poller) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::OrphanHandle(PosixEngineClosure* on_done,
+                                     int* release_fd,
+                                     absl::string_view reason) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::ShutdownHandle(absl::Status why) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::NotifyOnRead(PosixEngineClosure* on_read) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::NotifyOnWrite(PosixEngineClosure* on_write) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::NotifyOnError(PosixEngineClosure* on_error) {
+  grpc_core::Crash("unimplemented");
+}
+
+void Epoll1EventHandle::SetReadable() { grpc_core::Crash("unimplemented"); }
+void Epoll1EventHandle::SetWritable() { grpc_core::Crash("unimplemented"); }
+void Epoll1EventHandle::SetHasError() { grpc_core::Crash("unimplemented"); }
+
+bool Epoll1EventHandle::IsHandleShutdown() {
+  grpc_core::Crash("unimplemented");
+  return false;
+}
+
+PosixEventPoller* Epoll1EventHandle::Poller() { return epoll_poller(); }
 
 }  // namespace experimental
 }  // namespace grpc_event_engine
