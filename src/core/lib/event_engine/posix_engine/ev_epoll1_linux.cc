@@ -486,6 +486,18 @@ void Epoll1Poller::PostforkParent() {}
 // TODO(vigneshbabu): implement
 void Epoll1Poller::PostforkChild() {}
 
+void Epoll1EventHandlePool::CloseAllOnFork() {
+  grpc_core::MutexLock lock(&mu_);
+  for (size_t i = 0; i < events_in_use_.size(); ++i) {
+    if (events_in_use_[i]) {
+      close(events_[0].WrappedFd());
+    }
+  }
+  if (next_block_ != nullptr) {
+    next_block_->CloseAllOnFork();
+  }
+}
+
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
@@ -577,6 +589,10 @@ bool Epoll1EventHandle::IsHandleShutdown() {
 }
 
 PosixEventPoller* Epoll1EventHandle::Poller() { return epoll_poller(); }
+
+void Epoll1EventHandlePool::CloseAllOnFork() {
+  grpc_core::Crash("unimplemented");
+}
 
 }  // namespace experimental
 }  // namespace grpc_event_engine
