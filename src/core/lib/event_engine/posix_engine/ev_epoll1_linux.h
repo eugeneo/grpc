@@ -71,6 +71,7 @@ class Epoll1EventHandle : public EventHandle {
   LockfreeEvent* ReadClosure() { return read_closure_.get(); }
   LockfreeEvent* WriteClosure() { return write_closure_.get(); }
   LockfreeEvent* ErrorClosure() { return error_closure_.get(); }
+  ~Epoll1EventHandle() override = default;
 
  private:
   // This really belongs to Epoll1EventHandlePool class but then there would
