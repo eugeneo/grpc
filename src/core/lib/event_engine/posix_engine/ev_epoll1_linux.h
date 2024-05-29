@@ -134,17 +134,7 @@ class Epoll1EventHandlePool {
     }
   }
 
-  void CloseAllOnFork() {
-    grpc_core::MutexLock lock(&mu_);
-    for (size_t i = 0; i < events_in_use_.size(); ++i) {
-      if (events_in_use_[i]) {
-        close(events_[0].WrappedFd());
-      }
-    }
-    if (next_block_ != nullptr) {
-      next_block_->CloseAllOnFork();
-    }
-  }
+  void CloseAllOnFork();
 
  private:
   Epoll1EventHandle* GetFreeEventFromBlock()
