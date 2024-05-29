@@ -558,7 +558,7 @@ namespace experimental {
 using ::grpc_event_engine::experimental::EventEngine;
 using ::grpc_event_engine::experimental::Poller;
 
-Epoll1Poller::Epoll1Poller(Scheduler* /* engine */) {
+Epoll1Poller::Epoll1Poller(Scheduler* /* engine */) : events_(this) {
   grpc_core::Crash("unimplemented");
 }
 
