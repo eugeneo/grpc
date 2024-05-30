@@ -91,4 +91,4 @@ class EventHandlePool {
   std::unique_ptr<EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
 };
 
-#endif
+#endif  // GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EVENT_HANDLE_POOL_H
