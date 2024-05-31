@@ -576,11 +576,7 @@ bool Epoll1EventHandle::IsHandleShutdown() {
   return false;
 }
 
-PosixEventPoller* Epoll1EventHandle::Poller() { return epoll_poller(); }
-
-void Epoll1EventHandlePool::CloseAllOnFork() {
-  grpc_core::Crash("unimplemented");
-}
+PosixEventPoller* Epoll1EventHandle::Poller() { return poller_; }
 
 }  // namespace experimental
 }  // namespace grpc_event_engine
