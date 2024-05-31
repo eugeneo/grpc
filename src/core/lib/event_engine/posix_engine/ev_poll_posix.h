@@ -21,7 +21,6 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/functional/function_ref.h"
 #include "absl/strings/string_view.h"
-#include "event_poller.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
@@ -105,7 +104,7 @@ class PollEventHandle : public EventHandle {
 class PollPoller : public PosixEventPoller,
                    public std::enable_shared_from_this<PollPoller> {
  public:
-  PollPoller(Scheduler* scheduler, bool use_phony_poll = false);
+  explicit PollPoller(Scheduler* scheduler, bool use_phony_poll = false);
   EventHandleRef CreateHandle(int fd, absl::string_view name,
                               bool track_err) override;
   void ReturnEventHandle(PollEventHandle* handle);
