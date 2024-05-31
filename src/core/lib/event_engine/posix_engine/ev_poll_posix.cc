@@ -316,7 +316,7 @@ void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
   ForkFdListRemoveHandle(this);
   ForceRemoveHandleFromPoller();
   {
-    grpc_core::MutexLock lock(&mu_);
+    grpc_core::ReleasableMutexLock event_handle_lock(&mu_);
     on_done_ = on_done;
     released_ = release_fd != nullptr;
     if (release_fd != nullptr) {
@@ -346,6 +346,7 @@ void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
       // blocking poll. Mark it as Unwatched and kick the thread executing
       // Work(...). That thread should proceed with the cleanup.
       SetWatched(-1);
+      event_handle_lock.Release();
       grpc_core::MutexLock lock(&poller_->mu_);
       poller_->KickExternal(false);
     }
@@ -423,8 +424,9 @@ void PollEventHandle::NotifyOnRead(PosixEngineClosure* on_read) {
   // poller->Shutdown() prematurely.
   Ref();
   {
-    grpc_core::MutexLock lock(&mu_);
+    grpc_core::ReleasableMutexLock handle_lock(&mu_);
     if (NotifyOnLocked(&read_closure_, on_read)) {
+      handle_lock.Release();
       // NotifyOnLocked immediately scheduled some closure. It would have set
       // the closure state to NOT_READY. We need to wakeup the Work(...) thread
       // to start polling on this fd. If this call is not made, it is possible
@@ -445,8 +447,9 @@ void PollEventHandle::NotifyOnWrite(PosixEngineClosure* on_write) {
   // poller->Shutdown() prematurely.
   Ref();
   {
-    grpc_core::MutexLock lock(&mu_);
+    grpc_core::ReleasableMutexLock handle_lock(&mu_);
     if (NotifyOnLocked(&write_closure_, on_write)) {
+      handle_lock.Release();
       // NotifyOnLocked immediately scheduled some closure. It would have set
       // the closure state to NOT_READY. We need to wakeup the Work(...) thread
       // to start polling on this fd. If this call is not made, it is possible
