@@ -18,7 +18,14 @@
 #include <bitset>
 #include <memory>
 
+#include "absl/functional/any_invocable.h"
+
 #include "src/core/lib/gprpp/sync.h"
+
+namespace grpc_event_engine {
+namespace experimental {
+
+static constexpr size_t kBlockSize = 16;
 
 template <typename Poller, typename EventHandle>
 class EventHandlePool {
@@ -67,6 +74,24 @@ class EventHandlePool {
     }
   }
 
+  bool AllFree() {
+    grpc_core::MutexLock lock(&mu_);
+    return events_in_use_.none() &&
+           (next_block_ == nullptr || next_block_->AllFree());
+  }
+
+  void VisitUsedEventHandles(absl::AnyInvocable<void(EventHandle*)> invocable) {
+    grpc_core::MutexLock lock(&mu_);
+    for (size_t i = 0; i < events_in_use_.size(); ++i) {
+      if (events_in_use_[i]) {
+        invocable(&events_[i]);
+      }
+    }
+    if (next_block_ != nullptr) {
+      next_block_->VisitUsedEventHandles(std::move(invocable));
+    }
+  }
+
  private:
   EventHandle* GetFreeEventFromBlock() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
     // Short circuit
@@ -85,10 +110,12 @@ class EventHandlePool {
 
   Poller* poller_;
   grpc_core::Mutex mu_;
-  std::array<EventHandle, EventHandle::kBlockSize> events_
-      ABSL_GUARDED_BY(&mu_);
-  std::bitset<EventHandle::kBlockSize> events_in_use_ ABSL_GUARDED_BY(&mu_);
+  std::array<EventHandle, kBlockSize> events_ ABSL_GUARDED_BY(&mu_);
+  std::bitset<kBlockSize> events_in_use_ ABSL_GUARDED_BY(&mu_);
   std::unique_ptr<EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
 };
+
+}  // namespace experimental
+}  // namespace grpc_event_engine
 
 #endif  // GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_EVENT_HANDLE_POOL_H

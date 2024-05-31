@@ -24,6 +24,7 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "absl/strings/string_view.h"
+#include "event_handle_pool.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
@@ -73,9 +74,6 @@ class Epoll1EventHandle : public EventHandle {
   ~Epoll1EventHandle() override = default;
 
  private:
-  // This really belongs to EventHandlePool class but then there would
-  // be a circular dependency...
-  static constexpr size_t kBlockSize = 16;
   // These events are only created inside the pool. Need to have a default
   // constructor as the class is non-movable and is allocated in the array
   friend class std::array<Epoll1EventHandle, kBlockSize>;
