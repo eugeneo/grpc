@@ -24,7 +24,6 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "absl/strings/string_view.h"
-#include "event_handle_pool.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
