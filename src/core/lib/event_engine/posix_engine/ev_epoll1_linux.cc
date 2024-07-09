@@ -28,6 +28,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "ev_epoll1_linux.h"
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/status.h>
@@ -147,7 +148,7 @@ bool InitEpoll1PollerLinux() {
 //
 // Epoll1EventHandle
 //
-void Epoll1EventHandle::ReInit(int fd) {
+void Epoll1EventHandle::InitWithFd(int fd) {
   fd_ = fd;
   read_closure_->InitEvent();
   write_closure_->InitEvent();
@@ -203,7 +204,7 @@ void Epoll1EventHandle::SetPoller(Epoll1Poller* poller) {
   read_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
   write_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
   error_closure_ = std::make_unique<LockfreeEvent>(poller->GetScheduler());
-  ReInit(0);
+  InitWithFd(0);
 }
 
 void Epoll1EventHandle::OrphanHandle(PosixEngineClosure* on_done,
@@ -244,7 +245,10 @@ void Epoll1EventHandle::OrphanHandle(PosixEngineClosure* on_done,
   pending_read_.store(false, std::memory_order_release);
   pending_write_.store(false, std::memory_order_release);
   pending_error_.store(false, std::memory_order_release);
-  poller_->events_.ReturnEventHandle(this);
+  {
+    grpc_core::MutexLock lock(&poller_->mu_);
+    poller_->events_.ReturnEventHandle(this);
+  }
   if (on_done != nullptr) {
     on_done->SetStatus(absl::OkStatus());
     poller_->GetScheduler()->Run(on_done);
@@ -304,7 +308,10 @@ void Epoll1Poller::Close() {
 }
 
 void Epoll1Poller::CloseOnFork() {
-  events_.CloseAllOnFork();
+  {
+    grpc_core::MutexLock lock(&mu_);
+    events_.CloseAllOnFork();
+  }
   Close();
 }
 
@@ -312,8 +319,11 @@ Epoll1Poller::~Epoll1Poller() { Close(); }
 
 EventHandleRef Epoll1Poller::CreateHandle(int fd, absl::string_view /*name*/,
                                           bool track_err) {
-  Epoll1EventHandle* new_handle = events_.GetFreeEvent();
-  new_handle->ReInit(fd);
+  Epoll1EventHandle* new_handle;
+  {
+    grpc_core::MutexLock lock(&mu_);
+    new_handle = events_.GetEventFromPool(fd);
+  }
   struct epoll_event ev;
   ev.events = static_cast<uint32_t>(EPOLLIN | EPOLLOUT | EPOLLET);
   // Use the least significant bit of ev.data.ptr to store track_err. We expect
@@ -486,18 +496,6 @@ void Epoll1Poller::PostforkParent() {}
 // TODO(vigneshbabu): implement
 void Epoll1Poller::PostforkChild() {}
 
-void Epoll1EventHandlePool::CloseAllOnFork() {
-  grpc_core::MutexLock lock(&mu_);
-  for (size_t i = 0; i < events_in_use_.size(); ++i) {
-    if (events_in_use_[i]) {
-      close(events_[0].WrappedFd());
-    }
-  }
-  if (next_block_ != nullptr) {
-    next_block_->CloseAllOnFork();
-  }
-}
-
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
@@ -588,11 +586,7 @@ bool Epoll1EventHandle::IsHandleShutdown() {
   return false;
 }
 
-PosixEventPoller* Epoll1EventHandle::Poller() { return epoll_poller(); }
-
-void Epoll1EventHandlePool::CloseAllOnFork() {
-  grpc_core::Crash("unimplemented");
-}
+PosixEventPoller* Epoll1EventHandle::Poller() { return poller_; }
 
 }  // namespace experimental
 }  // namespace grpc_event_engine

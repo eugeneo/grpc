@@ -29,6 +29,7 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/event_engine/poller.h"
+#include "src/core/lib/event_engine/posix_engine/event_handle_pool.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/internal_errqueue.h"
 #include "src/core/lib/event_engine/posix_engine/lockfree_event.h"
@@ -49,10 +50,8 @@ class Epoll1Poller;
 
 class Epoll1EventHandle : public EventHandle {
  public:
-  void ReInit(int fd);
+  void InitWithFd(int fd) override;
   PosixEventPoller* Poller() override;
-  // Specific subclass
-  Epoll1Poller* epoll_poller() const { return poller_; }
   bool SetPendingActions(bool pending_read, bool pending_write,
                          bool pending_error);
   int WrappedFd() override { return fd_; }
@@ -74,14 +73,11 @@ class Epoll1EventHandle : public EventHandle {
   ~Epoll1EventHandle() override = default;
 
  private:
-  // This really belongs to Epoll1EventHandlePool class but then there would
-  // be a circular dependency...
-  static constexpr size_t kBlockSize = 16;
   // These events are only created inside the pool. Need to have a default
   // constructor as the class is non-movable and is allocated in the array
   friend class std::array<Epoll1EventHandle, kBlockSize>;
   Epoll1EventHandle() = default;
-  friend class Epoll1EventHandlePool;
+  friend class EventHandlePool<Epoll1Poller, Epoll1EventHandle>;
   void SetPoller(Epoll1Poller* poller);
   void HandleShutdownInternal(absl::Status why, bool releasing_fd);
   // See Epoll1Poller::ShutdownHandle for explanation on why a mutex is
@@ -97,67 +93,6 @@ class Epoll1EventHandle : public EventHandle {
   std::unique_ptr<LockfreeEvent> read_closure_;
   std::unique_ptr<LockfreeEvent> write_closure_;
   std::unique_ptr<LockfreeEvent> error_closure_;
-};
-
-class Epoll1EventHandlePool {
- public:
-  explicit Epoll1EventHandlePool(Epoll1Poller* poller) {
-    for (Epoll1EventHandle& handle : events_) {
-      handle.SetPoller(poller);
-    }
-  }
-
-  Epoll1EventHandle* GetFreeEvent() {
-    grpc_core::MutexLock lock(&mu_);
-    Epoll1EventHandle* handle = GetFreeEventFromBlock();
-    if (handle != nullptr) {
-      return handle;
-    }
-    if (next_block_ == nullptr) {  // Check next block
-      next_block_ =
-          std::make_unique<Epoll1EventHandlePool>(events_[0].epoll_poller());
-    }
-    return next_block_->GetFreeEvent();
-  }
-
-  void ReturnEventHandle(Epoll1EventHandle* handle) {
-    grpc_core::MutexLock lock(&mu_);
-    if (handle >= &events_.front() && handle <= &events_.back()) {
-      int ind = handle - events_.data();
-      CHECK(events_in_use_[ind]);
-      events_in_use_[ind] = false;
-      LOG(INFO) << absl::StrFormat("[%p] Returning event %d", this, ind);
-    } else if (next_block_ != nullptr) {
-      next_block_->ReturnEventHandle(handle);
-    } else {
-      LOG(INFO) << "No block containing event " << handle;
-    }
-  }
-
-  void CloseAllOnFork();
-
- private:
-  Epoll1EventHandle* GetFreeEventFromBlock()
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
-    // Short circuit
-    if (events_in_use_.all()) {
-      return nullptr;
-    }
-    for (size_t i = 0; i < events_in_use_.size(); ++i) {
-      if (!events_in_use_[i]) {
-        events_in_use_[i] = true;
-        return &events_[i];
-      }
-    }
-    return nullptr;
-  }
-
-  grpc_core::Mutex mu_;
-  std::array<Epoll1EventHandle, Epoll1EventHandle::kBlockSize> events_
-      ABSL_GUARDED_BY(&mu_);
-  std::bitset<Epoll1EventHandle::kBlockSize> events_in_use_
-      ABSL_GUARDED_BY(&mu_);
-  std::unique_ptr<Epoll1EventHandlePool> next_block_ ABSL_GUARDED_BY(&mu_);
 };
 
 // Definition of epoll1 based poller.
@@ -232,7 +167,7 @@ class Epoll1Poller : public PosixEventPoller {
   // A singleton epoll set
   EpollSet g_epoll_set_;
   bool was_kicked_ ABSL_GUARDED_BY(mu_);
-  Epoll1EventHandlePool events_;
+  EventHandlePool<Epoll1Poller, Epoll1EventHandle> events_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<WakeupFd> wakeup_fd_;
   bool closed_;
 };

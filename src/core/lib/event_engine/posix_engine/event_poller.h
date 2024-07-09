@@ -42,6 +42,8 @@ class PosixEventPoller;
 class EventHandle {
  public:
   virtual int WrappedFd() = 0;
+  // Initializes the event handle with a given handle
+  virtual void InitWithFd(int fd) = 0;
   // Delete the handle and optionally close the underlying file descriptor if
   // release_fd != nullptr. The on_done closure is scheduled to be invoked
   // after the operation is complete. After this operation, NotifyXXX and SetXXX
