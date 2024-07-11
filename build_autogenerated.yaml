@@ -21572,6 +21572,25 @@ targets:
   - linux
   - posix
   - mac
+- name: xds_api_test
+  gtest: true
+  build: test
+  language: c++
+  headers: []
+  src:
+  - src/proto/grpc/testing/xds/v3/address.proto
+  - src/proto/grpc/testing/xds/v3/base.proto
+  - src/proto/grpc/testing/xds/v3/load_report.proto
+  - src/proto/grpc/testing/xds/v3/lrs.proto
+  - src/proto/grpc/testing/xds/v3/percent.proto
+  - src/cpp/util/status.cc
+  - test/core/xds/xds_api_test.cc
+  deps:
+  - gtest
+  - absl/log:absl_check
+  - absl/log:absl_log
+  - protobuf
+  - grpc_test_util
 - name: xds_audit_logger_registry_test
   gtest: true
   build: test

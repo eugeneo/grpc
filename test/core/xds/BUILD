@@ -149,6 +149,22 @@ grpc_cc_library(
     ],
 )
 
+grpc_cc_test(
+    name = "xds_api_test",
+    srcs = ["xds_api_test.cc"],
+    external_deps = ["gtest"],
+    language = "C++",
+    deps = [
+        # ":xds_client_test_peer",
+        # ":xds_transport_fake",
+        # "//:xds_client",
+        # "//src/proto/grpc/testing/xds/v3:discovery_proto",
+        "//test/core/test_util:grpc_test_util",
+        "//src/proto/grpc/testing/xds/v3:lrs_proto",
+        # "//test/core/test_util:scoped_env_var",
+    ],
+)
+
 grpc_cc_library(
     name = "xds_client_test_peer",
     hdrs = ["xds_client_test_peer.h"],
