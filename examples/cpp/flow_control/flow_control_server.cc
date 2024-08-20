@@ -19,10 +19,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <iostream>
-#include <memory>
 #include <string>
-#include <thread>
 
 #include "absl/flags/parse.h"
 #include "absl/log/globals.h"

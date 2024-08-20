@@ -34,7 +34,7 @@
 #endif
 
 #ifdef BAZEL_BUILD
-ABSL_FLAG(std::string, db_path, "examples/cpp/route_guide/route_guide_db.json",
+ABSL_FLAG(std::string, db_path, "examples/cpp/flow_control/route_guide_db.json",
           "Path to db file");
 #else
 ABSL_FLAG(std::string, db_path, "route_guide_db.json", "Path to db file");
