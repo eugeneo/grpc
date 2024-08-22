@@ -1,6 +1,5 @@
 /*
- *
- * Copyright 2021 gRPC authors.
+ * Copyright 2024 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 #include <condition_variable>
@@ -105,6 +103,7 @@ class RouteGuideClient {
         StartRead(&feature_);
         StartCall();
       }
+
       void OnReadDone(bool ok) override {
         if (ok) {
           std::cout << "Found feature called " << feature_.name() << " at "
@@ -114,12 +113,14 @@ class RouteGuideClient {
           StartRead(&feature_);
         }
       }
+
       void OnDone(const Status& s) override {
         std::unique_lock<std::mutex> l(mu_);
         status_ = s;
         done_ = true;
         cv_.notify_one();
       }
+
       Status Await() {
         std::unique_lock<std::mutex> l(mu_);
         cv_.wait(l, [this] { return done_; });
@@ -135,6 +136,7 @@ class RouteGuideClient {
       Status status_;
       bool done_ = false;
     };
+
     Reader reader(stub_.get(), kCoordFactor_, rect);
     Status status = reader.Await();
     if (status.ok()) {
@@ -163,6 +165,7 @@ class RouteGuideClient {
         NextWrite();
         StartCall();
       }
+
       void OnWriteDone(bool ok) override {
         // Delay and then do the next write or WritesDone
         alarm_.Set(
