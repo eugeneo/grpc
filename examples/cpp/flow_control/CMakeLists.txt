@@ -1,4 +1,4 @@
-# Copyright 2024 gRPC authors.
+# Copyright 2018 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,9 +59,7 @@ target_link_libraries(hw_grpc_proto
 
 # Targets greeter_[async_](client|server)
 foreach(_target
-  greeter_client greeter_server
-  greeter_callback_client greeter_callback_server
-  greeter_async_client greeter_async_client2 greeter_async_server)
+  flow_control_client flow_control_server)
   add_executable(${_target} "${_target}.cc")
   target_link_libraries(${_target}
     hw_grpc_proto
