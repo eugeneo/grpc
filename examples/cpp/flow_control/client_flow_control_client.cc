@@ -66,8 +66,7 @@ class GreeterClientReactor final
 
   ~GreeterClientReactor() override {
     absl::MutexLock lock(&mu_);
-    mu_.Await(absl::Condition(
-        +[](bool* done) { return *done; }, &done_));
+    mu_.Await(absl::Condition(+[](bool* done) { return *done; }, &done_));
   }
 
   void OnWriteDone(bool ok) override {
