@@ -16,6 +16,8 @@
  *
  */
 
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
@@ -34,6 +36,7 @@
 #endif
 
 ABSL_FLAG(uint16_t, port, 50051, "Server port for the service");
+ABSL_FLAG(size_t, quota, 20, "Resource quota, in megabytes");
 
 namespace {
 
@@ -90,6 +93,8 @@ void RunServer(uint16_t port) {
   // Register "service" as the instance through which we'll communicate with
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
+  grpc::ResourceQuota quota;
+  quota.Resize(absl::GetFlag(FLAGS_quota) * 1024 * 1024);
   // Finally assemble the server.
   auto server = builder.BuildAndStart();
   std::cout << "Server listening on " << server_address << std::endl;
