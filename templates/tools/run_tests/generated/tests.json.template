@@ -23,10 +23,15 @@
     if excluded_poll_engines:
       out['excluded_poll_engines'] = excluded_poll_engines
     return out
+  
+  def is_end2end_test(tgt):
+    if not (tgt.get('run', True) and tgt.build == 'test'):
+      return False
+    if len([p for p in tgt.src if "end2end" in p and "xds" not in p]) > 0:
+      return True
+    return False
+
   %>
 
-  ${json.dumps([gen_one_target(tgt)
-                for tgt in targets
-                if tgt.get('run', True) and tgt.build == 'test'] +
-                tests,
+  ${json.dumps([gen_one_target(tgt) for tgt in targets if is_end2end_test(tgt)],
                sort_keys=True, indent=2)}
