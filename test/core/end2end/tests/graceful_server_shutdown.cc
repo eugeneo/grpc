@@ -56,6 +56,7 @@ CORE_END2END_TEST(Http2Test, GracefulServerShutdown) {
   EXPECT_EQ(server_status.status(), GRPC_STATUS_UNIMPLEMENTED);
   EXPECT_EQ(s.method(), "/foo");
   EXPECT_FALSE(client_close.was_cancelled());
+  EXPECT_TRUE(false);
 }
 
 }  // namespace

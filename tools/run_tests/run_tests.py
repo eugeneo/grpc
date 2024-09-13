@@ -61,6 +61,7 @@ os.chdir(_ROOT)
 
 _FORCE_ENVIRON_FOR_WRAPPERS = {
     "GRPC_VERBOSITY": "DEBUG",
+    "GRPC_TRACE": "all,-timer,-timer_check",
 }
 
 _POLLING_STRATEGIES = {
@@ -363,6 +364,7 @@ class CLanguage(object):
                     + "/src/core/tsi/test_creds/ca.pem",
                     "GRPC_POLL_STRATEGY": polling_strategy,
                     "GRPC_VERBOSITY": "DEBUG",
+                    "GRPC_TRACE": "all,-timer,-timer_check",
                 }
                 resolver = os.environ.get("GRPC_DNS_RESOLVER", None)
                 if resolver:
