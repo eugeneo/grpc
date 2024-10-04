@@ -601,6 +601,7 @@ void PollPoller::PollerHandlesListRemoveHandle(PollEventHandle* handle) {
         handle->PollerHandlesListPos().prev;
   }
   --num_poll_handles_;
+  DCHECK_GE(num_poll_handles_, 0) << getpid();
 }
 
 PollPoller::PollPoller(Scheduler* scheduler)

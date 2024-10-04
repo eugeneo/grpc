@@ -159,7 +159,8 @@ void DumpSignalHandler(int /* sig */) {
     LOG(ERROR) << "DumpStack::" << gpr_thd_currentid()
                << ": Stack trace not available";
   } else {
-    LOG(ERROR) << "DumpStack::" << gpr_thd_currentid() << ": " << trace.value();
+    LOG(ERROR) << "[" << getpid() << "] DumpStack::" << gpr_thd_currentid()
+               << ": " << trace.value();
   }
   g_reported_dump_count.fetch_add(1);
   grpc_core::Thread::Kill(gpr_thd_currentid());
