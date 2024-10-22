@@ -160,9 +160,11 @@ void UnlinkIfUnixDomainSocket(
 
 class PosixSocketWrapper {
  public:
-  explicit PosixSocketWrapper(int fd) : fd_(fd) { CHECK_GT(fd_, 0); }
+  explicit PosixSocketWrapper(const EventEngine::FileDescriptor& fd) : fd_(fd) {
+    CHECK(fd_.ready());
+  }
 
-  PosixSocketWrapper() : fd_(-1) {};
+  PosixSocketWrapper() {};
 
   ~PosixSocketWrapper() = default;
 
@@ -253,7 +255,7 @@ class PosixSocketWrapper {
   };
 
   // Returns the underlying file-descriptor.
-  int Fd() const { return fd_; }
+  EventEngine::FileDescriptor Fd() const { return fd_; }
 
   // Static methods
 
@@ -313,7 +315,7 @@ class PosixSocketWrapper {
       const EventEngine::ResolvedAddress& target_addr);
 
  private:
-  int fd_;
+  EventEngine::FileDescriptor fd_;
 };
 
 struct PosixSocketWrapper::PosixSocketCreateResult {

@@ -109,7 +109,7 @@ class EventEngineSupportsFdExtension {
   /// endpoint. \a memory_allocator - The endpoint may use the provided memory
   /// allocator to track memory allocations.
   virtual std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
-      int fd, const EndpointConfig& config,
+      const EventEngine::FileDescriptor& fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) = 0;
 
   /// Creates an EventEngine::Endpoint from an fd which is already assumed to be

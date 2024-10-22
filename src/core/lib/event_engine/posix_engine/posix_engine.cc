@@ -661,15 +661,15 @@ EventEngine::ConnectionHandle PosixEventEngine::CreateEndpointFromUnconnectedFd(
 }
 
 std::unique_ptr<EventEngine::Endpoint>
-PosixEventEngine::CreatePosixEndpointFromFd(int fd,
+PosixEventEngine::CreatePosixEndpointFromFd(const FileDescriptor& fd,
                                             const EndpointConfig& config,
                                             MemoryAllocator memory_allocator) {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
-  DCHECK_GT(fd, 0);
+  DCHECK(fd.ready());
   PosixEventPoller* poller = poller_manager_->Poller();
   DCHECK_NE(poller, nullptr);
   EventHandle* handle =
-      poller->CreateHandle(fd, "tcp-client", poller->CanTrackErrors());
+      poller->CreateHandle(fd.fd(), "tcp-client", poller->CanTrackErrors());
   return CreatePosixEndpoint(handle, nullptr, shared_from_this(),
                              std::move(memory_allocator),
                              TcpOptionsFromEndpointConfig(config));
@@ -682,19 +682,18 @@ PosixEventEngine::CreatePosixEndpointFromFd(int fd,
 
 std::unique_ptr<EventEngine::Endpoint> PosixEventEngine::CreateEndpointFromFd(
     const FileDescriptor& fd, const EndpointConfig& config) {
-  int file_descriptor = fd.fd();
   auto options = TcpOptionsFromEndpointConfig(config);
   MemoryAllocator allocator;
   if (options.memory_allocator_factory != nullptr) {
     return CreatePosixEndpointFromFd(
-        file_descriptor, config,
+        fd, config,
         options.memory_allocator_factory->CreateMemoryAllocator(
-            absl::StrCat("allocator:", file_descriptor)));
+            absl::StrCat("allocator:", fd.id())));
   }
   return CreatePosixEndpointFromFd(
-      file_descriptor, config,
+      fd, config,
       options.resource_quota->memory_quota()->CreateMemoryAllocator(
-          absl::StrCat("allocator:", file_descriptor)));
+          absl::StrCat("allocator:", fd.id())));
 }
 
 absl::StatusOr<std::unique_ptr<EventEngine::Listener>>

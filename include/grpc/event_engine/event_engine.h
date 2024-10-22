@@ -164,11 +164,26 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
 
   class FileDescriptor {
    public:
-    explicit FileDescriptor(int fd) : fd_(fd) {}
-    int fd() const { return fd_; }
+    static FileDescriptor MakeSocket(int domain, int type, int protocol);
+
+    FileDescriptor() = default;
+    FileDescriptor(const FileDescriptor& other) = default;
+
+    // Id is based on fd but is not fd. IO will fail.
+    int id() const { return ~fd_; }
+    // int fd() const { return fd_; }
+    bool ready() const { return fd_ > 0; }
+    void close() const;
+    bool epoll_ctl(int epfd, int op, void* event) const;
+    int getsockopt(int level, int optname, void* optval, socklen_t* optlen);
+    int setsockopt(int level, int optname, const void* optval,
+                   socklen_t optlen);
+    void shutdown(int how);
 
    private:
-    int fd_;
+    explicit FileDescriptor(int fd) : fd_(fd) {}
+
+    int fd_ = -1;
   };
 
   /// One end of a connection between a gRPC client and server. Endpoints are

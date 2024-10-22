@@ -169,7 +169,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   ~PosixEventEngine() override;
 
   std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
-      int fd, const EndpointConfig& config,
+      const EventEngine::FileDescriptor& fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) override;
   std::unique_ptr<EventEngine::Endpoint> CreateEndpointFromFd(
       const FileDescriptor& fd, const EndpointConfig& config) override;

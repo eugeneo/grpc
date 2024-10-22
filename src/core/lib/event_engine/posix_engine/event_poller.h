@@ -40,7 +40,7 @@ class PosixEventPoller;
 
 class EventHandle {
  public:
-  virtual int WrappedFd() = 0;
+  virtual EventEngine::FileDescriptor WrappedFd() = 0;
   // Delete the handle and optionally close the underlying file descriptor if
   // release_fd != nullptr. The on_done closure is scheduled to be invoked
   // after the operation is complete. After this operation, NotifyXXX and SetXXX
@@ -89,8 +89,8 @@ class PosixEventPoller : public grpc_event_engine::experimental::Poller,
                          public Forkable {
  public:
   // Return an opaque handle to perform actions on the provided file descriptor.
-  virtual EventHandle* CreateHandle(int fd, absl::string_view name,
-                                    bool track_err) = 0;
+  virtual EventHandle* CreateHandle(const EventEngine::FileDescriptor& fd,
+                                    absl::string_view name, bool track_err) = 0;
   virtual bool CanTrackErrors() const = 0;
   virtual std::string Name() = 0;
   // Shuts down and deletes the poller. It is legal to call this function

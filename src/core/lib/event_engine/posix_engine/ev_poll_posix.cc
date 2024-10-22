@@ -69,7 +69,8 @@ using Events = absl::InlinedVector<PollEventHandle*, 5>;
 
 class PollEventHandle : public EventHandle {
  public:
-  PollEventHandle(int fd, std::shared_ptr<PollPoller> poller)
+  PollEventHandle(const EventEngine::FileDescriptor& fd,
+                  std::shared_ptr<PollPoller> poller)
       : fd_(fd),
         pending_actions_(0),
         fork_fd_list_(this),
@@ -91,6 +92,7 @@ class PollEventHandle : public EventHandle {
     grpc_core::MutexLock lock(&poller_->mu_);
     poller_->PollerHandlesListAddHandle(this);
   }
+  EventEngine::FileDescriptor WrappedFd() override;
   PollPoller* Poller() override { return poller_.get(); }
   bool SetPendingActions(bool pending_read, bool pending_write) {
     pending_actions_ |= pending_read;
@@ -109,14 +111,13 @@ class PollEventHandle : public EventHandle {
     grpc_core::MutexLock lock(&poller_->mu_);
     poller_->PollerHandlesListRemoveHandle(this);
   }
-  int WrappedFd() override { return fd_; }
   bool IsOrphaned() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     return is_orphaned_;
   }
   void CloseFd() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     if (!released_ && !closed_) {
       closed_ = true;
-      close(fd_);
+      fd_.close();
     }
   }
   bool IsPollhup() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return pollhup_; }
@@ -200,7 +201,7 @@ class PollEventHandle : public EventHandle {
   // required.
   grpc_core::Mutex mu_;
   std::atomic<int> ref_count_{1};
-  int fd_;
+  EventEngine::FileDescriptor fd_;
   int pending_actions_;
   PollPoller::HandlesList fork_fd_list_;
   PollPoller::HandlesList poller_handles_list_;
@@ -299,7 +300,7 @@ void ResetEventManagerOnFork() {
   // Delete all pending Epoll1EventHandles.
   gpr_mu_lock(&fork_fd_list_mu);
   while (fork_fd_list_head != nullptr) {
-    close(fork_fd_list_head->WrappedFd());
+    fork_fd_list_head->WrappedFd().close();
     PollEventHandle* next = fork_fd_list_head->ForkFdListPos().next;
     fork_fd_list_head->ForceRemoveHandleFromPoller();
     delete fork_fd_list_head;
@@ -332,7 +333,8 @@ bool InitPollPollerPosix() {
 
 }  // namespace
 
-EventHandle* PollPoller::CreateHandle(int fd, absl::string_view /*name*/,
+EventHandle* PollPoller::CreateHandle(const EventEngine::FileDescriptor& fd,
+                                      absl::string_view /*name*/,
                                       bool track_err) {
   // Avoid unused-parameter warning for debug-only parameter
   (void)track_err;
@@ -345,7 +347,8 @@ EventHandle* PollPoller::CreateHandle(int fd, absl::string_view /*name*/,
   return handle;
 }
 
-void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
+void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done,
+                                   EventEngine::FileDescriptor* release_fd,
                                    absl::string_view /*reason*/) {
   ForkFdListRemoveHandle(this);
   ForceRemoveHandleFromPoller();
@@ -371,7 +374,7 @@ void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
     }
     // signal read/write closed to OS so that future operations fail.
     if (!released_) {
-      shutdown(fd_, SHUT_RDWR);
+      fd_.Shutdown(SHUT_RDWR);
     }
     if (!IsWatched()) {
       CloseFd();

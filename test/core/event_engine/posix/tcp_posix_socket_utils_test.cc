@@ -151,7 +151,7 @@ TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
 }
 
 TEST(TcpPosixSocketUtilsTest, SocketOptionsTest) {
-  int sock = socket(PF_INET, SOCK_STREAM, 0);
+  auto sock = EventEngine::FileDescriptor::MakeSocket(PF_INET, SOCK_STREAM, 0);
   if (sock < 0) {
     // Try ipv6
     sock = socket(AF_INET6, SOCK_STREAM, 0);

@@ -133,14 +133,14 @@ int GetMaxAcceptQueueSize() {
 absl::Status PrepareSocket(const PosixTcpOptions& options,
                            ListenerSocket& socket) {
   ResolvedAddress sockname_temp;
-  int fd = socket.sock.Fd();
-  CHECK_GE(fd, 0);
+  EventEngine::FileDescriptor fd = socket.sock.Fd();
+  CHECK(fd.ready());
   bool close_fd = true;
   socket.zero_copy_enabled = false;
   socket.port = 0;
   auto sock_cleanup = absl::MakeCleanup([&close_fd, fd]() -> void {
-    if (close_fd && fd >= 0) {
-      close(fd);
+    if (close_fd && fd.ready()) {
+      fd.close();
     }
   });
   if (PosixSocketWrapper::IsSocketReusePortSupported() &&
