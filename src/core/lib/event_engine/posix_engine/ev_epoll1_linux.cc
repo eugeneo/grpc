@@ -278,7 +278,7 @@ bool InitEpoll1PollerLinux() {
 }  // namespace
 
 void Epoll1EventHandle::OrphanHandle(PosixEngineClosure* on_done,
-                                     int* release_fd,
+                                     EventEngine::FileDescriptor* release_fd,
                                      absl::string_view reason) {
   bool is_release_fd = (release_fd != nullptr);
   bool was_shutdown = false;

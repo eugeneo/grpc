@@ -533,7 +533,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 #endif  // GRPC_LINUX_ERRQUEUE
   grpc_core::Mutex read_mu_;
   PosixSocketWrapper sock_;
-  int fd_;
+  EventEngine::FileDescriptor fd_;
   bool is_first_read_ = true;
   bool has_posted_reclaimer_ ABSL_GUARDED_BY(read_mu_) = false;
   double target_length_;

@@ -252,7 +252,8 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
 }
 
 absl::Status PosixEngineListenerImpl::HandleExternalConnection(
-    int listener_fd, int fd, SliceBuffer* pending_data) {
+    int listener_fd, EventEngine::FileDescriptor fd,
+    SliceBuffer* pending_data) {
   if (listener_fd < 0) {
     return absl::UnknownError(absl::StrCat(
         "HandleExternalConnection: Invalid listener socket: ", listener_fd));

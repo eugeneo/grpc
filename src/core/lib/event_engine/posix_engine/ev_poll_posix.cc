@@ -374,7 +374,7 @@ void PollEventHandle::OrphanHandle(PosixEngineClosure* on_done,
     }
     // signal read/write closed to OS so that future operations fail.
     if (!released_) {
-      fd_.Shutdown(SHUT_RDWR);
+      fd_.shutdown(SHUT_RDWR);
     }
     if (!IsWatched()) {
       CloseFd();

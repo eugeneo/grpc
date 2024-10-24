@@ -69,19 +69,19 @@ absl::StatusOr<int> GetUnusedPort() {
   if (dsmode == PosixSocketWrapper::DSMode::DSMODE_IPV4) {
     wild = ResolvedAddressMakeWild4(0);
   }
-  if (bind(sock->Fd(), wild.address(), wild.size()) != 0) {
-    close(sock->Fd());
+  if (sock->Fd().bind(wild.address(), wild.size()) != 0) {
+    sock->Fd().close();
     return absl::FailedPreconditionError(
         absl::StrCat("bind(GetUnusedPort): ", std::strerror(errno)));
   }
   socklen_t len = wild.size();
-  if (getsockname(sock->Fd(), const_cast<sockaddr*>(wild.address()), &len) !=
+  if (sock->Fd().getsockname(const_cast<sockaddr*>(wild.address()), &len) !=
       0) {
-    close(sock->Fd());
+    sock->Fd().close();
     return absl::FailedPreconditionError(
         absl::StrCat("getsockname(GetUnusedPort): ", std::strerror(errno)));
   }
-  close(sock->Fd());
+  sock->Fd().close();
   int port = ResolvedAddressGetPort(wild);
   if (port <= 0) {
     return absl::FailedPreconditionError("Bad port");
@@ -172,7 +172,7 @@ absl::Status PrepareSocket(const PosixTcpOptions& options,
   GRPC_RETURN_IF_ERROR(socket.sock.ApplySocketMutatorInOptions(
       GRPC_FD_SERVER_LISTENER_USAGE, options));
 
-  if (bind(fd, socket.addr.address(), socket.addr.size()) < 0) {
+  if (fd.bind(socket.addr.address(), socket.addr.size()) < 0) {
     auto sockaddr_str = ResolvedAddressToString(socket.addr);
     if (!sockaddr_str.ok()) {
       LOG(ERROR) << "Could not convert sockaddr to string: "
@@ -185,13 +185,13 @@ absl::Status PrepareSocket(const PosixTcpOptions& options,
                      "': ", std::strerror(errno)));
   }
 
-  if (listen(fd, GetMaxAcceptQueueSize()) < 0) {
+  if (fd.listen(GetMaxAcceptQueueSize()) < 0) {
     return absl::FailedPreconditionError(
         absl::StrCat("Error in listen: ", std::strerror(errno)));
   }
   socklen_t len = static_cast<socklen_t>(sizeof(struct sockaddr_storage));
 
-  if (getsockname(fd, const_cast<sockaddr*>(sockname_temp.address()), &len) <
+  if (fd.getsockname(const_cast<sockaddr*>(sockname_temp.address()), &len) <
       0) {
     return absl::FailedPreconditionError(
         absl::StrCat("Error in getsockname: ", std::strerror(errno)));

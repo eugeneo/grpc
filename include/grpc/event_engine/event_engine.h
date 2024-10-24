@@ -175,10 +175,17 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     bool ready() const { return fd_ > 0; }
     void close() const;
     bool epoll_ctl(int epfd, int op, void* event) const;
-    int getsockopt(int level, int optname, void* optval, socklen_t* optlen);
+    int getsockopt(int level, int optname, void* optval,
+                   socklen_t* optlen) const;
     int setsockopt(int level, int optname, const void* optval,
-                   socklen_t optlen);
+                   socklen_t optlen) const;
     void shutdown(int how);
+    int ioctl(int op, void* arg);
+    int fcntl(int op, int args);
+    void invalidate() { fd_ = -1; }
+    bool grpc_socket_mutator_mutate_fd(void* mutator, int usage);
+    int getsockname(struct sockaddr* addr, socklen_t* addrlen);
+    int getpeername(struct sockaddr* addr, socklen_t* addrlen);
 
    private:
     explicit FileDescriptor(int fd) : fd_(fd) {}

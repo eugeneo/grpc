@@ -291,7 +291,8 @@ class PosixSocketWrapper {
 
   // The dsmode output indicates which address family was actually created.
   static absl::StatusOr<PosixSocketWrapper> CreateDualStackSocket(
-      std::function<int(int /*domain*/, int /*type*/, int /*protocol*/)>
+      std::function<EventEngine::FileDescriptor(int /*domain*/, int /*type*/,
+                                                int /*protocol*/)>
           socket_factory,
       const experimental::EventEngine::ResolvedAddress& addr, int type,
       int protocol, DSMode& dsmode);

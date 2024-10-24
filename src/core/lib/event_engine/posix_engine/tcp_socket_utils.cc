@@ -89,8 +89,9 @@ bool kDefaultClientUserTimeoutEnabled = false;
 bool kDefaultServerUserTimeoutEnabled = true;
 
 absl::Status ErrorForFd(
-    int fd, const experimental::EventEngine::ResolvedAddress& addr) {
-  if (fd >= 0) return absl::OkStatus();
+    EventEngine::FileDescriptor fd,
+    const experimental::EventEngine::ResolvedAddress& addr) {
+  if (fd.ready()) return absl::OkStatus();
   const char* addr_str = reinterpret_cast<const char*>(addr.address());
   return absl::Status(absl::StatusCode::kInternal,
                       absl::StrCat("socket: ", grpc_core::StrError(errno),
@@ -108,7 +109,7 @@ EventEngine::FileDescriptor CreateSocket(
     int saved_errno = errno;
     LOG_EVERY_N_SEC(ERROR, 10)
         << "socket(" << family << ", " << type << ", " << protocol
-        << ") returned " << res << " with error: |"
+        << ") returned " << res.id() << " with error: |"
         << grpc_core::StrError(errno)
         << "|. This process might not have a sufficient file descriptor limit "
            "for the number of connections grpc wants to open (which is "
@@ -156,9 +157,9 @@ absl::Status PrepareTcpClientSocket(PosixSocketWrapper sock,
 #ifdef GRPC_POSIX_SOCKET_UTILS_COMMON
 #ifndef GRPC_SET_SOCKET_DUALSTACK_CUSTOM
 
-bool SetSocketDualStack(int fd) {
+bool SetSocketDualStack(const EventEngine::FileDescriptor& fd) {
   const int off = 0;
-  return 0 == setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off));
+  return 0 == fd.setsockopt(IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off));
 }
 
 #endif  // GRPC_SET_SOCKET_DUALSTACK_CUSTOM
@@ -338,7 +339,7 @@ absl::Status PosixSocketWrapper::SetSocketZeroCopy() {
 
 // Set a socket to non blocking mode
 absl::Status PosixSocketWrapper::SetSocketNonBlocking(int non_blocking) {
-  int oldflags = fcntl(fd_, F_GETFL, 0);
+  int oldflags = fd_.fcntl(F_GETFL, 0);
   if (oldflags < 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
@@ -350,7 +351,7 @@ absl::Status PosixSocketWrapper::SetSocketNonBlocking(int non_blocking) {
     oldflags &= ~O_NONBLOCK;
   }
 
-  if (fcntl(fd_, F_SETFL, oldflags) != 0) {
+  if (fd_.fcntl(F_SETFL, oldflags) != 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
   }
@@ -427,7 +428,7 @@ absl::Status PosixSocketWrapper::SetSocketRcvBuf(int buffer_size_bytes) {
 
 // Set a socket to close on exec
 absl::Status PosixSocketWrapper::SetSocketCloexec(int close_on_exec) {
-  int oldflags = fcntl(fd_, F_GETFD, 0);
+  int oldflags = fd_.fcntl(F_GETFD, 0);
   if (oldflags < 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
@@ -439,7 +440,7 @@ absl::Status PosixSocketWrapper::SetSocketCloexec(int close_on_exec) {
     oldflags &= ~FD_CLOEXEC;
   }
 
-  if (fcntl(fd_, F_SETFD, oldflags) != 0) {
+  if (fd_.fcntl(F_SETFD, oldflags) != 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
   }
@@ -500,14 +501,15 @@ absl::Status PosixSocketWrapper::SetSocketReusePort(int reuse) {
 
 bool PosixSocketWrapper::IsSocketReusePortSupported() {
   static bool kSupportSoReusePort = []() -> bool {
-    int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
+    EventEngine::FileDescriptor s =
+        EventEngine::FileDescriptor::MakeSocket(AF_INET, SOCK_STREAM, 0);
+    if (!s.ready()) {
       // This might be an ipv6-only environment in which case
       // 'socket(AF_INET,..)' call would fail. Try creating IPv6 socket in
       // that case
-      s = socket(AF_INET6, SOCK_STREAM, 0);
+      s = EventEngine::FileDescriptor::MakeSocket(AF_INET6, SOCK_STREAM, 0);
     }
-    if (s >= 0) {
+    if (s.ready()) {
       PosixSocketWrapper sock(s);
       bool result = sock.SetSocketReusePort(1).ok();
       sock.Fd().close();
@@ -672,7 +674,7 @@ void PosixSocketWrapper::TrySetSocketTcpUserTimeout(
 absl::Status PosixSocketWrapper::SetSocketMutator(
     grpc_fd_usage usage, grpc_socket_mutator* mutator) {
   CHECK(mutator);
-  if (!grpc_socket_mutator_mutate_fd(mutator, fd_, usage)) {
+  if (!fd_.grpc_socket_mutator_mutate_fd(mutator, usage)) {
     return absl::Status(absl::StatusCode::kInternal,
                         "grpc_socket_mutator failed.");
   }
@@ -716,7 +718,7 @@ absl::StatusOr<EventEngine::ResolvedAddress>
 PosixSocketWrapper::LocalAddress() {
   EventEngine::ResolvedAddress addr;
   socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-  if (getsockname(fd_, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+  if (fd_.getsockname(const_cast<sockaddr*>(addr.address()), &len) < 0) {
     return absl::InternalError(
         absl::StrCat("getsockname:", grpc_core::StrError(errno)));
   }
@@ -726,7 +728,7 @@ PosixSocketWrapper::LocalAddress() {
 absl::StatusOr<EventEngine::ResolvedAddress> PosixSocketWrapper::PeerAddress() {
   EventEngine::ResolvedAddress addr;
   socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-  if (getpeername(fd_, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+  if (fd_.getpeername(const_cast<sockaddr*>(addr.address()), &len) < 0) {
     return absl::InternalError(
         absl::StrCat("getpeername:", grpc_core::StrError(errno)));
   }
@@ -750,7 +752,7 @@ absl::StatusOr<std::string> PosixSocketWrapper::PeerAddressString() {
 }
 
 absl::StatusOr<PosixSocketWrapper> PosixSocketWrapper::CreateDualStackSocket(
-    std::function<int(int, int, int)> socket_factory,
+    std::function<EventEngine::FileDescriptor(int, int, int)> socket_factory,
     const experimental::EventEngine::ResolvedAddress& addr, int type,
     int protocol, PosixSocketWrapper::DSMode& dsmode) {
   const sockaddr* sock_addr = addr.address();
@@ -760,11 +762,11 @@ absl::StatusOr<PosixSocketWrapper> PosixSocketWrapper::CreateDualStackSocket(
     if (IsIpv6LoopbackAvailable()) {
       newfd = CreateSocket(socket_factory, family, type, protocol);
     } else {
-      newfd = -1;
+      newfd.invalidate();
       errno = EAFNOSUPPORT;
     }
     // Check if we've got a valid dualstack socket.
-    if (newfd > 0 && SetSocketDualStack(newfd)) {
+    if (newfd.ready() && SetSocketDualStack(newfd)) {
       dsmode = PosixSocketWrapper::DSMode::DSMODE_DUALSTACK;
       return PosixSocketWrapper(newfd);
     }
@@ -785,7 +787,7 @@ absl::StatusOr<PosixSocketWrapper> PosixSocketWrapper::CreateDualStackSocket(
   dsmode = family == AF_INET ? PosixSocketWrapper::DSMode::DSMODE_IPV4
                              : PosixSocketWrapper::DSMode::DSMODE_NONE;
   newfd = CreateSocket(socket_factory, family, type, protocol);
-  if (newfd < 0) {
+  if (!newfd.ready()) {
     return ErrorForFd(newfd, addr);
   }
   return PosixSocketWrapper(newfd);

@@ -77,7 +77,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
   bool IsFdStillReadableLocked() override {
     size_t bytes_available = 0;
-    return ioctl(handle_->WrappedFd(), FIONREAD, &bytes_available) == 0 &&
+    return handle_->WrappedFd().ioctl(FIONREAD, &bytes_available) == 0 &&
            bytes_available > 0;
   }
 

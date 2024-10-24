@@ -161,7 +161,7 @@ void SessionShutdownCb(session* se, bool /*success*/) {
 
 // Called when data become readable in a session.
 void SessionReadCb(session* se, absl::Status status) {
-  int fd = se->em_fd->WrappedFd();
+  EventHandle::FileDescriptor fd = se->em_fd->WrappedFd();
 
   ssize_t read_once = 0;
   ssize_t read_total = 0;
@@ -172,7 +172,7 @@ void SessionReadCb(session* se, absl::Status status) {
   }
 
   do {
-    read_once = read(fd, se->read_buf, BUF_SIZE);
+    read_once = fd.read(se->read_buf, BUF_SIZE);
     if (read_once > 0) read_total += read_once;
   } while (read_once > 0);
   se->sv->read_bytes_total += read_total;
@@ -222,8 +222,8 @@ void ListenCb(server* sv, absl::Status status) {
   }
 
   do {
-    fd = accept(listen_em_fd->WrappedFd(),
-                reinterpret_cast<struct sockaddr*>(&ss), &slen);
+    fd = listen_em_fd->WrappedFd().accept(
+        reinterpret_cast<struct sockaddr*>(&ss), &slen);
   } while (fd < 0 && errno == EINTR);
   if (fd < 0 && errno == EAGAIN) {
     sv->listen_closure = PosixEngineClosure::TestOnlyToClosure(
@@ -452,7 +452,7 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   EventHandle* em_fd;
   FdChangeData a, b;
   int flags;
-  int sv[2];
+  EventEngine::FileDescriptor sv[2];
   char data;
   ssize_t result;
   if (g_event_poller == nullptr) {
@@ -466,10 +466,10 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   InitChangeData(&b);
 
   EXPECT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
-  flags = fcntl(sv[0], F_GETFL, 0);
-  EXPECT_EQ(fcntl(sv[0], F_SETFL, flags | O_NONBLOCK), 0);
-  flags = fcntl(sv[1], F_GETFL, 0);
-  EXPECT_EQ(fcntl(sv[1], F_SETFL, flags | O_NONBLOCK), 0);
+  flags = sv[0].fcntl(F_GETFL, 0);
+  EXPECT_EQ(sv[0].fcntl(F_SETFL, flags | O_NONBLOCK), 0);
+  flags = sv[1].fcntl(F_GETFL, 0);
+  EXPECT_EQ(sv[1].fcntl(F_SETFL, flags | O_NONBLOCK), 0);
 
   em_fd =
       g_event_poller->CreateHandle(sv[0], "TestEventPollerHandleChange", false);
@@ -603,7 +603,7 @@ class WakeupFdHandle : public grpc_core::DualRefCounted<WakeupFdHandle> {
     ssize_t r;
     int total_bytes_read = 0;
     for (;;) {
-      r = read(wakeup_fd_->ReadFd(), buf, sizeof(buf));
+      r = wakeup_fd_->ReadFd().read(buf, sizeof(buf));
       if (r > 0) {
         total_bytes_read += r;
         continue;
