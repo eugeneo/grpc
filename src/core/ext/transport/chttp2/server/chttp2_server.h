@@ -55,7 +55,8 @@ class PassiveListenerImpl final : public PassiveListener {
       std::unique_ptr<grpc_event_engine::experimental::EventEngine::Endpoint>
           endpoint) override ABSL_LOCKS_EXCLUDED(mu_);
 
-  absl::Status AcceptConnectedFd(int fd) override ABSL_LOCKS_EXCLUDED(mu_);
+  absl::Status AcceptConnectedFd(GRPC_UNUSED int fd) override
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   void ListenerDestroyed() ABSL_LOCKS_EXCLUDED(mu_);
 
