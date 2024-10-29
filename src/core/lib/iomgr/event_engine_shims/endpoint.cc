@@ -74,7 +74,7 @@ class EventEngineEndpointWrapper {
     return std::move(endpoint_);
   }
 
-  EventEngine::FileDescriptor Fd() {
+  int Fd() {
     grpc_core::MutexLock lock(&mu_);
     return fd_;
   }
@@ -214,7 +214,7 @@ class EventEngineEndpointWrapper {
         kShutdownBit + 1) {
       auto* supports_fd =
           QueryExtension<EndpointSupportsFdExtension>(endpoint_.get());
-      if (supports_fd != nullptr && fd_.ready() && on_release_fd_) {
+      if (supports_fd != nullptr && fd_ > 0 && on_release_fd_) {
         supports_fd->Shutdown(
             [cb = std::move(on_release_fd_)](
                 absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
@@ -251,7 +251,7 @@ class EventEngineEndpointWrapper {
         Ref();
         if (shutdown_ref_.fetch_sub(1, std::memory_order_acq_rel) ==
             kShutdownBit + 1) {
-          if (supports_fd != nullptr && fd_.ready() && on_release_fd_) {
+          if (supports_fd != nullptr && fd_ && on_release_fd_) {
             supports_fd->Shutdown(
                 [cb = std::move(on_release_fd_)](
                     absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
@@ -283,7 +283,7 @@ class EventEngineEndpointWrapper {
   void OnShutdownInternal() {
     {
       grpc_core::MutexLock lock(&mu_);
-      fd_.invalidate();
+      fd_ = -1;
     }
     endpoint_.reset();
     // For the Ref taken in TriggerShutdown
@@ -302,7 +302,7 @@ class EventEngineEndpointWrapper {
       ResolvedAddressToURI(endpoint_->GetPeerAddress()).value_or("")};
   const std::string local_address_{
       ResolvedAddressToURI(endpoint_->GetLocalAddress()).value_or("")};
-  EventEngine::FileDescriptor fd_;
+  int fd_{-1};
 };
 
 // Read from the endpoint and place the data in slices slice buffer. The
@@ -387,7 +387,7 @@ int EndpointGetFd(grpc_endpoint* ep) {
   auto* eeep =
       reinterpret_cast<EventEngineEndpointWrapper::grpc_event_engine_endpoint*>(
           ep);
-  return eeep->wrapper->Fd().file_descriptor_for_iomgr();
+  return eeep->wrapper->Fd();
 }
 
 bool EndpointCanTrackErr(grpc_endpoint* ep) {
@@ -418,9 +418,9 @@ EventEngineEndpointWrapper::EventEngineEndpointWrapper(
   auto* supports_fd =
       QueryExtension<EndpointSupportsFdExtension>(endpoint_.get());
   if (supports_fd != nullptr) {
-    fd_ = supports_fd->GetWrappedFd();
+    fd_ = supports_fd->GetWrappedFd().file_descriptor_for_iomgr();
   } else {
-    fd_.invalidate();
+    fd_ = -1;
   }
   GRPC_TRACE_LOG(event_engine, INFO)
       << "EventEngine::Endpoint " << eeep_->wrapper << " Create";
