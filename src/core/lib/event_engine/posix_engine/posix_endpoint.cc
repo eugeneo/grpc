@@ -98,12 +98,12 @@ namespace {
 
 // A wrapper around sendmsg. It sends \a msg over \a fd and returns the number
 // of bytes sent.
-ssize_t TcpSend(int fd, const struct msghdr* msg, int* saved_errno,
-                int additional_flags = 0) {
+ssize_t TcpSend(EventEngine::FileDescriptor fd, const struct msghdr* msg,
+                int* saved_errno, int additional_flags = 0) {
   GRPC_LATENT_SEE_PARENT_SCOPE("TcpSend");
   ssize_t sent_length;
   do {
-    sent_length = sendmsg(fd, msg, SENDMSG_FLAGS | additional_flags);
+    sent_length = fd.sendmsg(msg, SENDMSG_FLAGS | additional_flags);
   } while (sent_length < 0 && (*saved_errno = errno) == EINTR);
   return sent_length;
 }
@@ -329,7 +329,7 @@ bool PosixEndpointImpl::TcpDoRead(absl::Status& status) {
     msg.msg_flags = 0;
 
     do {
-      read_bytes = recvmsg(fd_, &msg, 0);
+      read_bytes = fd_.recvmsg(&msg, 0);
     } while (read_bytes < 0 && errno == EINTR);
 
     if (read_bytes < 0 && errno == EAGAIN) {
@@ -703,7 +703,7 @@ bool PosixEndpointImpl::ProcessErrors() {
   while (true) {
     msg.msg_controllen = sizeof(aligned_buf.rbuf);
     do {
-      r = recvmsg(fd_, &msg, MSG_ERRQUEUE);
+      r = fd_.recvmsg(&msg, MSG_ERRQUEUE);
       saved_errno = errno;
     } while (r < 0 && saved_errno == EINTR);
 
@@ -1295,7 +1295,7 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
                  << "value.";
     } else {
       const int enable = 1;
-      if (setsockopt(fd_, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable)) !=
+      if (fd_.setsockopt(SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable)) !=
           0) {
         zerocopy_enabled = false;
         LOG(ERROR) << "Failed to set zerocopy options on the socket.";
@@ -1314,10 +1314,10 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       options.tcp_tx_zerocopy_send_bytes_threshold);
 #ifdef GRPC_HAVE_TCP_INQ
   int one = 1;
-  if (setsockopt(fd_, SOL_TCP, TCP_INQ, &one, sizeof(one)) == 0) {
+  if (fd_.setsockopt(SOL_TCP, TCP_INQ, &one, sizeof(one)) == 0) {
     inq_capable_ = true;
   } else {
-    VLOG(2) << "cannot set inq fd=" << fd_ << " errno=" << errno;
+    VLOG(2) << "cannot set inq fd=" << fd_.id() << " errno=" << errno;
     inq_capable_ = false;
   }
 #else

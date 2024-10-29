@@ -114,7 +114,7 @@ TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
       // Try ipv6
       sock = EventEngine::FileDescriptor::MakeSocket(AF_INET6, SOCK_STREAM, 0);
     }
-    EXPECT_GT(sock, 0);
+    EXPECT_TRUE(sock.ready());
     PosixSocketWrapper posix_sock(sock);
     struct test_socket_mutator mutator;
     grpc_socket_mutator_init(&mutator.base, vtable);
@@ -145,7 +145,7 @@ TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
             .SetSocketMutator(GRPC_FD_CLIENT_CONNECTION_USAGE,
                               reinterpret_cast<grpc_socket_mutator*>(&mutator))
             .ok());
-    close(sock);
+    sock.close();
   };
   test_with_vtable(&mutator_vtable);
   test_with_vtable(&mutator_vtable2);

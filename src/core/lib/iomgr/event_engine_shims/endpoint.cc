@@ -74,7 +74,7 @@ class EventEngineEndpointWrapper {
     return std::move(endpoint_);
   }
 
-  int Fd() {
+  EventEngine::FileDescriptor Fd() {
     grpc_core::MutexLock lock(&mu_);
     return fd_;
   }
@@ -286,7 +286,7 @@ class EventEngineEndpointWrapper {
       ResolvedAddressToURI(endpoint_->GetPeerAddress()).value_or("")};
   const std::string local_address_{
       ResolvedAddressToURI(endpoint_->GetLocalAddress()).value_or("")};
-  int fd_{-1};
+  EventEngine::FileDescriptor fd_;
 };
 
 // Read from the endpoint and place the data in slices slice buffer. The

@@ -161,7 +161,7 @@ void SessionShutdownCb(session* se, bool /*success*/) {
 
 // Called when data become readable in a session.
 void SessionReadCb(session* se, absl::Status status) {
-  EventHandle::FileDescriptor fd = se->em_fd->WrappedFd();
+  EventEngine::FileDescriptor fd = se->em_fd->WrappedFd();
 
   ssize_t read_once = 0;
   ssize_t read_total = 0;
@@ -209,7 +209,7 @@ void ListenShutdownCb(server* sv) {
 
 // Called when a new TCP connection request arrives in the listening port.
 void ListenCb(server* sv, absl::Status status) {
-  int fd;
+  EventEngine::FileDescriptor fd;
   int flags;
   session* se;
   struct sockaddr_storage ss;
@@ -236,8 +236,8 @@ void ListenCb(server* sv, absl::Status status) {
   }
   EXPECT_GE(fd, 0);
   EXPECT_LT(fd, FD_SETSIZE);
-  flags = fcntl(fd, F_GETFL, 0);
-  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  flags = fd.fcntl(F_GETFL, 0);
+  fd.fcntl(F_SETFL, flags | O_NONBLOCK);
   se = static_cast<session*>(gpr_malloc(sizeof(*se)));
   se->sv = sv;
   se->em_fd = g_event_poller->CreateHandle(fd, "listener", false);

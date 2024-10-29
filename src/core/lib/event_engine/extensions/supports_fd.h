@@ -32,7 +32,7 @@ class EndpointSupportsFdExtension {
     return "io.grpc.event_engine.extension.endpoint_supports_fd";
   }
   /// Returns the file descriptor associated with the posix endpoint.
-  virtual int GetWrappedFd() = 0;
+  virtual EventEngine::FileDescriptor GetWrappedFd() = 0;
 
   /// Shutdown the endpoint. This function call should trigger execution of
   /// any pending endpoint Read/Write callbacks with appropriate error
@@ -63,8 +63,8 @@ class ListenerSupportsFdExtension {
   ///
   /// \a listener_fd - The listening socket fd that was bound to the specified
   /// address.
-  using OnPosixBindNewFdCallback =
-      absl::AnyInvocable<void(absl::StatusOr<int> listener_fd)>;
+  using OnPosixBindNewFdCallback = absl::AnyInvocable<void(
+      absl::StatusOr<EventEngine::FileDescriptor> listener_fd)>;
   /// Bind an address/port to this Listener.
   ///
   /// It is expected that multiple addresses/ports can be bound to this
@@ -90,8 +90,9 @@ class ListenerSupportsFdExtension {
   /// already been read over the externally accepted client connection.
   /// Otherwise, it is assumed that no data has been read over the new client
   /// connection.
-  virtual absl::Status HandleExternalConnection(int listener_fd, int fd,
-                                                SliceBuffer* pending_data) = 0;
+  virtual absl::Status HandleExternalConnection(
+      EventEngine::FileDescriptor listener_fd, int fd,
+      SliceBuffer* pending_data) = 0;
 
   /// Shutdown/stop listening on all bind Fds.
   virtual void ShutdownListeningFds() = 0;
@@ -132,7 +133,7 @@ class EventEngineSupportsFdExtension {
   /// to track memory allocations.
   /// \a timeout - The timeout to use for the connection attempt.
   virtual EventEngine::ConnectionHandle CreateEndpointFromUnconnectedFd(
-      int fd, EventEngine::OnConnectCallback on_connect,
+      EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
       const EventEngine::ResolvedAddress& addr, const EndpointConfig& config,
       MemoryAllocator memory_allocator, EventEngine::Duration timeout) = 0;
 

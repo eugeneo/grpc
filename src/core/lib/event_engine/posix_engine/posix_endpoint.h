@@ -490,7 +490,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
     return local_address_;
   }
 
-  int GetWrappedFd() { return fd_; }
+  EventEngine::FileDescriptor GetWrappedFd() { return fd_; }
 
   bool CanTrackErrors() const { return poller_->CanTrackErrors(); }
 
@@ -636,7 +636,9 @@ class PosixEndpoint : public PosixEndpointWithFdSupport {
     return impl_->GetLocalAddress();
   }
 
-  int GetWrappedFd() override { return impl_->GetWrappedFd(); }
+  EventEngine::FileDescriptor GetWrappedFd() override {
+    return impl_->GetWrappedFd();
+  }
 
   bool CanTrackErrors() override { return impl_->CanTrackErrors(); }
 

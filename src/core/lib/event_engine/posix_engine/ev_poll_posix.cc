@@ -134,7 +134,8 @@ class PollEventHandle : public EventHandle {
   void SetWatched(int watch_mask) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     watch_mask_ = watch_mask;
   }
-  void OrphanHandle(PosixEngineClosure* on_done, int* release_fd,
+  void OrphanHandle(PosixEngineClosure* on_done,
+                    EventEngine::FileDescriptor* release_fd,
                     absl::string_view reason) override;
   void ShutdownHandle(absl::Status why) override;
   void NotifyOnRead(PosixEngineClosure* on_read) override;
@@ -675,7 +676,7 @@ Poller::WorkResult PollPoller::Work(
     }
 
     pfd_count = 1;
-    pfds[0].fd = wakeup_fd_->ReadFd();
+    pfds[0].fd = wakeup_fd_->ReadFd().file_descriptor_for_polling();
     pfds[0].events = POLLIN;
     pfds[0].revents = 0;
     PollEventHandle* head = poll_handles_list_head_;
@@ -687,7 +688,7 @@ Poller::WorkResult PollPoller::Work(
         // poll handle list for the poller under the poller lock.
         CHECK(!head->IsOrphaned());
         if (!head->IsPollhup()) {
-          pfds[pfd_count].fd = head->WrappedFd();
+          pfds[pfd_count].fd = head->WrappedFd().file_descriptor_for_polling();
           watchers[pfd_count] = head;
           // BeginPollLocked takes a ref of the handle. It also marks the
           // fd as Watched with an appropriate watch_mask. The watch_mask

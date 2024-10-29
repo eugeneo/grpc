@@ -38,9 +38,10 @@ namespace experimental {
 #ifdef GRPC_LINUX_EVENTFD
 
 absl::Status EventFdWakeupFd::Init() {
-  int read_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  int write_fd = -1;
-  if (read_fd < 0) {
+  EventEngine::FileDescriptor read_fd =
+      EventEngine::FileDescriptor::MakeEventFd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  EventEngine::FileDescriptor write_fd;
+  if (!read_fd.ready()) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("eventfd: ", grpc_core::StrError(errno)));
   }
@@ -49,10 +50,9 @@ absl::Status EventFdWakeupFd::Init() {
 }
 
 absl::Status EventFdWakeupFd::ConsumeWakeup() {
-  eventfd_t value;
   int err;
   do {
-    err = eventfd_read(ReadFd(), &value);
+    err = ReadFd().eventfd_read();
   } while (err < 0 && errno == EINTR);
   if (err < 0 && errno != EAGAIN) {
     return absl::Status(
@@ -65,7 +65,7 @@ absl::Status EventFdWakeupFd::ConsumeWakeup() {
 absl::Status EventFdWakeupFd::Wakeup() {
   int err;
   do {
-    err = eventfd_write(ReadFd(), 1);
+    err = ReadFd().eventfd_write(1);
   } while (err < 0 && errno == EINTR);
   if (err < 0) {
     return absl::Status(
@@ -76,8 +76,8 @@ absl::Status EventFdWakeupFd::Wakeup() {
 }
 
 EventFdWakeupFd::~EventFdWakeupFd() {
-  if (ReadFd() != 0) {
-    close(ReadFd());
+  if (ReadFd().ready()) {
+    ReadFd().close();
   }
 }
 

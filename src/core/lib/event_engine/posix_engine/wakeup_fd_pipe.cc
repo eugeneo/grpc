@@ -39,8 +39,8 @@ namespace experimental {
 
 namespace {
 
-absl::Status SetSocketNonBlocking(int fd) {
-  int oldflags = fcntl(fd, F_GETFL, 0);
+absl::Status SetSocketNonBlocking(EventEngine::FileDescriptor& fd) {
+  int oldflags = fd.fcntl(F_GETFL, 0);
   if (oldflags < 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
@@ -48,7 +48,7 @@ absl::Status SetSocketNonBlocking(int fd) {
 
   oldflags |= O_NONBLOCK;
 
-  if (fcntl(fd, F_SETFL, oldflags) != 0) {
+  if (fd.fcntl(F_SETFL, oldflags) != 0) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("fcntl: ", grpc_core::StrError(errno)));
   }
@@ -58,17 +58,15 @@ absl::Status SetSocketNonBlocking(int fd) {
 }  // namespace
 
 absl::Status PipeWakeupFd::Init() {
-  int pipefd[2];
-  int r = pipe(pipefd);
-  if (0 != r) {
-    return absl::Status(absl::StatusCode::kInternal,
-                        absl::StrCat("pipe: ", grpc_core::StrError(errno)));
+  auto pipefd = EventEngine::FileDescriptor::MakePipe();
+  if (!pipefd.ok()) {
+    return pipefd.status();
   }
-  auto status = SetSocketNonBlocking(pipefd[0]);
+  auto status = SetSocketNonBlocking(pipefd->first);
   if (!status.ok()) return status;
-  status = SetSocketNonBlocking(pipefd[1]);
+  status = SetSocketNonBlocking(pipefd->second);
   if (!status.ok()) return status;
-  SetWakeupFds(pipefd[0], pipefd[1]);
+  SetWakeupFds(pipefd->first, pipefd->second);
   return absl::OkStatus();
 }
 
@@ -77,7 +75,7 @@ absl::Status PipeWakeupFd::ConsumeWakeup() {
   ssize_t r;
 
   for (;;) {
-    r = read(ReadFd(), buf, sizeof(buf));
+    r = ReadFd().read(buf, sizeof(buf));
     if (r > 0) continue;
     if (r == 0) return absl::OkStatus();
     switch (errno) {
@@ -94,17 +92,17 @@ absl::Status PipeWakeupFd::ConsumeWakeup() {
 
 absl::Status PipeWakeupFd::Wakeup() {
   char c = 0;
-  while (write(WriteFd(), &c, 1) != 1 && errno == EINTR) {
+  while (WriteFd().write(&c, 1) != 1 && errno == EINTR) {
   }
   return absl::OkStatus();
 }
 
 PipeWakeupFd::~PipeWakeupFd() {
-  if (ReadFd() != 0) {
-    close(ReadFd());
+  if (ReadFd().ready()) {
+    ReadFd().close();
   }
-  if (WriteFd() != 0) {
-    close(WriteFd());
+  if (WriteFd().ready()) {
+    WriteFd().close();
   }
 }
 

@@ -58,7 +58,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
   ~GrpcPolledFdPosix() override {
     // c-ares library will close the fd. This fd may be picked up immediately by
     // another thread and should not be closed by the following OrphanHandle.
-    int phony_release_fd;
+    EventEngine::FileDescriptor phony_release_fd;
     handle_->OrphanHandle(/*on_done=*/nullptr, &phony_release_fd,
                           "c-ares query finished");
   }
@@ -114,7 +114,8 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
     owned_fds_.insert(as);
     return std::make_unique<GrpcPolledFdPosix>(
         as,
-        poller_->CreateHandle(as, "c-ares socket", poller_->CanTrackErrors()));
+        poller_->CreateHandle(EventEngine::FileDescriptor::FromAresSocket(as),
+                              "c-ares socket", poller_->CanTrackErrors()));
   }
 
   void ConfigureAresChannelLocked(ares_channel channel) override {
@@ -172,7 +173,7 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
     // clang-format off
 #define RETURN_IF_ERROR(expr) if (!(expr).ok()) { return -1; }
     // clang-format on
-    PosixSocketWrapper sock(fd);
+    PosixSocketWrapper sock(EventEngine::FileDescriptor::FromAresSocket(fd));
     RETURN_IF_ERROR(sock.SetSocketNonBlocking(1));
     RETURN_IF_ERROR(sock.SetSocketCloexec(1));
     if (type == SOCK_STREAM) {

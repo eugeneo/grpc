@@ -14,6 +14,7 @@
 #ifndef GRPC_EVENT_ENGINE_EVENT_ENGINE_H
 #define GRPC_EVENT_ENGINE_EVENT_ENGINE_H
 
+#include <fcntl.h>
 #include <grpc/event_engine/endpoint_config.h>
 #include <grpc/event_engine/extensible.h>
 #include <grpc/event_engine/memory_allocator.h>
@@ -21,7 +22,12 @@
 #include <grpc/event_engine/slice_buffer.h>
 #include <grpc/support/port_platform.h>
 
+#include <utility>
 #include <vector>
+
+#ifdef GRPC_LINUX_EPOLL
+#include <sys/epoll.h>
+#endif
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
@@ -165,6 +171,13 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
   class FileDescriptor {
    public:
     static FileDescriptor MakeSocket(int domain, int type, int protocol);
+    static FileDescriptor MakeEventFd(int initval, int flags);
+    //     return absl::Status(absl::StatusCode::kInternal,
+    // absl::StrCat("pipe: ", grpc_core::StrError(errno)));
+    static absl::StatusOr<std::pair<FileDescriptor, FileDescriptor>> MakePipe();
+    static FileDescriptor FromAresSocket(int ares_socket);
+    static FileDescriptor epoll_create(int size);
+    static FileDescriptor epoll_create1(int flags);
 
     FileDescriptor() = default;
     FileDescriptor(const FileDescriptor& other) = default;
@@ -174,7 +187,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     // int fd() const { return fd_; }
     bool ready() const { return fd_ > 0; }
     void close() const;
-    bool epoll_ctl(int epfd, int op, void* event) const;
+    bool epoll_ctl(int op, EventEngine::FileDescriptor epfd, void* event) const;
     int getsockopt(int level, int optname, void* optval,
                    socklen_t* optlen) const;
     int setsockopt(int level, int optname, const void* optval,
@@ -183,9 +196,26 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     int ioctl(int op, void* arg);
     int fcntl(int op, int args);
     void invalidate() { fd_ = -1; }
-    bool grpc_socket_mutator_mutate_fd(void* mutator, int usage);
     int getsockname(struct sockaddr* addr, socklen_t* addrlen);
     int getpeername(struct sockaddr* addr, socklen_t* addrlen);
+    int bind(const struct sockaddr* addr, socklen_t addrlen);
+    int listen(int backlog);
+    ssize_t read(void* buf, size_t nbyte);
+#ifdef GRPC_LINUX_EPOLL
+    int epoll_ctl(int op, int fd, struct epoll_event* event);
+#endif
+    int epoll_wait(void* events, int maxevents, int timeout);
+    int eventfd_read();  // No need for output fd
+    int eventfd_write(uint64_t counter);
+    EventEngine::FileDescriptor accept(struct sockaddr* address,
+                                       socklen_t* address_len);
+    ssize_t write(const void* buf, size_t nbyte);
+    ssize_t sendmsg(const struct msghdr* message, int flags);
+    int connect(const struct sockaddr* addr, socklen_t addrlen);
+    ssize_t recvmsg(struct msghdr* msg, int flags);
+
+    bool grpc_socket_mutator_mutate_fd(void* mutator, int usage);
+    int file_descriptor_for_polling() const;
 
    private:
     explicit FileDescriptor(int fd) : fd_(fd) {}

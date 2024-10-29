@@ -169,13 +169,13 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   ~PosixEventEngine() override;
 
   std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
-      const EventEngine::FileDescriptor& fd, const EndpointConfig& config,
+      EventEngine::FileDescriptor fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) override;
   std::unique_ptr<EventEngine::Endpoint> CreateEndpointFromFd(
       const FileDescriptor& fd, const EndpointConfig& config) override;
 
   ConnectionHandle CreateEndpointFromUnconnectedFd(
-      int fd, EventEngine::OnConnectCallback on_connect,
+      EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
       const EventEngine::ResolvedAddress& addr, const EndpointConfig& config,
       MemoryAllocator memory_allocator, EventEngine::Duration timeout) override;
 
@@ -241,7 +241,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
       std::shared_ptr<PosixEnginePollerManager> poller_manager);
 
   ConnectionHandle CreateEndpointFromUnconnectedFdInternal(
-      int fd, EventEngine::OnConnectCallback on_connect,
+      EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
       const EventEngine::ResolvedAddress& addr, const PosixTcpOptions& options,
       MemoryAllocator memory_allocator, EventEngine::Duration timeout);
 

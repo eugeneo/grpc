@@ -101,7 +101,7 @@ class Epoll1Poller : public PosixEventPoller {
   friend class Epoll1EventHandle;
 #ifdef GRPC_LINUX_EPOLL
   struct EpollSet {
-    int epfd = -1;
+    EventEngine::FileDescriptor epfd;
 
     // The epoll_events after the last call to epoll_wait()
     struct epoll_event events[MAX_EPOLL_EVENTS]{};

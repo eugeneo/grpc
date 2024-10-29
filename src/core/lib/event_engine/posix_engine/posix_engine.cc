@@ -189,8 +189,8 @@ void AsyncConnect::OnWritable(absl::Status status)
 
   do {
     so_error_size = sizeof(so_error);
-    err = getsockopt(fd->WrappedFd(), SOL_SOCKET, SO_ERROR, &so_error,
-                     &so_error_size);
+    err = fd->WrappedFd().getsockopt(SOL_SOCKET, SO_ERROR, &so_error,
+                                     &so_error_size);
   } while (err < 0 && errno == EINTR);
   if (err < 0) {
     status = absl::FailedPreconditionError(
@@ -240,14 +240,14 @@ void AsyncConnect::OnWritable(absl::Status status)
 
 EventEngine::ConnectionHandle
 PosixEventEngine::CreateEndpointFromUnconnectedFdInternal(
-    int fd, EventEngine::OnConnectCallback on_connect,
+    EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
     const EventEngine::ResolvedAddress& addr,
     const PosixTcpOptions& tcp_options, MemoryAllocator memory_allocator,
     EventEngine::Duration timeout) {
   int err;
   int connect_errno;
   do {
-    err = connect(fd, addr.address(), addr.size());
+    err = fd.connect(addr.address(), addr.size());
   } while (err < 0 && errno == EINTR);
   connect_errno = (err < 0) ? errno : 0;
 
@@ -638,7 +638,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
     return EventEngine::ConnectionHandle::kInvalid;
   }
   return CreateEndpointFromUnconnectedFdInternal(
-      (*socket).sock.Fd(), std::move(on_connect), (*socket).mapped_target_addr,
+      socket->sock.Fd(), std::move(on_connect), (*socket).mapped_target_addr,
       options, std::move(memory_allocator), timeout);
 #else   // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::Crash("EventEngine::Connect is not supported on this platform");
@@ -646,7 +646,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
 }
 
 EventEngine::ConnectionHandle PosixEventEngine::CreateEndpointFromUnconnectedFd(
-    int fd, EventEngine::OnConnectCallback on_connect,
+    EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
     const EventEngine::ResolvedAddress& addr, const EndpointConfig& config,
     MemoryAllocator memory_allocator, EventEngine::Duration timeout) {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
@@ -669,7 +669,7 @@ PosixEventEngine::CreatePosixEndpointFromFd(const FileDescriptor& fd,
   PosixEventPoller* poller = poller_manager_->Poller();
   DCHECK_NE(poller, nullptr);
   EventHandle* handle =
-      poller->CreateHandle(fd.fd(), "tcp-client", poller->CanTrackErrors());
+      poller->CreateHandle(fd, "tcp-client", poller->CanTrackErrors());
   return CreatePosixEndpoint(handle, nullptr, shared_from_this(),
                              std::move(memory_allocator),
                              TcpOptionsFromEndpointConfig(config));
