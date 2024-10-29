@@ -48,9 +48,7 @@ class PassiveListener {
   ///
   /// Returns a failure status if the server's active EventEngine does not
   /// support Endpoint creation from fds.
-  virtual absl::Status AcceptConnectedFd(
-      const grpc_event_engine::experimental::EventEngine::FileDescriptor&
-          fd) = 0;
+  virtual absl::Status AcceptConnectedFd(int fd) = 0;
 };
 
 }  // namespace experimental

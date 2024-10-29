@@ -1105,8 +1105,7 @@ absl::Status PassiveListenerImpl::AcceptConnectedEndpoint(
   return absl::OkStatus();
 }
 
-absl::Status PassiveListenerImpl::AcceptConnectedFd(
-    const EventEngine::FileDescriptor& fd) {
+absl::Status PassiveListenerImpl::AcceptConnectedFd(int fd) {
   CHECK_NE(server_.get(), nullptr);
   ExecCtx exec_ctx;
   auto& args = server_->channel_args();

@@ -681,19 +681,19 @@ PosixEventEngine::CreatePosixEndpointFromFd(FileDescriptor fd,
 }
 
 std::unique_ptr<EventEngine::Endpoint> PosixEventEngine::CreateEndpointFromFd(
-    FileDescriptor fd, const EndpointConfig& config) {
+    int fd, const EndpointConfig& config) {
   auto options = TcpOptionsFromEndpointConfig(config);
   MemoryAllocator allocator;
   if (options.memory_allocator_factory != nullptr) {
     return CreatePosixEndpointFromFd(
-        fd, config,
+        EventEngine::FileDescriptor::FromIomgr(fd), config,
         options.memory_allocator_factory->CreateMemoryAllocator(
-            absl::StrCat("allocator:", fd.id())));
+            absl::StrCat("allocator:", fd)));
   }
   return CreatePosixEndpointFromFd(
-      fd, config,
+      EventEngine::FileDescriptor::FromIomgr(fd), config,
       options.resource_quota->memory_quota()->CreateMemoryAllocator(
-          absl::StrCat("allocator:", fd.id())));
+          absl::StrCat("allocator:", fd)));
 }
 
 absl::StatusOr<std::unique_ptr<EventEngine::Listener>>
