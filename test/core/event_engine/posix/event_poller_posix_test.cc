@@ -236,7 +236,7 @@ void ListenCb(server* sv, absl::Status status) {
     LOG(ERROR) << "Failed to acceot a connection, returned error: "
                << grpc_core::StrError(errno);
   }
-  EXPECT_TRUE(fd.ready(), 0);
+  EXPECT_TRUE(fd.ready());
   EXPECT_LT(fd.id(), FD_SETSIZE);
   flags = fd.fcntl(F_GETFL, 0);
   fd.fcntl(F_SETFL, flags | O_NONBLOCK);
@@ -336,14 +336,13 @@ void ClientSessionWrite(client* cl, absl::Status status) {
 
 // Start a client to send a stream of bytes.
 void ClientStart(client* cl, int port) {
-  int fd;
+  EventEngine::FileDescriptor fd;
   struct sockaddr_in6 sin;
   CreateTestSocket(port, &fd, &sin);
-  if (connect(fd, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) ==
-      -1) {
+  if (fd.connect(reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) == -1) {
     if (errno == EINPROGRESS) {
       struct pollfd pfd;
-      pfd.fd = fd;
+      pfd.fd = fd.file_descriptor_for_polling();
       pfd.events = POLLOUT;
       pfd.revents = 0;
       if (poll(&pfd, 1, -1) == -1) {
@@ -467,7 +466,8 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   InitChangeData(&a);
   InitChangeData(&b);
 
-  EXPECT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
+  EXPECT_EQ(
+      EventEngine::FileDescriptor::socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
   flags = sv[0].fcntl(F_GETFL, 0);
   EXPECT_EQ(sv[0].fcntl(F_SETFL, flags | O_NONBLOCK), 0);
   flags = sv[1].fcntl(F_GETFL, 0);
@@ -479,7 +479,7 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   // Register the first callback, then make its FD readable
   em_fd->NotifyOnRead(first_closure);
   data = 0;
-  result = write(sv[1], &data, 1);
+  result = sv[1].write(&data, 1);
   EXPECT_EQ(result, 1);
 
   // And now wait for it to run.
@@ -498,14 +498,14 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   gpr_mu_unlock(&g_mu);
 
   // And drain the socket so we can generate a new read edge
-  result = read(sv[0], &data, 1);
+  result = sv[0].read(&data, 1);
   EXPECT_EQ(result, 1);
 
   // Now register a second callback with distinct change data, and do the same
   // thing again.
   em_fd->NotifyOnRead(second_closure);
   data = 0;
-  result = write(sv[1], &data, 1);
+  result = sv[1].write(&data, 1);
   EXPECT_EQ(result, 1);
 
   // And now wait for it to run.
@@ -517,7 +517,7 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   em_fd->OrphanHandle(nullptr, nullptr, "d");
   DestroyChangeData(&a);
   DestroyChangeData(&b);
-  close(sv[1]);
+  sv[1].close();
 }
 
 std::atomic<int> kTotalActiveWakeupFdHandles{0};

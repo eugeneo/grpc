@@ -174,10 +174,13 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     static FileDescriptor MakeEventFd(int initval, int flags);
     //     return absl::Status(absl::StatusCode::kInternal,
     // absl::StrCat("pipe: ", grpc_core::StrError(errno)));
+    static FileDescriptor FromIomgr(int fd);
     static absl::StatusOr<std::pair<FileDescriptor, FileDescriptor>> MakePipe();
     static FileDescriptor FromAresSocket(int ares_socket);
     static FileDescriptor epoll_create(int size);
     static FileDescriptor epoll_create1(int flags);
+    static int socketpair(int domain, int type, int protocol,
+                          absl::Span<FileDescriptor> sv);
 
     FileDescriptor() = default;
     FileDescriptor(const FileDescriptor& other) = default;
@@ -216,6 +219,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
 
     bool grpc_socket_mutator_mutate_fd(void* mutator, int usage);
     int file_descriptor_for_polling() const;
+    int file_descriptor_for_iomgr() const;
 
    private:
     explicit FileDescriptor(int fd) : fd_(fd) {}

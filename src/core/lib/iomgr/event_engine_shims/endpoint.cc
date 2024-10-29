@@ -214,8 +214,16 @@ class EventEngineEndpointWrapper {
         kShutdownBit + 1) {
       auto* supports_fd =
           QueryExtension<EndpointSupportsFdExtension>(endpoint_.get());
-      if (supports_fd != nullptr && fd_ > 0 && on_release_fd_) {
-        supports_fd->Shutdown(std::move(on_release_fd_));
+      if (supports_fd != nullptr && fd_.ready() && on_release_fd_) {
+        supports_fd->Shutdown(
+            [cb = std::move(on_release_fd_)](
+                absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
+              if (fd.ok()) {
+                cb(fd->file_descriptor_for_iomgr());
+              } else {
+                cb(std::move(fd).status());
+              }
+            });
       }
       OnShutdownInternal();
     }
@@ -243,8 +251,16 @@ class EventEngineEndpointWrapper {
         Ref();
         if (shutdown_ref_.fetch_sub(1, std::memory_order_acq_rel) ==
             kShutdownBit + 1) {
-          if (supports_fd != nullptr && fd_ > 0 && on_release_fd_) {
-            supports_fd->Shutdown(std::move(on_release_fd_));
+          if (supports_fd != nullptr && fd_.ready() && on_release_fd_) {
+            supports_fd->Shutdown(
+                [cb = std::move(on_release_fd_)](
+                    absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
+                  if (fd.ok()) {
+                    cb(fd->file_descriptor_for_iomgr());
+                  } else {
+                    cb(std::move(fd).status());
+                  }
+                });
           }
           OnShutdownInternal();
         }
@@ -267,7 +283,7 @@ class EventEngineEndpointWrapper {
   void OnShutdownInternal() {
     {
       grpc_core::MutexLock lock(&mu_);
-      fd_ = -1;
+      fd_.invalidate();
     }
     endpoint_.reset();
     // For the Ref taken in TriggerShutdown
@@ -371,7 +387,7 @@ int EndpointGetFd(grpc_endpoint* ep) {
   auto* eeep =
       reinterpret_cast<EventEngineEndpointWrapper::grpc_event_engine_endpoint*>(
           ep);
-  return eeep->wrapper->Fd();
+  return eeep->wrapper->Fd().file_descriptor_for_iomgr();
 }
 
 bool EndpointCanTrackErr(grpc_endpoint* ep) {
@@ -404,7 +420,7 @@ EventEngineEndpointWrapper::EventEngineEndpointWrapper(
   if (supports_fd != nullptr) {
     fd_ = supports_fd->GetWrappedFd();
   } else {
-    fd_ = -1;
+    fd_.invalidate();
   }
   GRPC_TRACE_LOG(event_engine, INFO)
       << "EventEngine::Endpoint " << eeep_->wrapper << " Create";
