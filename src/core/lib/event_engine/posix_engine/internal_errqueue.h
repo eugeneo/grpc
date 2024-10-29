@@ -15,6 +15,7 @@
 #ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_INTERNAL_ERRQUEUE_H
 #define GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_INTERNAL_ERRQUEUE_H
 
+#include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
 #include <stdint.h>
 
@@ -162,7 +163,7 @@ struct tcp_info {
 #define TCP_INFO 11
 #endif
 
-int GetSocketTcpInfo(tcp_info* info, int fd);
+int GetSocketTcpInfo(tcp_info* info, EventEngine::FileDescriptor fd);
 
 #endif  // GRPC_LINUX_ERRQUEUE
 

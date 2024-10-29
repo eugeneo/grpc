@@ -661,7 +661,7 @@ EventEngine::ConnectionHandle PosixEventEngine::CreateEndpointFromUnconnectedFd(
 }
 
 std::unique_ptr<EventEngine::Endpoint>
-PosixEventEngine::CreatePosixEndpointFromFd(const FileDescriptor& fd,
+PosixEventEngine::CreatePosixEndpointFromFd(FileDescriptor fd,
                                             const EndpointConfig& config,
                                             MemoryAllocator memory_allocator) {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
@@ -681,7 +681,7 @@ PosixEventEngine::CreatePosixEndpointFromFd(const FileDescriptor& fd,
 }
 
 std::unique_ptr<EventEngine::Endpoint> PosixEventEngine::CreateEndpointFromFd(
-    const FileDescriptor& fd, const EndpointConfig& config) {
+    FileDescriptor fd, const EndpointConfig& config) {
   auto options = TcpOptionsFromEndpointConfig(config);
   MemoryAllocator allocator;
   if (options.memory_allocator_factory != nullptr) {
@@ -705,9 +705,9 @@ PosixEventEngine::CreateListener(
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   PosixEventEngineWithFdSupport::PosixAcceptCallback posix_on_accept =
       [on_accept_cb = std::move(on_accept)](
-          int /*listener_fd*/, std::unique_ptr<EventEngine::Endpoint> ep,
-          bool /*is_external*/, MemoryAllocator allocator,
-          SliceBuffer* /*pending_data*/) mutable {
+          EventEngine::FileDescriptor /*listener_fd*/,
+          std::unique_ptr<EventEngine::Endpoint> ep, bool /*is_external*/,
+          MemoryAllocator allocator, SliceBuffer* /*pending_data*/) mutable {
         on_accept_cb(std::move(ep), std::move(allocator));
       };
   return std::make_unique<PosixEngineListener>(

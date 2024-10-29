@@ -45,8 +45,10 @@ class EndpointSupportsFdExtension {
   /// released instead of being closed. The callback will get the released
   /// file descriptor as its argument if the release operation is successful.
   /// Otherwise it would get an appropriate error status as its argument.
-  virtual void Shutdown(absl::AnyInvocable<void(absl::StatusOr<int> release_fd)>
-                            on_release_fd) = 0;
+  virtual void Shutdown(
+      absl::AnyInvocable<
+          void(absl::StatusOr<EventEngine::FileDescriptor> release_fd)>
+          on_release_fd) = 0;
 };
 
 class ListenerSupportsFdExtension {
@@ -91,7 +93,7 @@ class ListenerSupportsFdExtension {
   /// Otherwise, it is assumed that no data has been read over the new client
   /// connection.
   virtual absl::Status HandleExternalConnection(
-      EventEngine::FileDescriptor listener_fd, int fd,
+      EventEngine::FileDescriptor listener_fd, EventEngine::FileDescriptor fd,
       SliceBuffer* pending_data) = 0;
 
   /// Shutdown/stop listening on all bind Fds.
@@ -110,7 +112,7 @@ class EventEngineSupportsFdExtension {
   /// endpoint. \a memory_allocator - The endpoint may use the provided memory
   /// allocator to track memory allocations.
   virtual std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
-      const EventEngine::FileDescriptor& fd, const EndpointConfig& config,
+      EventEngine::FileDescriptor fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) = 0;
 
   /// Creates an EventEngine::Endpoint from an fd which is already assumed to be
@@ -118,7 +120,7 @@ class EventEngineSupportsFdExtension {
   /// This has the same behavior, but the \a memory_allocator is taken from the
   /// EndpointConfig's resource quota.
   virtual std::unique_ptr<EventEngine::Endpoint> CreateEndpointFromFd(
-      const EventEngine::FileDescriptor& fd, const EndpointConfig& config) = 0;
+      EventEngine::FileDescriptor fd, const EndpointConfig& config) = 0;
 
   /// Creates an EventEngine::Endpoint from a file descriptor that is configured
   /// and bound locally but not yet connected to a remote peer. Returns a
@@ -151,9 +153,9 @@ class EventEngineSupportsFdExtension {
   /// already been read over the new client connection. Otherwise, it is
   /// assumed that no data has been read over the new client connection.
   using PosixAcceptCallback = absl::AnyInvocable<void(
-      int listener_fd, std::unique_ptr<EventEngine::Endpoint> endpoint,
-      bool is_external, MemoryAllocator memory_allocator,
-      SliceBuffer* pending_data)>;
+      EventEngine::FileDescriptor listener_fd,
+      std::unique_ptr<EventEngine::Endpoint> endpoint, bool is_external,
+      MemoryAllocator memory_allocator, SliceBuffer* pending_data)>;
 
   /// Factory method to create a posix specific network listener / server with
   /// fd support.

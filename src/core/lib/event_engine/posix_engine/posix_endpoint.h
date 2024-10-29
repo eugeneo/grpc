@@ -496,7 +496,9 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 
   void MaybeShutdown(
       absl::Status why,
-      absl::AnyInvocable<void(absl::StatusOr<int> release_fd)> on_release_fd);
+      absl::AnyInvocable<
+          void(absl::StatusOr<EventEngine::FileDescriptor> release_fd)>
+          on_release_fd);
 
  private:
   void UpdateRcvLowat() ABSL_EXCLUSIVE_LOCKS_REQUIRED(read_mu_);
@@ -575,7 +577,8 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 
   void* outgoing_buffer_arg_ = nullptr;
 
-  absl::AnyInvocable<void(absl::StatusOr<int>)> on_release_fd_ = nullptr;
+  absl::AnyInvocable<void(absl::StatusOr<EventEngine::FileDescriptor>)>
+      on_release_fd_ = nullptr;
 
   // A counter which starts at 0. It is initialized the first time the
   // socket options for collecting timestamps are set, and is incremented
@@ -642,7 +645,8 @@ class PosixEndpoint : public PosixEndpointWithFdSupport {
 
   bool CanTrackErrors() override { return impl_->CanTrackErrors(); }
 
-  void Shutdown(absl::AnyInvocable<void(absl::StatusOr<int> release_fd)>
+  void Shutdown(absl::AnyInvocable<
+                void(absl::StatusOr<EventEngine::FileDescriptor> release_fd)>
                     on_release_fd) override {
     if (!shutdown_.exchange(true, std::memory_order_acq_rel)) {
       impl_->MaybeShutdown(absl::FailedPreconditionError("Endpoint closing"),

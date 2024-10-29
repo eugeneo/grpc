@@ -2300,6 +2300,7 @@ grpc_cc_library(
     deps = [
         "iomgr_port",
         "strerror",
+        "//:event_engine_base_hdrs",
         "//:gpr",
     ],
 )
@@ -2321,6 +2322,7 @@ grpc_cc_library(
     deps = [
         "iomgr_port",
         "posix_event_engine_internal_errqueue",
+        "//:event_engine_base_hdrs",
         "//:gpr",
     ],
 )

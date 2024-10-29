@@ -841,8 +841,8 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
                                             int additional_flags) {
   if (!socket_ts_enabled_) {
     uint32_t opt = kTimestampingSocketOptions;
-    if (setsockopt(fd_, SOL_SOCKET, SO_TIMESTAMPING, static_cast<void*>(&opt),
-                   sizeof(opt)) != 0) {
+    if (fd_.setsockopt(SOL_SOCKET, SO_TIMESTAMPING, static_cast<void*>(&opt),
+                       sizeof(opt)) != 0) {
       return false;
     }
     bytes_counter_ = -1;
@@ -1220,7 +1220,8 @@ bool PosixEndpointImpl::Write(
 
 void PosixEndpointImpl::MaybeShutdown(
     absl::Status why,
-    absl::AnyInvocable<void(absl::StatusOr<int>)> on_release_fd) {
+    absl::AnyInvocable<void(absl::StatusOr<EventEngine::FileDescriptor>)>
+        on_release_fd) {
   if (poller_->CanTrackErrors()) {
     ZerocopyDisableAndWaitForRemaining();
     stop_error_notification_.store(true, std::memory_order_release);
@@ -1237,7 +1238,7 @@ void PosixEndpointImpl::MaybeShutdown(
 }
 
 PosixEndpointImpl ::~PosixEndpointImpl() {
-  int release_fd = -1;
+  EventEngine::FileDescriptor release_fd;
   handle_->OrphanHandle(on_done_,
                         on_release_fd_ == nullptr ? nullptr : &release_fd, "");
   if (on_release_fd_ != nullptr) {

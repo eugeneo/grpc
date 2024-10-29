@@ -201,7 +201,8 @@ bool TracedBufferList::TracedBuffer::Finished(gpr_timespec ts) {
          kGrpcMaxPendingAckTimeMillis;
 }
 
-void TracedBufferList::AddNewEntry(int32_t seq_no, int fd, void* arg) {
+void TracedBufferList::AddNewEntry(int32_t seq_no,
+                                   EventEngine::FileDescriptor fd, void* arg) {
   TracedBuffer* new_elem = new TracedBuffer(seq_no, arg);
   // Store the current time as the sendmsg time.
   new_elem->ts_.sendmsg_time.time = gpr_now(GPR_CLOCK_REALTIME);

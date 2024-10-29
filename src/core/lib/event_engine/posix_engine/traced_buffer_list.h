@@ -15,6 +15,7 @@
 #ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_TRACED_BUFFER_LIST_H
 #define GRPC_SRC_CORE_LIB_EVENT_ENGINE_POSIX_ENGINE_TRACED_BUFFER_LIST_H
 
+#include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
 #include <grpc/support/time.h>
 #include <stdint.h>
@@ -111,7 +112,7 @@ class TracedBufferList {
   ~TracedBufferList() = default;
   // Add a new entry in the TracedBuffer list pointed to by head. Also saves
   // sendmsg_time with the current timestamp.
-  void AddNewEntry(int32_t seq_no, int fd, void* arg);
+  void AddNewEntry(int32_t seq_no, EventEngine::FileDescriptor fd, void* arg);
   // Processes a received timestamp based on sock_extended_err and
   // scm_timestamping structures. It will invoke the timestamps callback if the
   // timestamp type is SCM_TSTAMP_ACK.

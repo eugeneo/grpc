@@ -68,7 +68,8 @@ class PosixEngineListenerImpl
   void TriggerShutdown();
 
   absl::Status HandleExternalConnection(EventEngine::FileDescriptor listener_fd,
-                                        int fd, SliceBuffer* pending_data);
+                                        EventEngine::FileDescriptor fd,
+                                        SliceBuffer* pending_data);
 
   ~PosixEngineListenerImpl();
 
@@ -218,7 +219,7 @@ class PosixEngineListener : public PosixListenerWithFdSupport {
     return impl_->Bind(addr, std::move(on_bind_new_fd));
   }
   absl::Status HandleExternalConnection(EventEngine::FileDescriptor listener_fd,
-                                        int fd,
+                                        EventEngine::FileDescriptor fd,
                                         SliceBuffer* pending_data) override {
     return impl_->HandleExternalConnection(listener_fd, fd, pending_data);
   }

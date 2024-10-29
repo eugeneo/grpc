@@ -139,7 +139,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     // Note: If we ever decide to return this address to the user, remember to
     // strip off the ::ffff:0.0.0.0/96 prefix first.
     EventEngine::FileDescriptor fd = Accept4(handle_->WrappedFd(), addr, 1, 1);
-    if (fd < 0) {
+    if (!fd.ready()) {
       switch (errno) {
         case EINTR:
           continue;
@@ -187,7 +187,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     // sun_path of sockaddr_un, so explicitly call getpeername to get it.
     if (addr.address()->sa_family == AF_UNIX) {
       socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-      if (getpeername(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+      if (fd.getpeername(const_cast<sockaddr*>(addr.address()), &len) < 0) {
         auto listener_addr_uri = ResolvedAddressToURI(socket_.addr);
         LOG(ERROR) << "Failed getpeername: " << grpc_core::StrError(errno)
                    << ". Dropping the connection, and continuing "
@@ -195,7 +195,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
                    << (listener_addr_uri.ok() ? *listener_addr_uri
                                               : "<unknown>")
                    << ":" << socket_.port;
-        close(fd);
+        fd.close();
         handle_->NotifyOnRead(notify_on_accept_);
         return;
       }
@@ -258,7 +258,7 @@ absl::Status PosixEngineListenerImpl::HandleExternalConnection(
         absl::StrCat("HandleExternalConnection: Invalid listener socket: ",
                      listener_fd.id()));
   }
-  if (fd < 0) {
+  if (!fd.ready()) {
     return absl::UnknownError(absl::StrCat(
         "HandleExternalConnection: Invalid peer socket: ", fd.id()));
   }
