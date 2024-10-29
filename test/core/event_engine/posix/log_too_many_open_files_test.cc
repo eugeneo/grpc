@@ -34,7 +34,7 @@ using ::grpc_event_engine::experimental::PosixSocketWrapper;
 TEST(LogTooManyOpenFilesTest, MainTest) {
   const auto mock_socket_factory = [](int, int, int) {
     errno = EMFILE;
-    return ::grpc_event_engine::experimental::EventEngine::FileDescriptor();
+    return grpc_event_engine::experimental::EventEngine::FileDescriptor();
   };
   auto addr = grpc_event_engine::experimental::URIToResolvedAddress(
       "ipv4:127.0.0.1:80");
