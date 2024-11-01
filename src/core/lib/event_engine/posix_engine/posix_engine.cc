@@ -742,7 +742,7 @@ PosixEventEngine::CreatePosixListener(
 
 EventEngineSupportsFdExtension::PosixApis& PosixEventEngine::GetPosixApis()
     const {
-  return *posix_apis_;
+  return posix_fadvise;
 }
 
 }  // namespace experimental
