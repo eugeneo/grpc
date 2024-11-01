@@ -98,12 +98,13 @@ namespace {
 
 // A wrapper around sendmsg. It sends \a msg over \a fd and returns the number
 // of bytes sent.
-ssize_t TcpSend(EventEngine::FileDescriptor fd, const struct msghdr* msg,
-                int* saved_errno, int additional_flags = 0) {
+ssize_t TcpSend(const SystemApi& api, FileDescriptor fd,
+                const struct msghdr* msg, int* saved_errno,
+                int additional_flags = 0) {
   GRPC_LATENT_SEE_PARENT_SCOPE("TcpSend");
   ssize_t sent_length;
   do {
-    sent_length = fd.sendmsg(msg, SENDMSG_FLAGS | additional_flags);
+    sent_length = api.sendmsg(fd, msg, SENDMSG_FLAGS | additional_flags);
   } while (sent_length < 0 && (*saved_errno = errno) == EINTR);
   return sent_length;
 }
@@ -329,7 +330,7 @@ bool PosixEndpointImpl::TcpDoRead(absl::Status& status) {
     msg.msg_flags = 0;
 
     do {
-      read_bytes = fd_.recvmsg(&msg, 0);
+      read_bytes = system_api().recvmsg(fd_, &msg, 0);
     } while (read_bytes < 0 && errno == EINTR);
 
     if (read_bytes < 0 && errno == EAGAIN) {
@@ -504,7 +505,7 @@ void PosixEndpointImpl::UpdateRcvLowat() {
   if (set_rcvlowat_ == remaining) {
     return;
   }
-  auto result = sock_.SetSocketRcvLowat(remaining);
+  auto result = sock_.SetSocketRcvLowat(system_api(), remaining);
   if (result.ok()) {
     set_rcvlowat_ = *result;
   } else {
@@ -703,7 +704,7 @@ bool PosixEndpointImpl::ProcessErrors() {
   while (true) {
     msg.msg_controllen = sizeof(aligned_buf.rbuf);
     do {
-      r = fd_.recvmsg(&msg, MSG_ERRQUEUE);
+      r = system_api().recvmsg(fd_, &msg, MSG_ERRQUEUE);
       saved_errno = errno;
     } while (r < 0 && saved_errno == EINTR);
 
@@ -839,10 +840,11 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
                                             ssize_t* sent_length,
                                             int* saved_errno,
                                             int additional_flags) {
+  const SystemApi& systemapi = system_api();
   if (!socket_ts_enabled_) {
     uint32_t opt = kTimestampingSocketOptions;
-    if (fd_.setsockopt(SOL_SOCKET, SO_TIMESTAMPING, static_cast<void*>(&opt),
-                       sizeof(opt)) != 0) {
+    if (systemapi.setsockopt(fd_, SOL_SOCKET, SO_TIMESTAMPING,
+                             static_cast<void*>(&opt), sizeof(opt)) != 0) {
       return false;
     }
     bytes_counter_ = -1;
@@ -862,7 +864,7 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
   msg->msg_controllen = CMSG_SPACE(sizeof(uint32_t));
 
   // If there was an error on sendmsg the logic in tcp_flush will handle it.
-  ssize_t length = TcpSend(fd_, msg, saved_errno, additional_flags);
+  ssize_t length = TcpSend(systemapi, fd_, msg, saved_errno, additional_flags);
   *sent_length = length;
   // Only save timestamps if all the bytes were taken by sendmsg.
   if (sending_length == static_cast<size_t>(length)) {
@@ -958,7 +960,8 @@ bool PosixEndpointImpl::DoFlushZerocopy(TcpZerocopySendRecord* record,
     if (!tried_sending_message) {
       msg.msg_control = nullptr;
       msg.msg_controllen = 0;
-      sent_length = TcpSend(fd_, &msg, &saved_errno, MSG_ZEROCOPY);
+      sent_length =
+          TcpSend(system_api(), fd_, &msg, &saved_errno, MSG_ZEROCOPY);
     }
     if (tcp_zerocopy_send_ctx_->UpdateZeroCopyOptMemStateAfterSend(
             saved_errno == ENOBUFS, constrained) ||
@@ -1075,7 +1078,7 @@ bool PosixEndpointImpl::TcpFlush(absl::Status& status) {
     if (!tried_sending_message) {
       msg.msg_control = nullptr;
       msg.msg_controllen = 0;
-      sent_length = TcpSend(fd_, &msg, &saved_errno);
+      sent_length = TcpSend(system_api(), fd_, &msg, &saved_errno);
     }
 
     if (sent_length < 0) {
@@ -1220,8 +1223,7 @@ bool PosixEndpointImpl::Write(
 
 void PosixEndpointImpl::MaybeShutdown(
     absl::Status why,
-    absl::AnyInvocable<void(absl::StatusOr<EventEngine::FileDescriptor>)>
-        on_release_fd) {
+    absl::AnyInvocable<void(absl::StatusOr<FileDescriptor>)> on_release_fd) {
   if (poller_->CanTrackErrors()) {
     ZerocopyDisableAndWaitForRemaining();
     stop_error_notification_.store(true, std::memory_order_release);
@@ -1238,7 +1240,7 @@ void PosixEndpointImpl::MaybeShutdown(
 }
 
 PosixEndpointImpl ::~PosixEndpointImpl() {
-  EventEngine::FileDescriptor release_fd;
+  FileDescriptor release_fd;
   handle_->OrphanHandle(on_done_,
                         on_release_fd_ == nullptr ? nullptr : &release_fd, "");
   if (on_release_fd_ != nullptr) {
@@ -1261,18 +1263,18 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       handle_(handle),
       poller_(handle->Poller()),
       engine_(engine) {
-  PosixSocketWrapper sock(handle->WrappedFd());
   fd_ = handle_->WrappedFd();
+  PosixSocketWrapper sock(fd_);
   CHECK(options.resource_quota != nullptr);
-  auto peer_addr_string = sock.PeerAddressString();
+  auto peer_addr_string = sock.PeerAddressString(system_api());
   mem_quota_ = options.resource_quota->memory_quota();
   memory_owner_ = mem_quota_->CreateMemoryOwner();
   self_reservation_ = memory_owner_.MakeReservation(sizeof(PosixEndpointImpl));
-  auto local_address = sock.LocalAddress();
+  auto local_address = sock.LocalAddress(system_api());
   if (local_address.ok()) {
     local_address_ = *local_address;
   }
-  auto peer_address = sock.PeerAddress();
+  auto peer_address = sock.PeerAddress(system_api());
   if (peer_address.ok()) {
     peer_address_ = *peer_address;
   }
@@ -1296,8 +1298,8 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
                  << "value.";
     } else {
       const int enable = 1;
-      if (fd_.setsockopt(SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable)) !=
-          0) {
+      if (system_api().setsockopt(fd_, SOL_SOCKET, SO_ZEROCOPY, &enable,
+                                  sizeof(enable)) != 0) {
         zerocopy_enabled = false;
         LOG(ERROR) << "Failed to set zerocopy options on the socket.";
       }
@@ -1315,10 +1317,10 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       options.tcp_tx_zerocopy_send_bytes_threshold);
 #ifdef GRPC_HAVE_TCP_INQ
   int one = 1;
-  if (fd_.setsockopt(SOL_TCP, TCP_INQ, &one, sizeof(one)) == 0) {
+  if (system_api().setsockopt(fd_, SOL_TCP, TCP_INQ, &one, sizeof(one)) == 0) {
     inq_capable_ = true;
   } else {
-    VLOG(2) << "cannot set inq fd=" << fd_.id() << " errno=" << errno;
+    VLOG(2) << "cannot set inq fd=" << fd_.fd() << " errno=" << errno;
     inq_capable_ = false;
   }
 #else

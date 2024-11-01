@@ -522,6 +522,12 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
                            ssize_t* sent_length, int* saved_errno,
                            int additional_flags);
   absl::Status TcpAnnotateError(absl::Status src_error) const;
+  const SystemApi& system_api() const;
+  //  {
+  //   auto api = QueryExtension<SystemApi>(*engine_);
+  //   DCHECK_NE(api, nullptr);
+  //   return *api;
+  // }
 #ifdef GRPC_LINUX_ERRQUEUE
   bool ProcessErrors();
   // Reads a cmsg to process zerocopy control messages.
@@ -573,8 +579,8 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 
   void* outgoing_buffer_arg_ = nullptr;
 
-  absl::AnyInvocable<void(absl::StatusOr<EventEngine::FileDescriptor>)>
-      on_release_fd_ = nullptr;
+  absl::AnyInvocable<void(absl::StatusOr<FileDescriptor>)> on_release_fd_ =
+      nullptr;
 
   // A counter which starts at 0. It is initialized the first time the
   // socket options for collecting timestamps are set, and is incremented

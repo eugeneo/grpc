@@ -210,9 +210,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     EventEngine::FileDescriptor accept(struct sockaddr* address,
                                        socklen_t* address_len);
     ssize_t write(const void* buf, size_t nbyte);
-    ssize_t sendmsg(const struct msghdr* message, int flags);
     int connect(const struct sockaddr* addr, socklen_t addrlen);
-    ssize_t recvmsg(struct msghdr* msg, int flags);
 
     bool grpc_socket_mutator_mutate_fd(void* mutator, int usage);
     int file_descriptor_for_polling() const;

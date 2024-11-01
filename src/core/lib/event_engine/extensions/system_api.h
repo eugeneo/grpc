@@ -35,6 +35,8 @@ class SystemApi {
   virtual ~SystemApi() = default;
 
   // Factories
+  virtual FileDescriptor AdoptExternalFd(int fd) const = 0;
+
   virtual FileDescriptor socket(int domain, int type, int protocol) const = 0;
 
   virtual int bind(FileDescriptor fd, const struct sockaddr* addr,
@@ -48,8 +50,12 @@ class SystemApi {
   virtual int getpeername(FileDescriptor fd, struct sockaddr* addr,
                           socklen_t* addrlen) const = 0;
   virtual int listen(FileDescriptor fd, int backlog) const = 0;
+  virtual ssize_t recvmsg(FileDescriptor fd, struct msghdr* msg,
+                          int flags) const = 0;
   virtual int setsockopt(FileDescriptor fd, int level, int optname,
                          const void* optval, socklen_t optlen) const = 0;
+  virtual ssize_t sendmsg(FileDescriptor fd, const struct msghdr* message,
+                          int flags) const = 0;
 };
 
 }  // namespace experimental

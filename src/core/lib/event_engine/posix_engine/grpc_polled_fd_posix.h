@@ -118,10 +118,11 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
                               "c-ares socket", poller_->CanTrackErrors()));
   }
 
-  void ConfigureAresChannelLocked(ares_channel channel) override {
+  void ConfigureAresChannelLocked(const SystemApi& system_api,
+                                  ares_channel channel) override {
     ares_set_socket_functions(channel, &kSockFuncs, this);
     ares_set_socket_configure_callback(
-        channel, &GrpcPolledFdFactoryPosix::ConfigureSocket, nullptr);
+        channel, &GrpcPolledFdFactoryPosix::ConfigureSocket, &system_api);
   }
 
  private:
@@ -169,15 +170,16 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
   ///   - non-blocking
   ///   - cloexec flag
   ///   - disable nagle
-  static int ConfigureSocket(ares_socket_t fd, int type, void* /*user_data*/) {
+  static int ConfigureSocket(ares_socket_t fd, int type, void* system_api_ptr) {
     // clang-format off
 #define RETURN_IF_ERROR(expr) if (!(expr).ok()) { return -1; }
     // clang-format on
-    PosixSocketWrapper sock(EventEngine::FileDescriptor::FromAresSocket(fd));
-    RETURN_IF_ERROR(sock.SetSocketNonBlocking(1));
-    RETURN_IF_ERROR(sock.SetSocketCloexec(1));
+    SystemApi& system_api = *static_cast<SystemApi*>(system_api_ptr);
+    PosixSocketWrapper sock(system_api.AdoptExternalFd(fd));
+    RETURN_IF_ERROR(sock.SetSocketNonBlocking(system_api, 1));
+    RETURN_IF_ERROR(sock.SetSocketCloexec(system_api, 1));
     if (type == SOCK_STREAM) {
-      RETURN_IF_ERROR(sock.SetSocketLowLatency(1));
+      RETURN_IF_ERROR(sock.SetSocketLowLatency(system_api, 1));
     }
     return 0;
   }

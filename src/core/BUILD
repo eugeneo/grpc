@@ -2072,6 +2072,7 @@ grpc_cc_library(
         "absl/strings",
     ],
     deps = [
+        "event_engine_extensions",
         "event_engine_poller",
         "forkable",
         "posix_event_engine_closure",
