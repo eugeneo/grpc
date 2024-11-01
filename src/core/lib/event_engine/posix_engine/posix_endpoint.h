@@ -27,18 +27,15 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <new>
 #include <utility>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
-#include "absl/hash/hash.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "src/core/lib/event_engine/extensions/supports_fd.h"
 #include "src/core/lib/event_engine/posix.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine_closure.h"
@@ -490,14 +487,13 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
     return local_address_;
   }
 
-  EventEngine::FileDescriptor GetWrappedFd() { return fd_; }
+  FileDescriptor GetWrappedFd() { return fd_; }
 
   bool CanTrackErrors() const { return poller_->CanTrackErrors(); }
 
   void MaybeShutdown(
       absl::Status why,
-      absl::AnyInvocable<
-          void(absl::StatusOr<EventEngine::FileDescriptor> release_fd)>
+      absl::AnyInvocable<void(absl::StatusOr<FileDescriptor> release_fd)>
           on_release_fd);
 
  private:
@@ -535,7 +531,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
 #endif  // GRPC_LINUX_ERRQUEUE
   grpc_core::Mutex read_mu_;
   PosixSocketWrapper sock_;
-  EventEngine::FileDescriptor fd_;
+  FileDescriptor fd_;
   bool is_first_read_ = true;
   bool has_posted_reclaimer_ ABSL_GUARDED_BY(read_mu_) = false;
   double target_length_;
@@ -639,18 +635,22 @@ class PosixEndpoint : public PosixEndpointWithFdSupport {
     return impl_->GetLocalAddress();
   }
 
-  EventEngine::FileDescriptor GetWrappedFd() override {
-    return impl_->GetWrappedFd();
-  }
+  int GetWrappedFd() override { return impl_->GetWrappedFd().fd(); }
 
   bool CanTrackErrors() override { return impl_->CanTrackErrors(); }
 
-  void Shutdown(absl::AnyInvocable<
-                void(absl::StatusOr<EventEngine::FileDescriptor> release_fd)>
+  void Shutdown(absl::AnyInvocable<void(absl::StatusOr<int> release_fd)>
                     on_release_fd) override {
     if (!shutdown_.exchange(true, std::memory_order_acq_rel)) {
       impl_->MaybeShutdown(absl::FailedPreconditionError("Endpoint closing"),
-                           std::move(on_release_fd));
+                           [on_release = std::move(on_release_fd)](
+                               absl::StatusOr<FileDescriptor> fd) mutable {
+                             if (fd.ok()) {
+                               on_release(fd->fd());
+                             } else {
+                               on_release(std::move(fd).status());
+                             }
+                           });
     }
   }
 
