@@ -23,6 +23,8 @@ namespace experimental {
 class FileDescriptor {
  public:
   bool ready() const { return fd_ > 0; }
+  void invalidate() { fd_ = -1; }
+  int fd() const { return fd_; }
 
  private:
   int fd_ = -1;

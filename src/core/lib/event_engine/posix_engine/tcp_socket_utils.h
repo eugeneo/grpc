@@ -172,28 +172,30 @@ class PosixSocketWrapper {
   // the socket before generating an interrupt for packet receive. If the call
   // succeeds, it returns the number of bytes (wait threshold) that was actually
   // set.
-  absl::StatusOr<int> SetSocketRcvLowat(int bytes);
+  absl::StatusOr<int> SetSocketRcvLowat(const SystemApi& system_api, int bytes);
 
   // Set socket to use zerocopy
-  absl::Status SetSocketZeroCopy();
+  absl::Status SetSocketZeroCopy(const SystemApi& system_api);
 
   // Set socket to non blocking mode
-  absl::Status SetSocketNonBlocking(int non_blocking);
+  absl::Status SetSocketNonBlocking(const SystemApi& system_api,
+                                    int non_blocking);
 
   // Set socket to close on exec
-  absl::Status SetSocketCloexec(int close_on_exec);
+  absl::Status SetSocketCloexec(const SystemApi& system_api, int close_on_exec);
 
   // Set socket to reuse old addresses
-  absl::Status SetSocketReuseAddr(int reuse);
+  absl::Status SetSocketReuseAddr(const SystemApi& system_api, int reuse);
 
   // Disable nagle algorithm
-  absl::Status SetSocketLowLatency(int low_latency);
+  absl::Status SetSocketLowLatency(const SystemApi& system_api,
+                                   int low_latency);
 
   // Set SO_REUSEPORT
-  absl::Status SetSocketReusePort(int reuse);
+  absl::Status SetSocketReusePort(const SystemApi& system_api, int reuse);
 
   // Set Differentiated Services Code Point (DSCP)
-  absl::Status SetSocketDscp(int dscp);
+  absl::Status SetSocketDscp(const SystemApi& system_api, int dscp);
 
   // Override default Tcp user timeout values if necessary.
   void TrySetSocketTcpUserTimeout(const SystemApi& posix_apis,
@@ -206,17 +208,19 @@ class PosixSocketWrapper {
 
   // Tries to set IP_PKTINFO if available on this platform. If IP_PKTINFO is not
   // available, returns not OK status.
-  absl::Status SetSocketIpPktInfoIfPossible();
+  absl::Status SetSocketIpPktInfoIfPossible(const SystemApi& system_api);
 
   // Tries to set IPV6_RECVPKTINFO if available on this platform. If
   // IPV6_RECVPKTINFO is not available, returns not OK status.
-  absl::Status SetSocketIpv6RecvPktInfoIfPossible();
+  absl::Status SetSocketIpv6RecvPktInfoIfPossible(const SystemApi& system_api);
 
   // Tries to set the socket's send buffer to given size.
-  absl::Status SetSocketSndBuf(int buffer_size_bytes);
+  absl::Status SetSocketSndBuf(const SystemApi& system_api,
+                               int buffer_size_bytes);
 
   // Tries to set the socket's receive buffer to given size.
-  absl::Status SetSocketRcvBuf(int buffer_size_bytes);
+  absl::Status SetSocketRcvBuf(const SystemApi& system_api,
+                               int buffer_size_bytes);
 
   // Tries to set the socket using a grpc_socket_mutator
   absl::Status SetSocketMutator(grpc_fd_usage usage,
@@ -227,16 +231,18 @@ class PosixSocketWrapper {
                                            const PosixTcpOptions& options);
 
   // Return LocalAddress as EventEngine::ResolvedAddress
-  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress();
+  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress(
+      const SystemApi& system_api);
 
   // Return PeerAddress as EventEngine::ResolvedAddress
-  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress();
+  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress(
+      const SystemApi& system_api);
 
   // Return LocalAddress as string
-  absl::StatusOr<std::string> LocalAddressString();
+  absl::StatusOr<std::string> LocalAddressString(const SystemApi& system_api);
 
   // Return PeerAddress as string
-  absl::StatusOr<std::string> PeerAddressString();
+  absl::StatusOr<std::string> PeerAddressString(const SystemApi& system_api);
 
   // An enum to keep track of IPv4/IPv6 socket modes.
 
@@ -266,7 +272,7 @@ class PosixSocketWrapper {
                                              bool is_client);
 
   // Return true if SO_REUSEPORT is supported
-  static bool IsSocketReusePortSupported();
+  static bool IsSocketReusePortSupported(const SystemApi& system_api);
 
   // Returns true if this system can create AF_INET6 sockets bound to ::1.
   // The value is probed once, and cached for the life of the process.
