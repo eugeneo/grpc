@@ -28,6 +28,7 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "src/core/lib/event_engine/extensions/system_api.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
@@ -161,11 +162,9 @@ void UnlinkIfUnixDomainSocket(
 
 class PosixSocketWrapper {
  public:
-  explicit PosixSocketWrapper(const EventEngine::FileDescriptor& fd) : fd_(fd) {
+  explicit PosixSocketWrapper(FileDescriptor fd) : fd_(fd) {
     CHECK(fd_.ready());
   }
-
-  PosixSocketWrapper() {};
 
   ~PosixSocketWrapper() = default;
 
@@ -197,7 +196,8 @@ class PosixSocketWrapper {
   absl::Status SetSocketDscp(int dscp);
 
   // Override default Tcp user timeout values if necessary.
-  void TrySetSocketTcpUserTimeout(const PosixTcpOptions& options,
+  void TrySetSocketTcpUserTimeout(const SystemApi& posix_apis,
+                                  const PosixTcpOptions& options,
                                   bool is_client);
 
   // Tries to set SO_NOSIGPIPE if available on this platform.
@@ -256,7 +256,7 @@ class PosixSocketWrapper {
   };
 
   // Returns the underlying file-descriptor.
-  EventEngine::FileDescriptor Fd() const { return fd_; }
+  FileDescriptor Fd() const { return fd_; }
 
   // Static methods
 
@@ -292,8 +292,9 @@ class PosixSocketWrapper {
 
   // The dsmode output indicates which address family was actually created.
   static absl::StatusOr<PosixSocketWrapper> CreateDualStackSocket(
-      std::function<EventEngine::FileDescriptor(int /*domain*/, int /*type*/,
-                                                int /*protocol*/)>
+      const SystemApi& posix_apis,
+      std::function<FileDescriptor(int /*domain*/, int /*type*/,
+                                   int /*protocol*/)>
           socket_factory,
       const experimental::EventEngine::ResolvedAddress& addr, int type,
       int protocol, DSMode& dsmode);
@@ -313,11 +314,11 @@ class PosixSocketWrapper {
   //
   static absl::StatusOr<PosixSocketCreateResult>
   CreateAndPrepareTcpClientSocket(
-      const PosixTcpOptions& options,
+      const SystemApi& posix_apis, const PosixTcpOptions& options,
       const EventEngine::ResolvedAddress& target_addr);
 
  private:
-  EventEngine::FileDescriptor fd_;
+  FileDescriptor fd_;
 };
 
 struct PosixSocketWrapper::PosixSocketCreateResult {

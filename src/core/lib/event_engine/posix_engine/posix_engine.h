@@ -95,6 +95,8 @@ class AsyncConnect {
   bool connect_cancelled_;
 };
 
+class EventEnginePosixApis;
+
 // A helper class to manager lifetime of the poller associated with the
 // posix EventEngine.
 class PosixEnginePollerManager
@@ -211,12 +213,14 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
                       absl::AnyInvocable<void()> closure) override;
   bool Cancel(TaskHandle handle) override;
 
+  PosixApis& GetPosixApis() const override;
+
 #ifdef GRPC_POSIX_SOCKET_TCP
-  // The posix EventEngine returned by this method would have a shared ownership
-  // of the poller and would not be in-charge of driving the poller by calling
-  // its Work(..) method. Instead its upto the test to drive the poller. The
-  // returned posix EventEngine will also not attempt to shutdown the poller
-  // since it does not own it.
+  // The posix EventEngine returned by this method would have a shared
+  // ownership of the poller and would not be in-charge of driving the
+  // poller by calling its Work(..) method. Instead its upto the test to
+  // drive the poller. The returned posix EventEngine will also not attempt
+  // to shutdown the poller since it does not own it.
   static std::shared_ptr<PosixEventEngine> MakeTestOnlyPosixEventEngine(
       std::shared_ptr<grpc_event_engine::experimental::PosixEventPoller>
           test_only_poller) {
@@ -260,6 +264,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 #ifdef GRPC_POSIX_SOCKET_TCP
   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
 #endif  // GRPC_POSIX_SOCKET_TCP
+  std::unique_ptr<EventEnginePosixApis> posix_apis_;
 };
 
 }  // namespace experimental

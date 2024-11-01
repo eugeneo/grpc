@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cstddef>
 #include <memory>
 
 #include "absl/status/status.h"
@@ -31,7 +32,9 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
+#include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
+#include "src/core/lib/event_engine/query_extensions.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
 #include "src/core/util/useful.h"
 
@@ -98,6 +101,15 @@ int CompareTestMutator(grpc_socket_mutator* a, grpc_socket_mutator* b) {
   return grpc_core::QsortCompare(ma->option_value, mb->option_value);
 }
 
+EventEngineSupportsFdExtension::PosixApis* GetPosixApis() {
+  auto ee = GetDefaultEventEngine();
+  auto fd_extension = QueryExtension<EventEngineSupportsFdExtension>(ee.get());
+  if (fd_extension != nullptr) {
+    return &fd_extension->GetPosixApis();
+  }
+  return nullptr;
+}
+
 const grpc_socket_mutator_vtable mutator_vtable = {MutateFd, CompareTestMutator,
                                                    DestroyTestMutator, nullptr};
 
@@ -107,15 +119,15 @@ const grpc_socket_mutator_vtable mutator_vtable2 = {
 }  // namespace
 
 TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
-  auto test_with_vtable = [](const grpc_socket_mutator_vtable* vtable) {
-    EventEngine::FileDescriptor sock =
-        EventEngine::FileDescriptor::MakeSocket(PF_INET, SOCK_STREAM, 0);
+  auto posix_api = GetPosixApis();
+  auto test_with_vtable = [=](const grpc_socket_mutator_vtable* vtable) {
+    EventEngineFd sock = posix_api->socket(PF_INET, SOCK_STREAM, 0);
     if (!sock.ready()) {
       // Try ipv6
-      sock = EventEngine::FileDescriptor::MakeSocket(AF_INET6, SOCK_STREAM, 0);
+      sock = posix_api->socket(AF_INET6, SOCK_STREAM, 0);
     }
     EXPECT_TRUE(sock.ready());
-    PosixSocketWrapper posix_sock(sock);
+    PosixSocketWrapper posix_sock(sock, posix_api);
     struct test_socket_mutator mutator;
     grpc_socket_mutator_init(&mutator.base, vtable);
 

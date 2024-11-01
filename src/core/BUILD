@@ -83,6 +83,7 @@ grpc_cc_library(
         "lib/event_engine/extensions/can_track_errors.h",
         "lib/event_engine/extensions/chaotic_good_extension.h",
         "lib/event_engine/extensions/supports_fd.h",
+        "lib/event_engine/extensions/system_api.h",
         "lib/event_engine/extensions/tcp_trace.h",
     ],
     external_deps = [
@@ -2412,6 +2413,8 @@ grpc_cc_library(
         "absl/types:optional",
     ],
     deps = [
+        "event_engine_extensions",
+        "event_engine_query_extensions",
         "event_engine_tcp_socket_utils",
         "iomgr_port",
         "resource_quota",

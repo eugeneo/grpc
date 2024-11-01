@@ -170,7 +170,6 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
 
   class FileDescriptor {
    public:
-    static FileDescriptor MakeSocket(int domain, int type, int protocol);
     static FileDescriptor MakeEventFd(int initval, int flags);
     //     return absl::Status(absl::StatusCode::kInternal,
     // absl::StrCat("pipe: ", grpc_core::StrError(errno)));

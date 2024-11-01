@@ -93,6 +93,9 @@ class TimerForkCallbackMethods {
 
 }  // namespace
 
+class EventEnginePosixApis final
+    : public EventEngineSupportsFdExtension::PosixApis {};
+
 #ifdef GRPC_POSIX_SOCKET_TCP
 
 void AsyncConnect::Start(EventEngine::Duration timeout) {
@@ -735,6 +738,11 @@ PosixEventEngine::CreatePosixListener(
   grpc_core::Crash(
       "EventEngine::CreateListener is not supported on this platform");
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+}
+
+EventEngineSupportsFdExtension::PosixApis& PosixEventEngine::GetPosixApis()
+    const {
+  return *posix_apis_;
 }
 
 }  // namespace experimental
