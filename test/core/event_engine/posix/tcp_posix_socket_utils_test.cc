@@ -121,7 +121,7 @@ const grpc_socket_mutator_vtable mutator_vtable2 = {
 TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
   auto posix_api = GetPosixApis();
   auto test_with_vtable = [=](const grpc_socket_mutator_vtable* vtable) {
-    EventEngineFd sock = posix_api->socket(PF_INET, SOCK_STREAM, 0);
+    EventEngine sock = posix_api->socket(PF_INET, SOCK_STREAM, 0);
     if (!sock.ready()) {
       // Try ipv6
       sock = posix_api->socket(AF_INET6, SOCK_STREAM, 0);

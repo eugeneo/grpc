@@ -162,7 +162,9 @@ void UnlinkIfUnixDomainSocket(
 
 class PosixSocketWrapper {
  public:
-  explicit PosixSocketWrapper(FileDescriptor fd) : fd_(fd) {
+  explicit PosixSocketWrapper(
+      EventEngine::FileDescriptorileDescriptorileDescriptor fd)
+      : fd_(fd) {
     CHECK(fd_.ready());
   }
 
@@ -261,8 +263,9 @@ class PosixSocketWrapper {
     DSMODE_DUALSTACK
   };
 
-  // Returns the underlying file-descriptor.
-  FileDescriptor Fd() const { return fd_; }
+  // Returns the
+  // undeEventEngine::FileDescriptorventEngine::FileDescriptorventEngine::FileDescriptor
+  // Fd() const { return fd_; }
 
   // Static methods
 
