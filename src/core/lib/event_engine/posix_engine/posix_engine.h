@@ -171,13 +171,13 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   ~PosixEventEngine() override;
 
   std::unique_ptr<EventEngine::Endpoint> CreatePosixEndpointFromFd(
-      EventEngine::FileDescriptor fd, const EndpointConfig& config,
+      int fd, const EndpointConfig& config,
       MemoryAllocator memory_allocator) override;
   std::unique_ptr<EventEngine::Endpoint> CreateEndpointFromFd(
       int fd, const EndpointConfig& config) override;
 
   ConnectionHandle CreateEndpointFromUnconnectedFd(
-      EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
+      int fd, EventEngine::OnConnectCallback on_connect,
       const EventEngine::ResolvedAddress& addr, const EndpointConfig& config,
       MemoryAllocator memory_allocator, EventEngine::Duration timeout) override;
 
@@ -212,8 +212,6 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   TaskHandle RunAfter(Duration when,
                       absl::AnyInvocable<void()> closure) override;
   bool Cancel(TaskHandle handle) override;
-
-  PosixApis& GetPosixApis() const override;
 
 #ifdef GRPC_POSIX_SOCKET_TCP
   // The posix EventEngine returned by this method would have a shared
@@ -264,7 +262,6 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 #ifdef GRPC_POSIX_SOCKET_TCP
   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
 #endif  // GRPC_POSIX_SOCKET_TCP
-  std::unique_ptr<EventEnginePosixApis> posix_apis_;
 };
 
 }  // namespace experimental

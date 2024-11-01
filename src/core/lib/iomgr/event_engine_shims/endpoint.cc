@@ -215,15 +215,7 @@ class EventEngineEndpointWrapper {
       auto* supports_fd =
           QueryExtension<EndpointSupportsFdExtension>(endpoint_.get());
       if (supports_fd != nullptr && fd_ > 0 && on_release_fd_) {
-        supports_fd->Shutdown(
-            [cb = std::move(on_release_fd_)](
-                absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
-              if (fd.ok()) {
-                cb(fd->file_descriptor_for_iomgr());
-              } else {
-                cb(std::move(fd).status());
-              }
-            });
+        supports_fd->Shutdown(std::move(on_release_fd_));
       }
       OnShutdownInternal();
     }
@@ -251,16 +243,8 @@ class EventEngineEndpointWrapper {
         Ref();
         if (shutdown_ref_.fetch_sub(1, std::memory_order_acq_rel) ==
             kShutdownBit + 1) {
-          if (supports_fd != nullptr && fd_ && on_release_fd_) {
-            supports_fd->Shutdown(
-                [cb = std::move(on_release_fd_)](
-                    absl::StatusOr<EventEngine::FileDescriptor> fd) mutable {
-                  if (fd.ok()) {
-                    cb(fd->file_descriptor_for_iomgr());
-                  } else {
-                    cb(std::move(fd).status());
-                  }
-                });
+          if (supports_fd != nullptr && fd_ > 0 && on_release_fd_) {
+            supports_fd->Shutdown(std::move(on_release_fd_));
           }
           OnShutdownInternal();
         }
@@ -418,7 +402,7 @@ EventEngineEndpointWrapper::EventEngineEndpointWrapper(
   auto* supports_fd =
       QueryExtension<EndpointSupportsFdExtension>(endpoint_.get());
   if (supports_fd != nullptr) {
-    fd_ = supports_fd->GetWrappedFd().file_descriptor_for_iomgr();
+    fd_ = supports_fd->GetWrappedFd();
   } else {
     fd_ = -1;
   }

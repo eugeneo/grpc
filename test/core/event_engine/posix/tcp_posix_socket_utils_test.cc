@@ -101,13 +101,9 @@ int CompareTestMutator(grpc_socket_mutator* a, grpc_socket_mutator* b) {
   return grpc_core::QsortCompare(ma->option_value, mb->option_value);
 }
 
-EventEngineSupportsFdExtension::PosixApis* GetPosixApis() {
+SystemApi* GetSystemApis() {
   auto ee = GetDefaultEventEngine();
-  auto fd_extension = QueryExtension<EventEngineSupportsFdExtension>(ee.get());
-  if (fd_extension != nullptr) {
-    return &fd_extension->GetPosixApis();
-  }
-  return nullptr;
+  return QueryExtension<SystemApi>(ee.get());
 }
 
 const grpc_socket_mutator_vtable mutator_vtable = {MutateFd, CompareTestMutator,
@@ -119,15 +115,15 @@ const grpc_socket_mutator_vtable mutator_vtable2 = {
 }  // namespace
 
 TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
-  auto posix_api = GetPosixApis();
+  auto system_api = GetSystemApis();
   auto test_with_vtable = [=](const grpc_socket_mutator_vtable* vtable) {
-    EventEngineFd sock = posix_api->socket(PF_INET, SOCK_STREAM, 0);
+    FileDescriptor sock = system_api->socket(PF_INET, SOCK_STREAM, 0);
     if (!sock.ready()) {
       // Try ipv6
-      sock = posix_api->socket(AF_INET6, SOCK_STREAM, 0);
+      sock = system_api->socket(AF_INET6, SOCK_STREAM, 0);
     }
     EXPECT_TRUE(sock.ready());
-    PosixSocketWrapper posix_sock(sock, posix_api);
+    PosixSocketWrapper posix_sock(sock);
     struct test_socket_mutator mutator;
     grpc_socket_mutator_init(&mutator.base, vtable);
 
@@ -157,17 +153,18 @@ TEST(TcpPosixSocketUtilsTest, SocketMutatorTest) {
             .SetSocketMutator(GRPC_FD_CLIENT_CONNECTION_USAGE,
                               reinterpret_cast<grpc_socket_mutator*>(&mutator))
             .ok());
-    sock.close();
+    system_api->close(sock);
   };
   test_with_vtable(&mutator_vtable);
   test_with_vtable(&mutator_vtable2);
 }
 
 TEST(TcpPosixSocketUtilsTest, SocketOptionsTest) {
-  auto sock = EventEngine::FileDescriptor::MakeSocket(PF_INET, SOCK_STREAM, 0);
+  auto system_api = GetSystemApis();
+  auto sock = system_api->socket(PF_INET, SOCK_STREAM, 0);
   if (!sock.ready()) {
     // Try ipv6
-    sock = EventEngine::FileDescriptor::MakeSocket(AF_INET6, SOCK_STREAM, 0);
+    sock = system_api->socket(AF_INET6, SOCK_STREAM, 0);
   }
   EXPECT_TRUE(sock.ready());
   PosixSocketWrapper posix_sock(sock);
@@ -179,7 +176,7 @@ TEST(TcpPosixSocketUtilsTest, SocketOptionsTest) {
   EXPECT_TRUE(posix_sock.SetSocketReuseAddr(0).ok());
   EXPECT_TRUE(posix_sock.SetSocketLowLatency(1).ok());
   EXPECT_TRUE(posix_sock.SetSocketLowLatency(0).ok());
-  sock.close();
+  system_api->close(sock);
 }
 
 }  // namespace experimental
