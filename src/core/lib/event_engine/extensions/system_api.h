@@ -34,7 +34,11 @@ class SystemApi {
  public:
   virtual ~SystemApi() = default;
 
+  // Factories
   virtual FileDescriptor socket(int domain, int type, int protocol) const = 0;
+
+  virtual int bind(FileDescriptor fd, const struct sockaddr* addr,
+                   socklen_t addrlen) const = 0;
   virtual void close(FileDescriptor fd) const = 0;
   virtual int fcntl(FileDescriptor fd, int op, int args) const = 0;
   virtual int getsockopt(FileDescriptor fd, int level, int optname,
@@ -43,6 +47,7 @@ class SystemApi {
                           socklen_t* addrlen) const = 0;
   virtual int getpeername(FileDescriptor fd, struct sockaddr* addr,
                           socklen_t* addrlen) const = 0;
+  virtual int listen(FileDescriptor fd, int backlog) const = 0;
   virtual int setsockopt(FileDescriptor fd, int level, int optname,
                          const void* optval, socklen_t optlen) const = 0;
 };

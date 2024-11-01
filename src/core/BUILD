@@ -2447,6 +2447,7 @@ grpc_cc_library(
         "absl/strings",
     ],
     deps = [
+        "event_engine_extensions",
         "event_engine_tcp_socket_utils",
         "iomgr_port",
         "posix_event_engine_tcp_socket_utils",

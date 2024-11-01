@@ -161,6 +161,8 @@ void UnlinkIfUnixDomainSocket(
 
 class PosixSocketWrapper {
  public:
+  PosixSocketWrapper() = default;
+
   explicit PosixSocketWrapper(FileDescriptor fd) : fd_(fd) {
     CHECK(fd_.ready());
   }

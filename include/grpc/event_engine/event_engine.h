@@ -200,8 +200,6 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     void invalidate() { fd_ = -1; }
     int getsockname(struct sockaddr* addr, socklen_t* addrlen);
     int getpeername(struct sockaddr* addr, socklen_t* addrlen);
-    int bind(const struct sockaddr* addr, socklen_t addrlen);
-    int listen(int backlog);
     ssize_t read(void* buf, size_t nbyte);
 #ifdef GRPC_LINUX_EPOLL
     int epoll_ctl(int op, int fd, struct epoll_event* event);
