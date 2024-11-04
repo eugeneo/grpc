@@ -522,7 +522,7 @@ class PosixEndpointImpl : public grpc_core::RefCounted<PosixEndpointImpl> {
                            ssize_t* sent_length, int* saved_errno,
                            int additional_flags);
   absl::Status TcpAnnotateError(absl::Status src_error) const;
-  const SystemApi& system_api() const;
+  const SystemApi& get_system_api() const;
   //  {
   //   auto api = QueryExtension<SystemApi>(*engine_);
   //   DCHECK_NE(api, nullptr);

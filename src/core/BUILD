@@ -2300,6 +2300,7 @@ grpc_cc_library(
         "absl/log:log",
     ],
     deps = [
+        "event_engine_extensions",
         "iomgr_port",
         "strerror",
         "//:event_engine_base_hdrs",
@@ -2322,6 +2323,7 @@ grpc_cc_library(
         "absl/types:optional",
     ],
     deps = [
+        "event_engine_extensions",
         "iomgr_port",
         "posix_event_engine_internal_errqueue",
         "//:event_engine_base_hdrs",

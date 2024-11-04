@@ -330,7 +330,7 @@ bool PosixEndpointImpl::TcpDoRead(absl::Status& status) {
     msg.msg_flags = 0;
 
     do {
-      read_bytes = system_api().recvmsg(fd_, &msg, 0);
+      read_bytes = get_system_api().recvmsg(fd_, &msg, 0);
     } while (read_bytes < 0 && errno == EINTR);
 
     if (read_bytes < 0 && errno == EAGAIN) {
@@ -505,7 +505,7 @@ void PosixEndpointImpl::UpdateRcvLowat() {
   if (set_rcvlowat_ == remaining) {
     return;
   }
-  auto result = sock_.SetSocketRcvLowat(system_api(), remaining);
+  auto result = sock_.SetSocketRcvLowat(get_system_api(), remaining);
   if (result.ok()) {
     set_rcvlowat_ = *result;
   } else {
@@ -704,7 +704,7 @@ bool PosixEndpointImpl::ProcessErrors() {
   while (true) {
     msg.msg_controllen = sizeof(aligned_buf.rbuf);
     do {
-      r = system_api().recvmsg(fd_, &msg, MSG_ERRQUEUE);
+      r = get_system_api().recvmsg(fd_, &msg, MSG_ERRQUEUE);
       saved_errno = errno;
     } while (r < 0 && saved_errno == EINTR);
 
@@ -840,11 +840,11 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
                                             ssize_t* sent_length,
                                             int* saved_errno,
                                             int additional_flags) {
-  const SystemApi& systemapi = system_api();
+  const SystemApi& system_api = get_system_api();
   if (!socket_ts_enabled_) {
     uint32_t opt = kTimestampingSocketOptions;
-    if (systemapi.setsockopt(fd_, SOL_SOCKET, SO_TIMESTAMPING,
-                             static_cast<void*>(&opt), sizeof(opt)) != 0) {
+    if (system_api.setsockopt(fd_, SOL_SOCKET, SO_TIMESTAMPING,
+                              static_cast<void*>(&opt), sizeof(opt)) != 0) {
       return false;
     }
     bytes_counter_ = -1;
@@ -864,11 +864,12 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
   msg->msg_controllen = CMSG_SPACE(sizeof(uint32_t));
 
   // If there was an error on sendmsg the logic in tcp_flush will handle it.
-  ssize_t length = TcpSend(systemapi, fd_, msg, saved_errno, additional_flags);
+  ssize_t length = TcpSend(system_api, fd_, msg, saved_errno, additional_flags);
   *sent_length = length;
   // Only save timestamps if all the bytes were taken by sendmsg.
   if (sending_length == static_cast<size_t>(length)) {
-    traced_buffers_.AddNewEntry(static_cast<uint32_t>(bytes_counter_ + length),
+    traced_buffers_.AddNewEntry(system_api,
+                                static_cast<uint32_t>(bytes_counter_ + length),
                                 fd_, outgoing_buffer_arg_);
     outgoing_buffer_arg_ = nullptr;
   }
@@ -961,7 +962,7 @@ bool PosixEndpointImpl::DoFlushZerocopy(TcpZerocopySendRecord* record,
       msg.msg_control = nullptr;
       msg.msg_controllen = 0;
       sent_length =
-          TcpSend(system_api(), fd_, &msg, &saved_errno, MSG_ZEROCOPY);
+          TcpSend(get_system_api(), fd_, &msg, &saved_errno, MSG_ZEROCOPY);
     }
     if (tcp_zerocopy_send_ctx_->UpdateZeroCopyOptMemStateAfterSend(
             saved_errno == ENOBUFS, constrained) ||
@@ -1078,7 +1079,7 @@ bool PosixEndpointImpl::TcpFlush(absl::Status& status) {
     if (!tried_sending_message) {
       msg.msg_control = nullptr;
       msg.msg_controllen = 0;
-      sent_length = TcpSend(system_api(), fd_, &msg, &saved_errno);
+      sent_length = TcpSend(get_system_api(), fd_, &msg, &saved_errno);
     }
 
     if (sent_length < 0) {
@@ -1266,15 +1267,15 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
   fd_ = handle_->WrappedFd();
   PosixSocketWrapper sock(fd_);
   CHECK(options.resource_quota != nullptr);
-  auto peer_addr_string = sock.PeerAddressString(system_api());
+  auto peer_addr_string = sock.PeerAddressString(get_system_api());
   mem_quota_ = options.resource_quota->memory_quota();
   memory_owner_ = mem_quota_->CreateMemoryOwner();
   self_reservation_ = memory_owner_.MakeReservation(sizeof(PosixEndpointImpl));
-  auto local_address = sock.LocalAddress(system_api());
+  auto local_address = sock.LocalAddress(get_system_api());
   if (local_address.ok()) {
     local_address_ = *local_address;
   }
-  auto peer_address = sock.PeerAddress(system_api());
+  auto peer_address = sock.PeerAddress(get_system_api());
   if (peer_address.ok()) {
     peer_address_ = *peer_address;
   }
@@ -1298,8 +1299,8 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
                  << "value.";
     } else {
       const int enable = 1;
-      if (system_api().setsockopt(fd_, SOL_SOCKET, SO_ZEROCOPY, &enable,
-                                  sizeof(enable)) != 0) {
+      if (get_system_api().setsockopt(fd_, SOL_SOCKET, SO_ZEROCOPY, &enable,
+                                      sizeof(enable)) != 0) {
         zerocopy_enabled = false;
         LOG(ERROR) << "Failed to set zerocopy options on the socket.";
       }
@@ -1317,7 +1318,8 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       options.tcp_tx_zerocopy_send_bytes_threshold);
 #ifdef GRPC_HAVE_TCP_INQ
   int one = 1;
-  if (system_api().setsockopt(fd_, SOL_TCP, TCP_INQ, &one, sizeof(one)) == 0) {
+  if (get_system_api().setsockopt(fd_, SOL_TCP, TCP_INQ, &one, sizeof(one)) ==
+      0) {
     inq_capable_ = true;
   } else {
     VLOG(2) << "cannot set inq fd=" << fd_.fd() << " errno=" << errno;
