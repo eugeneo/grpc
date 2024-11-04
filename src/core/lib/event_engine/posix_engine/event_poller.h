@@ -84,6 +84,8 @@ class EventHandle {
   virtual bool IsHandleShutdown() = 0;
   // Returns the poller which was used to create this handle.
   virtual PosixEventPoller* Poller() = 0;
+  // Closes file descriptor
+  virtual void CloseFd() = 0;
   virtual ~EventHandle() = default;
 };
 

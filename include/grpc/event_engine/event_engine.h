@@ -194,7 +194,6 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
                    socklen_t* optlen) const;
     int setsockopt(int level, int optname, const void* optval,
                    socklen_t optlen) const;
-    void shutdown(int how);
     int ioctl(int op, void* arg);
     int fcntl(int op, int args);
     void invalidate() { fd_ = -1; }

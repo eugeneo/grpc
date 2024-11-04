@@ -56,6 +56,7 @@ class SystemApi {
                          const void* optval, socklen_t optlen) const = 0;
   virtual ssize_t sendmsg(FileDescriptor fd, const struct msghdr* message,
                           int flags) const = 0;
+  virtual void shutdown(FileDescriptor fd, int how) const = 0;
 };
 
 }  // namespace experimental
