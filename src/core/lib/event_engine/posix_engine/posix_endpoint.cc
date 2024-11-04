@@ -28,7 +28,6 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
-#include <type_traits>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
@@ -41,7 +40,6 @@
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/internal_errqueue.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
-#include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/lib/experiments/experiments.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
@@ -52,7 +50,6 @@
 #include "src/core/util/status_helper.h"
 #include "src/core/util/strerror.h"
 #include "src/core/util/sync.h"
-#include "src/core/util/time.h"
 
 #ifdef GRPC_POSIX_SOCKET_TCP
 #ifdef GRPC_LINUX_ERRQUEUE
@@ -278,7 +275,7 @@ void PosixEndpointImpl::FinishEstimate() {
 
 absl::Status PosixEndpointImpl::TcpAnnotateError(absl::Status src_error) const {
   grpc_core::StatusSetInt(&src_error, grpc_core::StatusIntProperty::kFd,
-                          handle_->WrappedFd().id());
+                          handle_->WrappedFd().fd());
   grpc_core::StatusSetInt(&src_error, grpc_core::StatusIntProperty::kRpcStatus,
                           GRPC_STATUS_UNAVAILABLE);
   return src_error;
