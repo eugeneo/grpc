@@ -1161,6 +1161,7 @@ let package = Package(
         "src/core/lib/event_engine/extensions/can_track_errors.h",
         "src/core/lib/event_engine/extensions/chaotic_good_extension.h",
         "src/core/lib/event_engine/extensions/supports_fd.h",
+        "src/core/lib/event_engine/extensions/system_api.h",
         "src/core/lib/event_engine/extensions/tcp_trace.h",
         "src/core/lib/event_engine/forkable.cc",
         "src/core/lib/event_engine/forkable.h",
