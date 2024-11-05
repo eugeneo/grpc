@@ -46,6 +46,7 @@
 #include <grpc/support/port_platform.h>
 
 #include "absl/status/status.h"
+#include "src/core/lib/event_engine/extensions/system_api.h"
 
 namespace grpc_event_engine {
 namespace experimental {
@@ -56,20 +57,19 @@ class WakeupFd {
   virtual absl::Status Wakeup() = 0;
   virtual ~WakeupFd() = default;
 
-  EventEngine::FileDescriptor ReadFd() { return read_fd_; }
-  EventEngine::FileDescriptor WriteFd() { return write_fd_; }
+  FileDescriptor ReadFd() { return read_fd_; }
+  FileDescriptor WriteFd() { return write_fd_; }
 
  protected:
   WakeupFd() = default;
-  void SetWakeupFds(EventEngine::FileDescriptor read_fd,
-                    EventEngine::FileDescriptor write_fd) {
+  void SetWakeupFds(FileDescriptor read_fd, FileDescriptor write_fd) {
     read_fd_ = read_fd;
     write_fd_ = write_fd;
   }
 
  private:
-  EventEngine::FileDescriptor read_fd_;
-  EventEngine::FileDescriptor write_fd_;
+  FileDescriptor read_fd_;
+  FileDescriptor write_fd_;
 };
 
 }  // namespace experimental

@@ -38,9 +38,8 @@ namespace experimental {
 #ifdef GRPC_LINUX_EVENTFD
 
 absl::Status EventFdWakeupFd::Init() {
-  EventEngine::FileDescriptor read_fd =
-      EventEngine::FileDescriptor::MakeEventFd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  EventEngine::FileDescriptor write_fd;
+  FileDescriptor read_fd = system_api_.eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  FileDescriptor write_fd;
   if (!read_fd.ready()) {
     return absl::Status(absl::StatusCode::kInternal,
                         absl::StrCat("eventfd: ", grpc_core::StrError(errno)));
@@ -52,7 +51,7 @@ absl::Status EventFdWakeupFd::Init() {
 absl::Status EventFdWakeupFd::ConsumeWakeup() {
   int err;
   do {
-    err = ReadFd().eventfd_read();
+    err = system_api_.eventfd_read(ReadFd());
   } while (err < 0 && errno == EINTR);
   if (err < 0 && errno != EAGAIN) {
     return absl::Status(
@@ -65,7 +64,7 @@ absl::Status EventFdWakeupFd::ConsumeWakeup() {
 absl::Status EventFdWakeupFd::Wakeup() {
   int err;
   do {
-    err = ReadFd().eventfd_write(1);
+    err = system_api_.eventfd_write(ReadFd(), 1);
   } while (err < 0 && errno == EINTR);
   if (err < 0) {
     return absl::Status(
@@ -77,20 +76,24 @@ absl::Status EventFdWakeupFd::Wakeup() {
 
 EventFdWakeupFd::~EventFdWakeupFd() {
   if (ReadFd().ready()) {
-    ReadFd().close();
+    system_api_.close(ReadFd());
   }
 }
 
 bool EventFdWakeupFd::IsSupported() {
-  EventFdWakeupFd event_fd_wakeup_fd;
-  return event_fd_wakeup_fd.Init().ok();
+  int fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  if (fd > 0) {
+    close(fd);
+    return true;
+  }
+  return false;
 }
 
 absl::StatusOr<std::unique_ptr<WakeupFd>>
-EventFdWakeupFd::CreateEventFdWakeupFd() {
+EventFdWakeupFd::CreateEventFdWakeupFd(const SystemApi& system_api) {
   static bool kIsEventFdWakeupFdSupported = EventFdWakeupFd::IsSupported();
   if (kIsEventFdWakeupFdSupported) {
-    auto event_fd_wakeup_fd = std::make_unique<EventFdWakeupFd>();
+    auto event_fd_wakeup_fd = std::make_unique<EventFdWakeupFd>(system_api);
     auto status = event_fd_wakeup_fd->Init();
     if (status.ok()) {
       return std::unique_ptr<WakeupFd>(std::move(event_fd_wakeup_fd));

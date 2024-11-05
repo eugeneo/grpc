@@ -174,10 +174,7 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
     //     return absl::Status(absl::StatusCode::kInternal,
     // absl::StrCat("pipe: ", grpc_core::StrError(errno)));
     static FileDescriptor FromIomgr(int fd);
-    static absl::StatusOr<std::pair<FileDescriptor, FileDescriptor>> MakePipe();
     static FileDescriptor FromAresSocket(int ares_socket);
-    static FileDescriptor epoll_create(int size);
-    static FileDescriptor epoll_create1(int flags);
     static int socketpair(int domain, int type, int protocol,
                           absl::Span<FileDescriptor> sv);
 
@@ -203,9 +200,6 @@ class EventEngine : public std::enable_shared_from_this<EventEngine>,
 #ifdef GRPC_LINUX_EPOLL
     int epoll_ctl(int op, int fd, struct epoll_event* event);
 #endif
-    int epoll_wait(void* events, int maxevents, int timeout);
-    int eventfd_read();  // No need for output fd
-    int eventfd_write(uint64_t counter);
     EventEngine::FileDescriptor accept(struct sockaddr* address,
                                        socklen_t* address_len);
     ssize_t write(const void* buf, size_t nbyte);

@@ -93,8 +93,8 @@ class PosixEventPoller : public grpc_event_engine::experimental::Poller,
                          public Forkable {
  public:
   // Return an opaque handle to perform actions on the provided file descriptor.
-  virtual EventHandle* CreateHandle(const FileDescriptor& fd,
-                                    absl::string_view name, bool track_err) = 0;
+  virtual EventHandle* CreateHandle(FileDescriptor fd, absl::string_view name,
+                                    bool track_err) = 0;
   virtual bool CanTrackErrors() const = 0;
   virtual std::string Name() = 0;
   // Shuts down and deletes the poller. It is legal to call this function

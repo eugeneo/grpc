@@ -213,6 +213,9 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
                       absl::AnyInvocable<void()> closure) override;
   bool Cancel(TaskHandle handle) override;
 
+  // TODO(eostroukhov): make it non-virtual
+  const SystemApi& GetSystemApi();
+
 #ifdef GRPC_POSIX_SOCKET_TCP
   // The posix EventEngine returned by this method would have a shared
   // ownership of the poller and would not be in-charge of driving the
