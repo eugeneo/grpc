@@ -93,6 +93,9 @@ class TimerForkCallbackMethods {
 
 }  // namespace
 
+class EventEnginePosixApis final
+    : public EventEngineSupportsFdExtension::PosixApis {};
+
 #ifdef GRPC_POSIX_SOCKET_TCP
 
 void AsyncConnect::Start(EventEngine::Duration timeout) {
@@ -189,8 +192,8 @@ void AsyncConnect::OnWritable(absl::Status status)
 
   do {
     so_error_size = sizeof(so_error);
-    err = getsockopt(fd->WrappedFd(), SOL_SOCKET, SO_ERROR, &so_error,
-                     &so_error_size);
+    err = fd->WrappedFd().getsockopt(SOL_SOCKET, SO_ERROR, &so_error,
+                                     &so_error_size);
   } while (err < 0 && errno == EINTR);
   if (err < 0) {
     status = absl::FailedPreconditionError(
@@ -240,14 +243,14 @@ void AsyncConnect::OnWritable(absl::Status status)
 
 EventEngine::ConnectionHandle
 PosixEventEngine::CreateEndpointFromUnconnectedFdInternal(
-    int fd, EventEngine::OnConnectCallback on_connect,
+    EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
     const EventEngine::ResolvedAddress& addr,
     const PosixTcpOptions& tcp_options, MemoryAllocator memory_allocator,
     EventEngine::Duration timeout) {
   int err;
   int connect_errno;
   do {
-    err = connect(fd, addr.address(), addr.size());
+    err = fd.connect(addr.address(), addr.size());
   } while (err < 0 && errno == EINTR);
   connect_errno = (err < 0) ? errno : 0;
 
@@ -638,7 +641,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
     return EventEngine::ConnectionHandle::kInvalid;
   }
   return CreateEndpointFromUnconnectedFdInternal(
-      (*socket).sock.Fd(), std::move(on_connect), (*socket).mapped_target_addr,
+      socket->sock.Fd(), std::move(on_connect), (*socket).mapped_target_addr,
       options, std::move(memory_allocator), timeout);
 #else   // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::Crash("EventEngine::Connect is not supported on this platform");
@@ -646,7 +649,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
 }
 
 EventEngine::ConnectionHandle PosixEventEngine::CreateEndpointFromUnconnectedFd(
-    int fd, EventEngine::OnConnectCallback on_connect,
+    EventEngine::FileDescriptor fd, EventEngine::OnConnectCallback on_connect,
     const EventEngine::ResolvedAddress& addr, const EndpointConfig& config,
     MemoryAllocator memory_allocator, EventEngine::Duration timeout) {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
@@ -661,11 +664,11 @@ EventEngine::ConnectionHandle PosixEventEngine::CreateEndpointFromUnconnectedFd(
 }
 
 std::unique_ptr<EventEngine::Endpoint>
-PosixEventEngine::CreatePosixEndpointFromFd(int fd,
+PosixEventEngine::CreatePosixEndpointFromFd(FileDescriptor fd,
                                             const EndpointConfig& config,
                                             MemoryAllocator memory_allocator) {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
-  DCHECK_GT(fd, 0);
+  DCHECK(fd.ready());
   PosixEventPoller* poller = poller_manager_->Poller();
   DCHECK_NE(poller, nullptr);
   EventHandle* handle =
@@ -686,12 +689,12 @@ std::unique_ptr<EventEngine::Endpoint> PosixEventEngine::CreateEndpointFromFd(
   MemoryAllocator allocator;
   if (options.memory_allocator_factory != nullptr) {
     return CreatePosixEndpointFromFd(
-        fd, config,
+        EventEngine::FileDescriptor::FromIomgr(fd), config,
         options.memory_allocator_factory->CreateMemoryAllocator(
             absl::StrCat("allocator:", fd)));
   }
   return CreatePosixEndpointFromFd(
-      fd, config,
+      EventEngine::FileDescriptor::FromIomgr(fd), config,
       options.resource_quota->memory_quota()->CreateMemoryAllocator(
           absl::StrCat("allocator:", fd)));
 }
@@ -705,9 +708,9 @@ PosixEventEngine::CreateListener(
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   PosixEventEngineWithFdSupport::PosixAcceptCallback posix_on_accept =
       [on_accept_cb = std::move(on_accept)](
-          int /*listener_fd*/, std::unique_ptr<EventEngine::Endpoint> ep,
-          bool /*is_external*/, MemoryAllocator allocator,
-          SliceBuffer* /*pending_data*/) mutable {
+          EventEngine::FileDescriptor /*listener_fd*/,
+          std::unique_ptr<EventEngine::Endpoint> ep, bool /*is_external*/,
+          MemoryAllocator allocator, SliceBuffer* /*pending_data*/) mutable {
         on_accept_cb(std::move(ep), std::move(allocator));
       };
   return std::make_unique<PosixEngineListener>(
@@ -735,6 +738,11 @@ PosixEventEngine::CreatePosixListener(
   grpc_core::Crash(
       "EventEngine::CreateListener is not supported on this platform");
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+}
+
+EventEngineSupportsFdExtension::PosixApis& PosixEventEngine::GetPosixApis()
+    const {
+  return *posix_apis_;
 }
 
 }  // namespace experimental

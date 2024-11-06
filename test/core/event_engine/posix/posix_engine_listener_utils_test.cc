@@ -92,7 +92,7 @@ TEST(PosixEngineListenerUtils, ListenerContainerAddWildcardAddressesTest) {
       EXPECT_EQ(ResolvedAddressToNormalizedString((*socket).addr).value(),
                 absl::StrCat("0.0.0.0:", std::to_string(port)));
     }
-    close(socket->sock.Fd());
+    socket->sock.Fd().close();
   }
 }
 
@@ -135,7 +135,7 @@ TEST(PosixEngineListenerUtils, ListenerContainerAddAllLocalAddressesTest) {
     ASSERT_TRUE((*socket).addr.address()->sa_family == AF_INET6 ||
                 (*socket).addr.address()->sa_family == AF_INET);
     EXPECT_EQ(ResolvedAddressGetPort((*socket).addr), port);
-    close(socket->sock.Fd());
+    socket->sock.Fd().close();
   }
 }
 #endif  // GRPC_HAVE_IFADDRS
