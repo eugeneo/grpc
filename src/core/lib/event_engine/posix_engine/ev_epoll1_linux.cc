@@ -362,7 +362,7 @@ Epoll1Poller::Epoll1Poller(Scheduler* scheduler, const SystemApi& system_api)
   CHECK(g_epoll_set_.epfd.ready());
   GRPC_TRACE_LOG(event_engine_poller, INFO)
       << "grpc epoll fd: " << g_epoll_set_.epfd.fd();
-  struct epoll_event ev{};
+  struct epoll_event ev {};
   ev.events = static_cast<uint32_t>(EPOLLIN | EPOLLET);
   ev.data.ptr = wakeup_fd_.get();
   CHECK(get_system_api().epoll_ctl(g_epoll_set_.epfd, EPOLL_CTL_ADD,
