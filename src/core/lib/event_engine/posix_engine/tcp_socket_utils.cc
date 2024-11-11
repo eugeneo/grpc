@@ -871,35 +871,43 @@ PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
 
 #else  // GRPC_POSIX_SOCKET_UTILS_COMMON
 
-absl::StatusOr<int> PosixSocketWrapper::SetSocketRcvLowat(int /*bytes*/) {
+absl::StatusOr<int> PosixSocketWrapper::SetSocketRcvLowat(
+    const SystemApi& /*system_api*/, int /*bytes*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketZeroCopy() {
+absl::Status PosixSocketWrapper::SetSocketZeroCopy(
+    const SystemApi& /*system_api*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketNonBlocking(int /*non_blocking*/) {
+absl::Status PosixSocketWrapper::SetSocketNonBlocking(
+    const SystemApi& /*system_api*/, int /*non_blocking*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketCloexec(int /*close_on_exec*/) {
+absl::Status PosixSocketWrapper::SetSocketCloexec(
+    const SystemApi& /*system_api*/, int /*close_on_exec*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketReuseAddr(int /*reuse*/) {
+absl::Status PosixSocketWrapper::SetSocketReuseAddr(
+    const SystemApi& /*system_api*/, int /*reuse*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketLowLatency(int /*low_latency*/) {
+absl::Status PosixSocketWrapper::SetSocketLowLatency(
+    const SystemApi& /*system_api*/, int /*low_latency*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketReusePort(int /*reuse*/) {
+absl::Status PosixSocketWrapper::SetSocketReusePort(
+    const SystemApi& /*system_api*/, int /*reuse*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketDscp(int /*dscp*/) {
+absl::Status PosixSocketWrapper::SetSocketDscp(const SystemApi& /*system_api*/,
+                                               int /*dscp*/) {
   grpc_core::Crash("unimplemented");
 }
 
@@ -908,32 +916,39 @@ void PosixSocketWrapper::ConfigureDefaultTcpUserTimeout(bool /*enable*/,
                                                         bool /*is_client*/) {}
 
 void PosixSocketWrapper::TrySetSocketTcpUserTimeout(
-    const PosixTcpOptions& /*options*/, bool /*is_client*/) {
+    const SystemApi& /*system_api*/, const PosixTcpOptions& /*options*/,
+    bool /*is_client*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketNoSigpipeIfPossible() {
+absl::Status PosixSocketWrapper::SetSocketNoSigpipeIfPossible(
+    const SystemApi& /*system_api*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketIpPktInfoIfPossible() {
+absl::Status PosixSocketWrapper::SetSocketIpPktInfoIfPossible(
+    const SystemApi& /*system_api*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketIpv6RecvPktInfoIfPossible() {
+absl::Status PosixSocketWrapper::SetSocketIpv6RecvPktInfoIfPossible(
+    const SystemApi& /*system_api*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketSndBuf(int /*buffer_size_bytes*/) {
+absl::Status PosixSocketWrapper::SetSocketSndBuf(
+    const SystemApi& /*system_api*/, int /*buffer_size_bytes*/) {
   grpc_core::Crash("unimplemented");
 }
 
-absl::Status PosixSocketWrapper::SetSocketRcvBuf(int /*buffer_size_bytes*/) {
+absl::Status PosixSocketWrapper::SetSocketRcvBuf(
+    const SystemApi& /*system_api*/, int /*buffer_size_bytes*/) {
   grpc_core::Crash("unimplemented");
 }
 
 absl::Status PosixSocketWrapper::SetSocketMutator(
-    grpc_fd_usage /*usage*/, grpc_socket_mutator* /*mutator*/) {
+    const SystemApi& /*system_api*/, grpc_fd_usage /*usage*/,
+    grpc_socket_mutator* /*mutator*/) {
   grpc_core::Crash("unimplemented");
 }
 
