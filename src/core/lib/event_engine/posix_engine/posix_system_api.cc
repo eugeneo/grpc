@@ -14,8 +14,7 @@
 
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 
-#include <fcntl.h>
-#include <unistd.h>
+#include <grpc/support/port_platform.h>
 
 namespace grpc_event_engine {
 namespace experimental {

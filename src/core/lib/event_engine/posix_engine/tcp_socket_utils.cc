@@ -947,8 +947,7 @@ absl::Status PosixSocketWrapper::SetSocketRcvBuf(
 }
 
 absl::Status PosixSocketWrapper::SetSocketMutator(
-    const SystemApi& /*system_api*/, grpc_fd_usage /*usage*/,
-    grpc_socket_mutator* /*mutator*/) {
+    grpc_fd_usage /*usage*/, grpc_socket_mutator* /*mutator*/) {
   grpc_core::Crash("unimplemented");
 }
 
@@ -957,7 +956,8 @@ absl::Status PosixSocketWrapper::ApplySocketMutatorInOptions(
   grpc_core::Crash("unimplemented");
 }
 
-bool PosixSocketWrapper::IsSocketReusePortSupported() {
+bool PosixSocketWrapper::IsSocketReusePortSupported(
+    const SystemApi& /*system_api*/) {
   grpc_core::Crash("unimplemented");
 }
 
@@ -966,7 +966,9 @@ bool PosixSocketWrapper::IsIpv6LoopbackAvailable() {
 }
 
 absl::StatusOr<PosixSocketWrapper> PosixSocketWrapper::CreateDualStackSocket(
-    std::function<int(int /*domain*/, int /*type*/, int /*protocol*/)>
+    const SystemApi& /*system_api*/,
+    std::function<FileDescriptor(int /*domain*/, int /*type*/,
+                                 int /*protocol*/)>
     /* socket_factory */,
     const experimental::EventEngine::ResolvedAddress& /*addr*/, int /*type*/,
     int /*protocol*/, DSMode& /*dsmode*/) {
@@ -975,7 +977,7 @@ absl::StatusOr<PosixSocketWrapper> PosixSocketWrapper::CreateDualStackSocket(
 
 absl::StatusOr<PosixSocketWrapper::PosixSocketCreateResult>
 PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
-    const PosixTcpOptions& /*options*/,
+    const SystemApi& /*system_api*/, const PosixTcpOptions& /*options*/,
     const EventEngine::ResolvedAddress& /*target_addr*/) {
   grpc_core::Crash("unimplemented");
 }
