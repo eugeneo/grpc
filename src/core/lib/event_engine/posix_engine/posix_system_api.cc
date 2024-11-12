@@ -36,7 +36,7 @@ int PosixSystemApi::Bind(FileDescriptor fd, const struct sockaddr* addr,
 void PosixSystemApi::Close(FileDescriptor fd) const { close(fd.fd()); }
 
 int PosixSystemApi::Fcntl(FileDescriptor fd, int op, int args) const {
-  return fcntl(fd.fd(), op, args);
+  return Fcntl(fd.fd(), op, args);
 }
 
 int PosixSystemApi::GetSockOpt(FileDescriptor fd, int level, int optname,
