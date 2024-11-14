@@ -50,7 +50,6 @@ class PosixSystemApi : public SystemApi {
   bool IsSocketReusePortSupported() const override;
   // Set SO_REUSEPORT
   absl::Status SetSocketReusePort(FileDescriptor fd, int reuse) const override;
-
   // Set socket to use zerocopy
   absl::Status SetSocketZeroCopy(FileDescriptor fd) const override;
   // Set socket to non blocking mode

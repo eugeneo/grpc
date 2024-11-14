@@ -506,6 +506,61 @@ absl::Status PosixSystemApi::SetSocketNoSigpipeIfPossible(
   grpc_core::Crash("unimplemented");
 }
 
+absl::Status PosixSystemApi::SetSocketZeroCopy(FileDescriptor fd) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketNonBlocking(FileDescriptor fd,
+                                                  int non_blocking) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketCloexec(FileDescriptor fd,
+                                              int close_on_exec) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketLowLatency(FileDescriptor fd,
+                                                 int low_latency) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketDscp(FileDescriptor fd, int dscp) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketIpPktInfoIfPossible(
+    FileDescriptor fd) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketIpv6RecvPktInfoIfPossible(
+    FileDescriptor fd) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketSndBuf(FileDescriptor fd,
+                                             int buffer_size_bytes) const {
+  grpc_core::Crash("unimplemented");
+}
+
+absl::Status PosixSystemApi::SetSocketRcvBuf(FileDescriptor fd,
+                                             int buffer_size_bytes) const {
+  grpc_core::Crash("unimplemented");
+}
+
+void PosixSystemApi::TrySetSocketTcpUserTimeout(FileDescriptor fd,
+                                                int keep_alive_time_ms,
+                                                int keep_alive_timeout_ms,
+                                                bool is_client) const {
+  grpc_core::Crash("unimplemented");
+}
+
+void PosixSystemApi::ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
+                                                    bool is_client) {
+  grpc_core::Crash("unimplemented");
+}
+
 }  // namespace experimental
 }  // namespace grpc_event_engine
 

@@ -113,33 +113,32 @@ FileDescriptor CreateSocket(
 }
 
 absl::Status PrepareTcpClientSocket(const SystemApi& system_api,
-                                    PosixSocketWrapper sock,
+                                    FileDescriptor fd,
                                     const EventEngine::ResolvedAddress& addr,
                                     const PosixTcpOptions& options) {
   bool close_fd = true;
-  auto sock_cleanup =
-      absl::MakeCleanup([&close_fd, &system_api, fd = sock.Fd()]() -> void {
-        if (close_fd && fd.ready()) {
-          system_api.Close(fd);
-        }
-      });
-  GRPC_RETURN_IF_ERROR(system_api.SetSocketNonBlocking(sock.Fd(), 1));
-  GRPC_RETURN_IF_ERROR(system_api.SetSocketCloexec(sock.Fd(), 1));
+  auto sock_cleanup = absl::MakeCleanup([&close_fd, &system_api, fd]() -> void {
+    if (close_fd && fd.ready()) {
+      system_api.Close(fd);
+    }
+  });
+  GRPC_RETURN_IF_ERROR(system_api.SetSocketNonBlocking(fd, 1));
+  GRPC_RETURN_IF_ERROR(system_api.SetSocketCloexec(fd, 1));
   if (options.tcp_receive_buffer_size != options.kReadBufferSizeUnset) {
     GRPC_RETURN_IF_ERROR(
-        system_api.SetSocketRcvBuf(sock.Fd(), options.tcp_receive_buffer_size));
+        system_api.SetSocketRcvBuf(fd, options.tcp_receive_buffer_size));
   }
   if (addr.address()->sa_family != AF_UNIX && !ResolvedAddressIsVSock(addr)) {
     // If its not a unix socket or vsock address.
-    GRPC_RETURN_IF_ERROR(system_api.SetSocketLowLatency(sock.Fd(), 1));
-    GRPC_RETURN_IF_ERROR(system_api.SetSocketReuseAddr(sock.Fd(), 1));
-    GRPC_RETURN_IF_ERROR(system_api.SetSocketDscp(sock.Fd(), options.dscp));
-    system_api.TrySetSocketTcpUserTimeout(sock.Fd(), options.keep_alive_time_ms,
+    GRPC_RETURN_IF_ERROR(system_api.SetSocketLowLatency(fd, 1));
+    GRPC_RETURN_IF_ERROR(system_api.SetSocketReuseAddr(fd, 1));
+    GRPC_RETURN_IF_ERROR(system_api.SetSocketDscp(fd, options.dscp));
+    system_api.TrySetSocketTcpUserTimeout(fd, options.keep_alive_time_ms,
                                           options.keep_alive_timeout_ms, true);
   }
-  GRPC_RETURN_IF_ERROR(system_api.SetSocketNoSigpipeIfPossible(sock.Fd()));
+  GRPC_RETURN_IF_ERROR(system_api.SetSocketNoSigpipeIfPossible(fd));
   GRPC_RETURN_IF_ERROR(ApplySocketMutatorInOptions(
-      sock.Fd(), GRPC_FD_CLIENT_CONNECTION_USAGE, options));
+      fd, GRPC_FD_CLIENT_CONNECTION_USAGE, options));
   // No errors. Set close_fd to false to ensure the socket is not closed.
   close_fd = false;
   return absl::OkStatus();
@@ -459,7 +458,7 @@ PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
     }
   }
 
-  auto error = PrepareTcpClientSocket(posix_apis, *posix_socket_wrapper,
+  auto error = PrepareTcpClientSocket(posix_apis, posix_socket_wrapper->Fd(),
                                       mapped_target_addr, options);
   if (!error.ok()) {
     return error;
@@ -470,63 +469,12 @@ PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
 
 #else  // GRPC_POSIX_SOCKET_UTILS_COMMON
 
-absl::Status PosixSocketWrapper::SetSocketZeroCopy(
-    const SystemApi& /*system_api*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketNonBlocking(
-    const SystemApi& /*system_api*/, int /*non_blocking*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketCloexec(
-    const SystemApi& /*system_api*/, int /*close_on_exec*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketReuseAddr(
-    const SystemApi& /*system_api*/, int /*reuse*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketLowLatency(
-    const SystemApi& /*system_api*/, int /*low_latency*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketDscp(const SystemApi& /*system_api*/,
-                                               int /*dscp*/) {
-  grpc_core::Crash("unimplemented");
-}
-
 void PosixSocketWrapper::ConfigureDefaultTcpUserTimeout(bool /*enable*/,
                                                         int /*timeout*/,
                                                         bool /*is_client*/) {}
 
-void PosixSocketWrapper::TrySetSocketTcpUserTimeout(
-    const SystemApi& /*system_api*/, const PosixTcpOptions& /*options*/,
-    bool /*is_client*/) {
-  grpc_core::Crash("unimplemented");
-}
-
 absl::Status PosixSocketWrapper::SetSocketIpPktInfoIfPossible(
     const SystemApi& /*system_api*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketIpv6RecvPktInfoIfPossible(
-    const SystemApi& /*system_api*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketSndBuf(
-    const SystemApi& /*system_api*/, int /*buffer_size_bytes*/) {
-  grpc_core::Crash("unimplemented");
-}
-
-absl::Status PosixSocketWrapper::SetSocketRcvBuf(
-    const SystemApi& /*system_api*/, int /*buffer_size_bytes*/) {
   grpc_core::Crash("unimplemented");
 }
 
