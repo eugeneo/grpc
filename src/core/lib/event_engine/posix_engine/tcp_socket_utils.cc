@@ -42,7 +42,6 @@
 #include <unistd.h>
 #endif  //  GRPC_POSIX_SOCKET_UTILS_COMMON
 
-#include <atomic>
 #include <cstring>
 
 #include "absl/log/check.h"
@@ -468,10 +467,6 @@ PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
 }
 
 #else  // GRPC_POSIX_SOCKET_UTILS_COMMON
-
-void PosixSocketWrapper::ConfigureDefaultTcpUserTimeout(bool /*enable*/,
-                                                        int /*timeout*/,
-                                                        bool /*is_client*/) {}
 
 absl::Status PosixSocketWrapper::SetSocketIpPktInfoIfPossible(
     const SystemApi& /*system_api*/) {
