@@ -468,11 +468,6 @@ PosixSocketWrapper::CreateAndPrepareTcpClientSocket(
 
 #else  // GRPC_POSIX_SOCKET_UTILS_COMMON
 
-absl::Status PosixSocketWrapper::SetSocketIpPktInfoIfPossible(
-    const SystemApi& /*system_api*/) {
-  grpc_core::Crash("unimplemented");
-}
-
 bool PosixSocketWrapper::IsIpv6LoopbackAvailable() {
   grpc_core::Crash("unimplemented");
 }
