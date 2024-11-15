@@ -603,6 +603,10 @@ void SystemApi::ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
   grpc_core::Crash("unimplemented");
 }
 
+bool SystemApi::IsSocketReusePortSupported() const {
+  grpc_core::Crash("unimplemented");
+}
+
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
