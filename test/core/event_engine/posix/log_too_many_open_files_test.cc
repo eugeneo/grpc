@@ -40,10 +40,10 @@ TEST(LogTooManyOpenFilesTest, MainTest) {
   auto addr = grpc_event_engine::experimental::URIToResolvedAddress(
       "ipv4:127.0.0.1:80");
   ASSERT_TRUE(addr.ok());
-  ::grpc_event_engine::experimental::DSMode dsmode;
+  grpc_event_engine::experimental::DSMode dsmode;
   grpc_event_engine::experimental::PosixSystemApi system_api;
   absl::StatusOr<FileDescriptor> result =
-      ::grpc_event_engine::experimental::CreateDualStackSocket(
+      grpc_event_engine::experimental::CreateDualStackSocket(
           system_api, mock_socket_factory, *addr, SOCK_STREAM, AF_INET, dsmode);
   EXPECT_FALSE(result.ok());
   std::string emfile_message = grpc_core::StrError(EMFILE);
