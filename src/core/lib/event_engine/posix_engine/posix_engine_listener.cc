@@ -139,9 +139,8 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     memset(const_cast<sockaddr*>(addr.address()), 0, addr.size());
     // Note: If we ever decide to return this address to the user, remember to
     // strip off the ::ffff:0.0.0.0/96 prefix first.
-    FileDescriptor fd =
-        Accept4(system_api.AdoptExternalFd(handle_->WrappedFd()), system_api,
-                addr, 1, 1);
+    FileDescriptor fd = system_api.Accept4(
+        system_api.AdoptExternalFd(handle_->WrappedFd()), addr, 1, 1);
     if (!fd.ready()) {
       switch (errno) {
         case EINTR:

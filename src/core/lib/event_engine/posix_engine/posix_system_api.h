@@ -44,8 +44,10 @@ class SystemApi {
 
   FileDescriptor Accept(FileDescriptor sockfd, struct sockaddr* addr,
                         socklen_t* addrlen) const;
-  FileDescriptor Accept4(FileDescriptor sockfd, struct sockaddr* addr,
-                         socklen_t* addrlen, int flags) const;
+  FileDescriptor Accept4(
+      FileDescriptor sockfd,
+      grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
+      int nonblock, int cloexec) const;
 
   FileDescriptor AdoptExternalFd(int fd) const;
   FileDescriptor Socket(int domain, int type, int protocol) const;
@@ -112,6 +114,11 @@ class SystemApi {
   absl::StatusOr<std::string> PeerAddressString(FileDescriptor fd) const;
 
  private:
+#ifndef GRPC_LINUX_SOCKETUTILS
+  FileDescriptor Accept4(FileDescriptor sockfd, struct sockaddr* addr,
+                         socklen_t* addrlen, int flags) const;
+#endif
+
 #if GPR_LINUX == 1
 // For Linux, it will be detected to support TCP_USER_TIMEOUT
 #ifndef TCP_USER_TIMEOUT

@@ -148,12 +148,6 @@ PosixTcpOptions TcpOptionsFromEndpointConfig(
     const SystemApi& system_api,
     const grpc_event_engine::experimental::EndpointConfig& config);
 
-// a wrapper for accept or accept4
-FileDescriptor Accept4(
-    FileDescriptor fd, const SystemApi& system_api,
-    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
-    int nonblock, int cloexec);
-
 // Unlink the path pointed to by the given address if it refers to UDS path.
 void UnlinkIfUnixDomainSocket(
     const EventEngine::ResolvedAddress& resolved_addr);

@@ -229,60 +229,6 @@ PosixTcpOptions TcpOptionsFromEndpointConfig(const SystemApi& system_api,
   return options;
 }
 
-#ifdef GRPC_POSIX_SOCKETUTILS
-
-FileDescriptor Accept4(
-    FileDescriptor sockfd, const SystemApi& system_api,
-    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
-    int nonblock, int cloexec) {
-  int flags;
-  EventEngine::ResolvedAddress peer_addr;
-  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-  FileDescriptor fd = system_api.Accept(
-      sockfd, const_cast<sockaddr*>(peer_addr.address()), &len);
-  if (fd.ready()) {
-    if (nonblock) {
-      flags = system_api.Fcntl(fd, F_GETFL, 0);
-      if (flags < 0) goto close_and_error;
-      if (system_api.Fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-        goto close_and_error;
-      }
-    }
-    if (cloexec) {
-      flags = system_api.Fcntl(fd, F_GETFD, 0);
-      if (flags < 0) goto close_and_error;
-      if (system_api.Fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
-        goto close_and_error;
-      }
-    }
-  }
-  addr = EventEngine::ResolvedAddress(peer_addr.address(), len);
-  return fd;
-
-close_and_error:
-  system_api.Close(fd);
-  return FileDescriptor();
-}
-
-#elif GRPC_LINUX_SOCKETUTILS
-
-FileDescriptor Accept4(
-    FileDescriptor sockfd, const SystemApi& system_api,
-    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
-    int nonblock, int cloexec) {
-  int flags = 0;
-  flags |= nonblock ? SOCK_NONBLOCK : 0;
-  flags |= cloexec ? SOCK_CLOEXEC : 0;
-  EventEngine::ResolvedAddress peer_addr;
-  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-  FileDescriptor ret = system_api.Accept4(
-      sockfd, const_cast<sockaddr*>(peer_addr.address()), &len, flags);
-  addr = EventEngine::ResolvedAddress(peer_addr.address(), len);
-  return ret;
-}
-
-#endif  // GRPC_LINUX_SOCKETUTILS
-
 #ifdef GRPC_POSIX_SOCKET_UTILS_COMMON
 
 void UnlinkIfUnixDomainSocket(

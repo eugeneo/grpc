@@ -42,14 +42,68 @@
 namespace grpc_event_engine {
 namespace experimental {
 
-FileDescriptor SystemApi::Accept(FileDescriptor sockfd, struct sockaddr* addr,
-                                 socklen_t* addrlen) const {
-  return FileDescriptor(accept(sockfd.fd(), addr, addrlen));
+#ifdef GRPC_POSIX_SOCKETUTILS
+
+FileDescriptor SystemApi::Accept4(
+    FileDescriptor sockfd,
+    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
+    int nonblock, int cloexec) {
+  int flags;
+  EventEngine::ResolvedAddress peer_addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  FileDescriptor fd =
+      Accept(sockfd, const_cast<sockaddr*>(peer_addr.address()), &len);
+  if (fd.ready()) {
+    if (nonblock) {
+      flags = Fcntl(fd, F_GETFL, 0);
+      if (flags < 0) goto close_and_error;
+      if (Fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+        goto close_and_error;
+      }
+    }
+    if (cloexec) {
+      flags = Fcntl(fd, F_GETFD, 0);
+      if (flags < 0) goto close_and_error;
+      if (Fcntl(fd, F_SETFD, flags | FD_CLOEXEC) != 0) {
+        goto close_and_error;
+      }
+    }
+  }
+  addr = EventEngine::ResolvedAddress(peer_addr.address(), len);
+  return fd;
+
+close_and_error:
+  Close(fd);
+  return FileDescriptor();
 }
+
+#elif GRPC_LINUX_SOCKETUTILS
 
 FileDescriptor SystemApi::Accept4(FileDescriptor sockfd, struct sockaddr* addr,
                                   socklen_t* addrlen, int flags) const {
   return FileDescriptor(accept4(sockfd.fd(), addr, addrlen, flags));
+}
+
+FileDescriptor SystemApi::Accept4(
+    FileDescriptor sockfd,
+    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
+    int nonblock, int cloexec) const {
+  int flags = 0;
+  flags |= nonblock ? SOCK_NONBLOCK : 0;
+  flags |= cloexec ? SOCK_CLOEXEC : 0;
+  EventEngine::ResolvedAddress peer_addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  FileDescriptor ret =
+      Accept4(sockfd, const_cast<sockaddr*>(peer_addr.address()), &len, flags);
+  addr = EventEngine::ResolvedAddress(peer_addr.address(), len);
+  return ret;
+}
+
+#endif  // GRPC_LINUX_SOCKETUTILS
+
+FileDescriptor SystemApi::Accept(FileDescriptor sockfd, struct sockaddr* addr,
+                                 socklen_t* addrlen) const {
+  return FileDescriptor(accept(sockfd.fd(), addr, addrlen));
 }
 
 FileDescriptor SystemApi::AdoptExternalFd(int fd) const {
