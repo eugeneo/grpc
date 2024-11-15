@@ -431,7 +431,7 @@ absl::StatusOr<PosixSocketCreateResult> CreateAndPrepareTcpClientSocket(
 
 bool IsIpv6LoopbackAvailable() { grpc_core::Crash("unimplemented"); }
 
-absl::StatusOr<PosixSocketWrapper> CreateDualStackSocket(
+absl::StatusOr<FileDescriptor> CreateDualStackSocket(
     const SystemApi& /*system_api*/,
     std::function<FileDescriptor(int /*domain*/, int /*type*/,
                                  int /*protocol*/)>
