@@ -1263,19 +1263,18 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       handle_(handle),
       poller_(handle->Poller()),
       engine_(engine) {
-  fd_ =
-      handle_->Poller()->GetSystemApi()->AdoptExternalFd(handle_->WrappedFd());
-  PosixSocketWrapper sock(fd_);
+  SystemApi* system_api = get_system_api();
+  fd_ = system_api->AdoptExternalFd(handle_->WrappedFd());
   CHECK(options.resource_quota != nullptr);
-  auto peer_addr_string = sock.PeerAddressString(*get_system_api());
+  auto peer_addr_string = system_api->PeerAddressString(fd_);
   mem_quota_ = options.resource_quota->memory_quota();
   memory_owner_ = mem_quota_->CreateMemoryOwner();
   self_reservation_ = memory_owner_.MakeReservation(sizeof(PosixEndpointImpl));
-  auto local_address = sock.LocalAddress(*get_system_api());
+  auto local_address = system_api->LocalAddress(fd_);
   if (local_address.ok()) {
     local_address_ = *local_address;
   }
-  auto peer_address = sock.PeerAddress(*get_system_api());
+  auto peer_address = system_api->PeerAddress(fd_);
   if (peer_address.ok()) {
     peer_address_ = *peer_address;
   }

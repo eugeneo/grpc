@@ -42,6 +42,11 @@ class SystemApi {
  public:
   static constexpr int kDscpNotSet = -1;
 
+  FileDescriptor Accept(FileDescriptor sockfd, struct sockaddr* addr,
+                        socklen_t* addrlen) const;
+  FileDescriptor Accept4(FileDescriptor sockfd, struct sockaddr* addr,
+                         socklen_t* addrlen, int flags) const;
+
   FileDescriptor AdoptExternalFd(int fd) const;
   FileDescriptor Socket(int domain, int type, int protocol) const;
 
@@ -95,6 +100,16 @@ class SystemApi {
   // Configure default values for tcp user timeout to be used by client
   // and server side sockets.
   void ConfigureDefaultTcpUserTimeout(bool enable, int timeout, bool is_client);
+  // Return LocalAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress(
+      FileDescriptor fd) const;
+  // Return PeerAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress(
+      FileDescriptor fd) const;
+  // Return LocalAddress as string
+  absl::StatusOr<std::string> LocalAddressString(FileDescriptor fd) const;
+  // Return PeerAddress as string
+  absl::StatusOr<std::string> PeerAddressString(FileDescriptor fd) const;
 
  private:
 #if GPR_LINUX == 1
