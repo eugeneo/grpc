@@ -629,9 +629,8 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   CHECK_NE(poller_manager_, nullptr);
   PosixTcpOptions options = TcpOptionsFromEndpointConfig(system_api_, args);
-  absl::StatusOr<PosixSocketWrapper::PosixSocketCreateResult> socket =
-      PosixSocketWrapper::CreateAndPrepareTcpClientSocket(system_api_, options,
-                                                          addr);
+  absl::StatusOr<PosixSocketCreateResult> socket =
+      CreateAndPrepareTcpClientSocket(system_api_, options, addr);
   if (!socket.ok()) {
     Run([on_connect = std::move(on_connect),
          status = socket.status()]() mutable { on_connect(status); });

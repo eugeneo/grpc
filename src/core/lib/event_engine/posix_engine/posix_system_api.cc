@@ -19,6 +19,7 @@
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "src/core/lib/debug/trace.h"
+#include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/util/strerror.h"
 
@@ -40,7 +41,17 @@
 namespace grpc_event_engine {
 namespace experimental {
 
-namespace {}  // namespace
+FileDescriptor PosixSystemApi::Accept(FileDescriptor sockfd,
+                                      struct sockaddr* addr,
+                                      socklen_t* addrlen) const {
+  return FileDescriptor(accept(sockfd.fd(), addr, addrlen));
+}
+
+FileDescriptor PosixSystemApi::Accept4(FileDescriptor sockfd,
+                                       struct sockaddr* addr,
+                                       socklen_t* addrlen, int flags) const {
+  return FileDescriptor(accept4(sockfd.fd(), addr, addrlen, flags));
+}
 
 FileDescriptor PosixSystemApi::AdoptExternalFd(int fd) const {
   return FileDescriptor(fd);
@@ -433,6 +444,46 @@ void PosixSystemApi::ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
       kDefaultServerUserTimeoutMs = timeout;
     }
   }
+}
+
+absl::StatusOr<EventEngine::ResolvedAddress> PosixSystemApi::LocalAddress(
+    FileDescriptor fd) const {
+  EventEngine::ResolvedAddress addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  if (GetSockName(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+    return absl::InternalError(
+        absl::StrCat("getsockname:", grpc_core::StrError(errno)));
+  }
+  return EventEngine::ResolvedAddress(addr.address(), len);
+}
+
+absl::StatusOr<EventEngine::ResolvedAddress> PosixSystemApi::PeerAddress(
+    FileDescriptor fd) const {
+  EventEngine::ResolvedAddress addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  if (GetPeerName(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+    return absl::InternalError(
+        absl::StrCat("getpeername:", grpc_core::StrError(errno)));
+  }
+  return EventEngine::ResolvedAddress(addr.address(), len);
+}
+
+absl::StatusOr<std::string> PosixSystemApi::LocalAddressString(
+    FileDescriptor fd) const {
+  auto status = LocalAddress(fd);
+  if (!status.ok()) {
+    return status.status();
+  }
+  return ResolvedAddressToNormalizedString((*status));
+}
+
+absl::StatusOr<std::string> PosixSystemApi::PeerAddressString(
+    FileDescriptor fd) const {
+  auto status = PeerAddress(fd);
+  if (!status.ok()) {
+    return status.status();
+  }
+  return ResolvedAddressToNormalizedString((*status));
 }
 
 }  // namespace experimental

@@ -41,6 +41,10 @@ class SystemApi {
   virtual ~SystemApi() = default;
 
   // Factories
+  virtual FileDescriptor Accept(FileDescriptor sockfd, struct sockaddr* addr,
+                                socklen_t* addrlen) const = 0;
+  virtual FileDescriptor Accept4(FileDescriptor sockfd, struct sockaddr* addr,
+                                 socklen_t* addrlen, int flags) const = 0;
   virtual FileDescriptor AdoptExternalFd(int fd) const = 0;
   virtual FileDescriptor Socket(int domain, int type, int protocol) const = 0;
 
@@ -112,6 +116,22 @@ class SystemApi {
   // and server side sockets.
   virtual void ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
                                               bool is_client) = 0;
+
+  // Return LocalAddress as EventEngine::ResolvedAddress
+  virtual absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress(
+      FileDescriptor fd) const = 0;
+
+  // Return PeerAddress as EventEngine::ResolvedAddress
+  virtual absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress(
+      FileDescriptor fd) const = 0;
+
+  // Return LocalAddress as string
+  virtual absl::StatusOr<std::string> LocalAddressString(
+      FileDescriptor fd) const = 0;
+
+  // Return PeerAddress as string
+  virtual absl::StatusOr<std::string> PeerAddressString(
+      FileDescriptor fd) const = 0;
 };
 
 }  // namespace experimental

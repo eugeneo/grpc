@@ -2351,6 +2351,7 @@ grpc_cc_library(
     ],
     deps = [
         "event_engine_extensions",
+        "event_engine_tcp_socket_utils",
         "iomgr_port",
         "strerror",
         "//:config_vars",

@@ -26,6 +26,11 @@ class PosixSystemApi : public SystemApi {
  public:
   static constexpr int kDscpNotSet = -1;
 
+  FileDescriptor Accept(FileDescriptor sockfd, struct sockaddr* addr,
+                        socklen_t* addrlen) const override;
+  FileDescriptor Accept4(FileDescriptor sockfd, struct sockaddr* addr,
+                         socklen_t* addrlen, int flags) const override;
+
   FileDescriptor AdoptExternalFd(int fd) const override;
   FileDescriptor Socket(int domain, int type, int protocol) const override;
 
@@ -86,6 +91,22 @@ class PosixSystemApi : public SystemApi {
   // and server side sockets.
   void ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
                                       bool is_client) override;
+
+  // Return LocalAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress(
+      FileDescriptor fd) const override;
+
+  // Return PeerAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress(
+      FileDescriptor fd) const override;
+
+  // Return LocalAddress as string
+  absl::StatusOr<std::string> LocalAddressString(
+      FileDescriptor fd) const override;
+
+  // Return PeerAddress as string
+  absl::StatusOr<std::string> PeerAddressString(
+      FileDescriptor fd) const override;
 
  private:
 #if GPR_LINUX == 1
