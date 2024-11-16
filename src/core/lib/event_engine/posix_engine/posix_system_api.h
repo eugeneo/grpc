@@ -52,9 +52,15 @@ class SystemApi {
   FileDescriptor AdoptExternalFd(int fd) const;
   FileDescriptor Socket(int domain, int type, int protocol) const;
 
+  std::tuple<int, FileDescriptor, FileDescriptor> SocketPair(int domain,
+                                                             int type,
+                                                             int protocol);
+
   int Bind(FileDescriptor fd, const struct sockaddr* addr,
            socklen_t addrlen) const;
   void Close(FileDescriptor fd) const;
+  int Connect(FileDescriptor sockfd, const struct sockaddr* addr,
+              socklen_t addrlen) const;
   int Fcntl(FileDescriptor fd, int op, int args) const;
   int GetSockOpt(FileDescriptor fd, int level, int optname, void* optval,
                  socklen_t* optlen) const;
@@ -62,12 +68,16 @@ class SystemApi {
                   socklen_t* addrlen) const;
   int GetPeerName(FileDescriptor fd, struct sockaddr* addr,
                   socklen_t* addrlen) const;
+  int Ioctl(int fd, int op, void* arg) const;
   int Listen(FileDescriptor fd, int backlog) const;
   long RecvMsg(FileDescriptor fd, struct msghdr* msg, int flags) const;
+  ssize_t Read(FileDescriptor fd, void* buf, size_t count) const;
   long SendMsg(FileDescriptor fd, const struct msghdr* message,
                int flags) const;
   int SetSockOpt(FileDescriptor fd, int level, int optname, const void* optval,
                  socklen_t optlen) const;
+  int Shutdown(FileDescriptor sockfd, int how) const;
+  ssize_t Write(FileDescriptor fd, const void* buf, size_t count) const;
 
   absl::Status SetSocketNoSigpipeIfPossible(FileDescriptor fd) const;
   bool IsSocketReusePortSupported() const;

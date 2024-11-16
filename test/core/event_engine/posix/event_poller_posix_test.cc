@@ -87,9 +87,10 @@ using namespace std::chrono_literals;
 
 namespace {
 
-absl::Status SetSocketSendBuf(int fd, int buffer_size_bytes) {
-  return 0 == setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buffer_size_bytes,
-                         sizeof(buffer_size_bytes))
+absl::Status SetSocketSendBuf(FileDescriptor fd, int buffer_size_bytes) {
+  return 0 == g_event_poller->GetSystemApi()->SetSockOpt(
+                  fd, SOL_SOCKET, SO_SNDBUF, &buffer_size_bytes,
+                  sizeof(buffer_size_bytes))
              ? absl::OkStatus()
              : absl::Status(absl::StatusCode::kInternal,
                             grpc_core::StrError(errno).c_str());
@@ -98,21 +99,22 @@ absl::Status SetSocketSendBuf(int fd, int buffer_size_bytes) {
 // Create a test socket with the right properties for testing.
 // port is the TCP port to listen or connect to.
 // Return a socket FD and sockaddr_in.
-void CreateTestSocket(int port, int* socket_fd, struct sockaddr_in6* sin) {
-  int fd;
+void CreateTestSocket(int port, FileDescriptor* socket_fd,
+                      struct sockaddr_in6* sin) {
   int one = 1;
   int buffer_size_bytes = BUF_SIZE;
   int flags;
 
-  fd = socket(AF_INET6, SOCK_STREAM, 0);
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+  SystemApi* api = g_event_poller->GetSystemApi();
+  FileDescriptor fd = api->Socket(AF_INET6, SOCK_STREAM, 0);
+  api->SetSockOpt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
   // Reset the size of socket send buffer to the minimal value to facilitate
   // buffer filling up and triggering notify_on_write
   EXPECT_TRUE(SetSocketSendBuf(fd, buffer_size_bytes).ok());
   EXPECT_TRUE(SetSocketSendBuf(fd, buffer_size_bytes).ok());
   // Make fd non-blocking.
-  flags = fcntl(fd, F_GETFL, 0);
-  EXPECT_EQ(fcntl(fd, F_SETFL, flags | O_NONBLOCK), 0);
+  flags = api->Fcntl(fd, F_GETFL, 0);
+  EXPECT_EQ(api->Fcntl(fd, F_SETFL, flags | O_NONBLOCK), 0);
   *socket_fd = fd;
 
   // Use local address for test.
@@ -161,7 +163,7 @@ void SessionShutdownCb(session* se, bool /*success*/) {
 
 // Called when data become readable in a session.
 void SessionReadCb(session* se, absl::Status status) {
-  int fd = se->em_fd->WrappedFd();
+  FileDescriptor fd = se->em_fd->WrappedFd();
 
   ssize_t read_once = 0;
   ssize_t read_total = 0;
@@ -172,7 +174,8 @@ void SessionReadCb(session* se, absl::Status status) {
   }
 
   do {
-    read_once = read(fd, se->read_buf, BUF_SIZE);
+    read_once =
+        g_event_poller->GetSystemApi()->Read(fd, se->read_buf, BUF_SIZE);
     if (read_once > 0) read_total += read_once;
   } while (read_once > 0);
   se->sv->read_bytes_total += read_total;
@@ -209,35 +212,35 @@ void ListenShutdownCb(server* sv) {
 
 // Called when a new TCP connection request arrives in the listening port.
 void ListenCb(server* sv, absl::Status status) {
-  int fd;
+  FileDescriptor fd;
   int flags;
   session* se;
   struct sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
   EventHandle* listen_em_fd = sv->em_fd;
-
+  SystemApi* system_api = g_event_poller->GetSystemApi();
   if (!status.ok()) {
     ListenShutdownCb(sv);
     return;
   }
 
   do {
-    fd = accept(listen_em_fd->WrappedFd(),
-                reinterpret_cast<struct sockaddr*>(&ss), &slen);
-  } while (fd < 0 && errno == EINTR);
-  if (fd < 0 && errno == EAGAIN) {
+    fd = system_api->Accept(listen_em_fd->WrappedFd(),
+                            reinterpret_cast<struct sockaddr*>(&ss), &slen);
+  } while (!fd.ready() && errno == EINTR);
+  if (!fd.fd() && errno == EAGAIN) {
     sv->listen_closure = PosixEngineClosure::TestOnlyToClosure(
         [sv](absl::Status status) { ListenCb(sv, status); });
     listen_em_fd->NotifyOnRead(sv->listen_closure);
     return;
-  } else if (fd < 0) {
+  } else if (!fd.ready()) {
     LOG(ERROR) << "Failed to accept a connection, returned error: "
                << grpc_core::StrError(errno);
   }
-  EXPECT_GE(fd, 0);
-  EXPECT_LT(fd, FD_SETSIZE);
-  flags = fcntl(fd, F_GETFL, 0);
-  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  EXPECT_TRUE(fd.ready());
+  EXPECT_LT(fd.fd(), FD_SETSIZE);
+  flags = system_api->Fcntl(fd, F_GETFL, 0);
+  system_api->Fcntl(fd, F_SETFL, flags | O_NONBLOCK);
   se = static_cast<session*>(gpr_malloc(sizeof(*se)));
   se->sv = sv;
   se->em_fd = g_event_poller->CreateHandle(fd, "listener", false);
@@ -255,16 +258,17 @@ void ListenCb(server* sv, absl::Status status) {
 // connection request.
 int ServerStart(server* sv) {
   int port = grpc_pick_unused_port_or_die();
-  int fd;
+  FileDescriptor fd;
   struct sockaddr_in6 sin;
   socklen_t addr_len;
 
   CreateTestSocket(port, &fd, &sin);
   addr_len = sizeof(sin);
-  EXPECT_EQ(bind(fd, (struct sockaddr*)&sin, addr_len), 0);
-  EXPECT_EQ(getsockname(fd, (struct sockaddr*)&sin, &addr_len), 0);
+  SystemApi* system_api = g_event_poller->GetSystemApi();
+  EXPECT_EQ(system_api->Bind(fd, (struct sockaddr*)&sin, addr_len), 0);
+  EXPECT_EQ(system_api->GetSockName(fd, (struct sockaddr*)&sin, &addr_len), 0);
   port = ntohs(sin.sin6_port);
-  EXPECT_EQ(listen(fd, MAX_NUM_FD), 0);
+  EXPECT_EQ(system_api->Listen(fd, MAX_NUM_FD), 0);
 
   sv->em_fd = g_event_poller->CreateHandle(fd, "server", false);
   sv->listen_closure = PosixEngineClosure::TestOnlyToClosure(
@@ -305,7 +309,7 @@ void ClientSessionShutdownCb(client* cl) {
 
 // Write as much as possible, then register notify_on_write.
 void ClientSessionWrite(client* cl, absl::Status status) {
-  int fd = cl->em_fd->WrappedFd();
+  FileDescriptor fd = cl->em_fd->WrappedFd();
   ssize_t write_once = 0;
 
   if (!status.ok()) {
@@ -314,7 +318,8 @@ void ClientSessionWrite(client* cl, absl::Status status) {
   }
 
   do {
-    write_once = write(fd, cl->write_buf, CLIENT_WRITE_BUF_SIZE);
+    write_once = cl->em_fd->Poller()->GetSystemApi()->Write(
+        fd, cl->write_buf, CLIENT_WRITE_BUF_SIZE);
     if (write_once > 0) cl->write_bytes_total += write_once;
   } while (write_once > 0);
 
@@ -334,14 +339,14 @@ void ClientSessionWrite(client* cl, absl::Status status) {
 
 // Start a client to send a stream of bytes.
 void ClientStart(client* cl, int port) {
-  int fd;
+  FileDescriptor fd;
   struct sockaddr_in6 sin;
   CreateTestSocket(port, &fd, &sin);
-  if (connect(fd, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) ==
-      -1) {
+  if (g_event_poller->GetSystemApi()->Connect(
+          fd, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) == -1) {
     if (errno == EINPROGRESS) {
       struct pollfd pfd;
-      pfd.fd = fd;
+      pfd.fd = fd.fd();
       pfd.events = POLLOUT;
       pfd.revents = 0;
       if (poll(&pfd, 1, -1) == -1) {
@@ -459,26 +464,31 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   if (g_event_poller == nullptr) {
     return;
   }
+  SystemApi* system_api = g_event_poller->GetSystemApi();
   PosixEngineClosure* first_closure = PosixEngineClosure::TestOnlyToClosure(
       [a = &a](absl::Status status) { FirstReadCallback(a, status); });
   PosixEngineClosure* second_closure = PosixEngineClosure::TestOnlyToClosure(
       [b = &b](absl::Status status) { SecondReadCallback(b, status); });
   InitChangeData(&a);
   InitChangeData(&b);
+  auto code_sv0_sv1 = system_api->SocketPair(AF_UNIX, SOCK_STREAM, 0);
+  EXPECT_EQ(std::get<0>(code_sv0_sv1), 0);
+  flags = system_api->Fcntl(std::get<1>(code_sv0_sv1), F_GETFL, 0);
+  EXPECT_EQ(
+      system_api->Fcntl(std::get<1>(code_sv0_sv1), F_SETFL, flags | O_NONBLOCK),
+      0);
+  flags = system_api->Fcntl(std::get<1>(code_sv0_sv1), F_GETFL, 0);
+  EXPECT_EQ(
+      system_api->Fcntl(std::get<1>(code_sv0_sv1), F_SETFL, flags | O_NONBLOCK),
+      0);
 
-  EXPECT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, sv), 0);
-  flags = fcntl(sv[0], F_GETFL, 0);
-  EXPECT_EQ(fcntl(sv[0], F_SETFL, flags | O_NONBLOCK), 0);
-  flags = fcntl(sv[1], F_GETFL, 0);
-  EXPECT_EQ(fcntl(sv[1], F_SETFL, flags | O_NONBLOCK), 0);
-
-  em_fd =
-      g_event_poller->CreateHandle(sv[0], "TestEventPollerHandleChange", false);
+  em_fd = g_event_poller->CreateHandle(std::get<1>(code_sv0_sv1),
+                                       "TestEventPollerHandleChange", false);
   EXPECT_NE(em_fd, nullptr);
   // Register the first callback, then make its FD readable
   em_fd->NotifyOnRead(first_closure);
   data = 0;
-  result = write(sv[1], &data, 1);
+  result = system_api->Write(std::get<1>(code_sv0_sv1), &data, 1);
   EXPECT_EQ(result, 1);
 
   // And now wait for it to run.
@@ -497,14 +507,14 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   gpr_mu_unlock(&g_mu);
 
   // And drain the socket so we can generate a new read edge
-  result = read(sv[0], &data, 1);
+  result = system_api->Read(std::get<1>(code_sv0_sv1), &data, 1);
   EXPECT_EQ(result, 1);
 
   // Now register a second callback with distinct change data, and do the same
   // thing again.
   em_fd->NotifyOnRead(second_closure);
   data = 0;
-  result = write(sv[1], &data, 1);
+  result = system_api->Write(std::get<1>(code_sv0_sv1), &data, 1);
   EXPECT_EQ(result, 1);
 
   // And now wait for it to run.
@@ -516,7 +526,7 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   em_fd->OrphanHandle(nullptr, nullptr, "d");
   DestroyChangeData(&a);
   DestroyChangeData(&b);
-  close(sv[1]);
+  system_api->Close(std::get<1>(code_sv0_sv1));
 }
 
 std::atomic<int> kTotalActiveWakeupFdHandles{0};

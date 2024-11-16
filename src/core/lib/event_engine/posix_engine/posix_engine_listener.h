@@ -85,7 +85,7 @@ class PosixEngineListenerImpl
           listener_(std::move(listener)),
           socket_(socket),
           handle_(listener_->poller_->CreateHandle(
-              socket_.sock.fd(),
+              socket_.sock,
               *grpc_event_engine::experimental::
                   ResolvedAddressToNormalizedString(socket_.addr),
               listener_->poller_->CanTrackErrors())),

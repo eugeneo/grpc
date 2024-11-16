@@ -275,7 +275,7 @@ void PosixEndpointImpl::FinishEstimate() {
 
 absl::Status PosixEndpointImpl::TcpAnnotateError(absl::Status src_error) const {
   grpc_core::StatusSetInt(&src_error, grpc_core::StatusIntProperty::kFd,
-                          handle_->WrappedFd());
+                          handle_->WrappedFd().fd());
   grpc_core::StatusSetInt(&src_error, grpc_core::StatusIntProperty::kRpcStatus,
                           GRPC_STATUS_UNAVAILABLE);
   return src_error;
@@ -1239,14 +1239,12 @@ void PosixEndpointImpl::MaybeShutdown(
 }
 
 PosixEndpointImpl ::~PosixEndpointImpl() {
-  SystemApi* system_api = handle_->Poller()->GetSystemApi();
-  int release_fd = -1;
+  FileDescriptor release_fd;
   handle_->OrphanHandle(on_done_,
                         on_release_fd_ == nullptr ? nullptr : &release_fd, "");
   if (on_release_fd_ != nullptr) {
     engine_->Run([on_release_fd = std::move(on_release_fd_),
-                  release_fd = system_api->AdoptExternalFd(
-                      release_fd)]() mutable { on_release_fd(release_fd); });
+                  release_fd]() mutable { on_release_fd(release_fd); });
   }
   delete on_read_;
   delete on_write_;
@@ -1264,7 +1262,7 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
       poller_(handle->Poller()),
       engine_(engine) {
   SystemApi* system_api = get_system_api();
-  fd_ = system_api->AdoptExternalFd(handle_->WrappedFd());
+  fd_ = handle_->WrappedFd();
   CHECK(options.resource_quota != nullptr);
   auto peer_addr_string = system_api->PeerAddressString(fd_);
   mem_quota_ = options.resource_quota->memory_quota();

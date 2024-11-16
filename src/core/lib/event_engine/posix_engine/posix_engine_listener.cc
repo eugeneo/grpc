@@ -139,8 +139,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     memset(const_cast<sockaddr*>(addr.address()), 0, addr.size());
     // Note: If we ever decide to return this address to the user, remember to
     // strip off the ::ffff:0.0.0.0/96 prefix first.
-    FileDescriptor fd = system_api.Accept4(
-        system_api.AdoptExternalFd(handle_->WrappedFd()), addr, 1, 1);
+    FileDescriptor fd = system_api.Accept4(handle_->WrappedFd(), addr, 1, 1);
     if (!fd.ready()) {
       switch (errno) {
         case EINTR:
@@ -228,7 +227,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     }
     auto endpoint = CreatePosixEndpoint(
         /*handle=*/listener_->poller_->CreateHandle(
-            fd.fd(), *peer_name, listener_->poller_->CanTrackErrors()),
+            fd, *peer_name, listener_->poller_->CanTrackErrors()),
         /*on_shutdown=*/nullptr, /*engine=*/listener_->engine_,
         // allocator=
         listener_->memory_allocator_factory_->CreateMemoryAllocator(
@@ -240,7 +239,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
       // Call on_accept_ and then resume accepting new connections
       // by continuing the parent for-loop.
       listener_->on_accept_(
-          /*listener_fd=*/handle_->WrappedFd(),
+          /*listener_fd=*/handle_->WrappedFd().fd(),
           /*endpoint=*/std::move(endpoint),
           /*is_external=*/false,
           /*memory_allocator=*/
@@ -272,9 +271,9 @@ absl::Status PosixEngineListenerImpl::HandleExternalConnection(
                      peer_name.status().ToString()));
   }
   grpc_core::EnsureRunInExecCtx([this, peer_name = std::move(*peer_name),
-                                 pending_data, listener_fd, fd]() mutable {
+                                 pending_data, listener_fd, sock]() mutable {
     auto endpoint = CreatePosixEndpoint(
-        /*handle=*/poller_->CreateHandle(fd, peer_name,
+        /*handle=*/poller_->CreateHandle(sock, peer_name,
                                          poller_->CanTrackErrors()),
         /*on_shutdown=*/nullptr, /*engine=*/engine_,
         /*allocator=*/
