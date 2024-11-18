@@ -2171,7 +2171,10 @@ grpc_cc_library(
         "lib/event_engine/posix_engine/wakeup_fd_posix.h",
     ],
     external_deps = ["absl/status"],
-    deps = ["//:gpr_platform"],
+    deps = [
+        "posix_event_engine_system_api",
+        "//:gpr_platform",
+    ],
 )
 
 grpc_cc_library(

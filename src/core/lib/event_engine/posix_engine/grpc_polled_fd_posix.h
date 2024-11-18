@@ -103,8 +103,9 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
       : poller_(poller) {}
 
   ~GrpcPolledFdFactoryPosix() override {
+    SystemApi* system_api = poller_->GetSystemApi();
     for (auto& fd : owned_fds_) {
-      close(fd);
+      system_api->Close(fd.second);
     }
   }
 
@@ -112,10 +113,11 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
 
   std::unique_ptr<GrpcPolledFd> NewGrpcPolledFdLocked(
       ares_socket_t as) override {
-    owned_fds_.insert(as);
+    FileDescriptor fd = poller_->GetSystemApi()->AdoptExternalFd(as);
+    owned_fds_.emplace(as, fd);
     return std::make_unique<GrpcPolledFdPosix>(
         as,
-        poller_->CreateHandle(as, "c-ares socket", poller_->CanTrackErrors()));
+        poller_->CreateHandle(fd, "c-ares socket", poller_->CanTrackErrors()));
   }
 
   void ConfigureAresChannelLocked(ares_channel channel) override {
@@ -127,9 +129,10 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
 
  private:
   /// Overridden socket API for c-ares
-  static ares_socket_t Socket(int af, int type, int protocol,
-                              void* /*user_data*/) {
-    return socket(af, type, protocol);
+  static ares_socket_t Socket(int af, int type, int protocol, void* user_data) {
+    SystemApi* system_api = static_cast<GrpcPolledFdFactoryPosix*>(user_data)
+                                ->poller_->GetSystemApi();
+    return system_api->Socket(af, type, protocol).fd();
   }
 
   /// Overridden connect API for c-ares
@@ -195,7 +198,7 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
   PosixEventPoller* poller_;
   // fds that are used/owned by grpc - we (grpc) will close them rather than
   // c-ares
-  std::unordered_set<ares_socket_t> owned_fds_;
+  std::unordered_map<ares_socket_t, FileDescriptor> owned_fds_;
 };
 
 }  // namespace experimental

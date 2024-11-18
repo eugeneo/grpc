@@ -68,7 +68,7 @@ class SystemApi {
                   socklen_t* addrlen) const;
   int GetPeerName(FileDescriptor fd, struct sockaddr* addr,
                   socklen_t* addrlen) const;
-  int Ioctl(int fd, int op, void* arg) const;
+  int Ioctl(FileDescriptor fd, int op, void* arg) const;
   int Listen(FileDescriptor fd, int backlog) const;
   long RecvMsg(FileDescriptor fd, struct msghdr* msg, int flags) const;
   ssize_t Read(FileDescriptor fd, void* buf, size_t count) const;
