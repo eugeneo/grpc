@@ -16,6 +16,9 @@
 
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/support/port_platform.h>
+#include <sys/ioctl.h>
+
+#include <tuple>
 
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
@@ -534,6 +537,36 @@ absl::StatusOr<std::string> SystemApi::PeerAddressString(
   return ResolvedAddressToNormalizedString((*status));
 }
 
+int SystemApi::Shutdown(FileDescriptor sockfd, int how) const {
+  return shutdown(sockfd.fd(), how);
+}
+
+int SystemApi::Connect(FileDescriptor sockfd, const struct sockaddr* addr,
+                       socklen_t addrlen) const {
+  return connect(sockfd.fd(), addr, addrlen);
+}
+
+int SystemApi::Ioctl(FileDescriptor fd, int request, void* extras) const {
+  return ioctl(fd.fd(), request, extras);
+}
+
+ssize_t SystemApi::Read(FileDescriptor fd, void* buf, size_t count) const {
+  return read(fd.fd(), buf, count);
+}
+
+ssize_t SystemApi::Write(FileDescriptor fd, const void* buf,
+                         size_t count) const {
+  return write(fd.fd(), buf, count);
+}
+
+std::tuple<int, FileDescriptor, FileDescriptor> SystemApi::SocketPair(
+    int domain, int type, int protocol) {
+  std::array<int, 2> fds;
+  int result = socketpair(domain, type, protocol, fds.data());
+  return std::make_tuple(result, AdoptExternalFd(fds[0]),
+                         AdoptExternalFd(fds[1]));
+}
+
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
@@ -658,6 +691,33 @@ void SystemApi::ConfigureDefaultTcpUserTimeout(bool enable, int timeout,
 }
 
 bool SystemApi::IsSocketReusePortSupported() const {
+  grpc_core::Crash("unimplemented");
+}
+
+int SystemApi::Shutdown(FileDescriptor sockfd, int how) const {
+  grpc_core::Crash("unimplemented");
+}
+
+int SystemApi::Connect(FileDescriptor sockfd, const struct sockaddr* addr,
+                       socklen_t addrlen) const {
+  grpc_core::Crash("unimplemented");
+}
+
+int SystemApi::Ioctl(FileDescriptor fd, int request, void* extras) const {
+  grpc_core::Crash("unimplemented");
+}
+
+ssize_t SystemApi::Read(FileDescriptor fd, void* buf, size_t count) const {
+  grpc_core::Crash("unimplemented");
+}
+
+ssize_t SystemApi::Write(FileDescriptor fd, const void* buf,
+                         size_t count) const {
+  grpc_core::Crash("unimplemented");
+}
+
+std::tuple<int, FileDescriptor, FileDescriptor> SystemApi::SocketPair(
+    int domain, int type, int protocol) {
   grpc_core::Crash("unimplemented");
 }
 

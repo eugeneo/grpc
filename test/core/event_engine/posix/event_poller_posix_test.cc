@@ -458,7 +458,6 @@ TEST_F(EventPollerTest, TestEventPollerHandleChange) {
   EventHandle* em_fd;
   FdChangeData a, b;
   int flags;
-  int sv[2];
   char data;
   ssize_t result;
   if (g_event_poller == nullptr) {
@@ -583,7 +582,9 @@ class WakeupFdHandle : public grpc_core::DualRefCounted<WakeupFdHandle> {
     EXPECT_NE(scheduler_, nullptr);
     EXPECT_NE(poller_, nullptr);
     wakeup_fd_ = *PipeWakeupFd::CreatePipeWakeupFd();
-    handle_ = poller_->CreateHandle(wakeup_fd_->ReadFd(), "test", false);
+    handle_ = poller_->CreateHandle(
+        poller->GetSystemApi()->AdoptExternalFd(wakeup_fd_->ReadFd()), "test",
+        false);
     EXPECT_NE(handle_, nullptr);
     handle_->NotifyOnRead(on_read_);
     //  Send a wakeup initially.
