@@ -50,7 +50,7 @@ namespace experimental {
 FileDescriptor SystemApi::Accept4(
     FileDescriptor sockfd,
     grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
-    int nonblock, int cloexec) {
+    int nonblock, int cloexec) const {
   int flags;
   EventEngine::ResolvedAddress peer_addr;
   socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;

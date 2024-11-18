@@ -71,13 +71,13 @@ class SystemApi {
   int Ioctl(FileDescriptor fd, int request, void* extras) const;
   int Listen(FileDescriptor fd, int backlog) const;
   long RecvMsg(FileDescriptor fd, struct msghdr* msg, int flags) const;
-  ssize_t Read(FileDescriptor fd, void* buf, size_t count) const;
+  long Read(FileDescriptor fd, void* buf, size_t count) const;
   long SendMsg(FileDescriptor fd, const struct msghdr* message,
                int flags) const;
   int SetSockOpt(FileDescriptor fd, int level, int optname, const void* optval,
                  socklen_t optlen) const;
   int Shutdown(FileDescriptor sockfd, int how) const;
-  ssize_t Write(FileDescriptor fd, const void* buf, size_t count) const;
+  long Write(FileDescriptor fd, const void* buf, size_t count) const;
 
   absl::Status SetSocketNoSigpipeIfPossible(FileDescriptor fd) const;
   bool IsSocketReusePortSupported() const;
