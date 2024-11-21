@@ -22,8 +22,8 @@
 
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-#include "file_descriptor.h"
 #include "src/core/lib/debug/trace.h"
+#include "src/core/lib/event_engine/posix_engine/file_descriptor.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/util/strerror.h"
