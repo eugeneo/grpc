@@ -2348,9 +2348,11 @@ grpc_cc_library(
 grpc_cc_library(
     name = "posix_event_engine_system_api",
     srcs = [
+        "lib/event_engine/posix_engine/file_descriptors.cc",
         "lib/event_engine/posix_engine/posix_system_api.cc",
     ],
     hdrs = [
+        "lib/event_engine/posix_engine/file_descriptors.h",
         "lib/event_engine/posix_engine/posix_system_api.h",
     ],
     external_deps = [
@@ -2358,6 +2360,7 @@ grpc_cc_library(
         "absl/functional:any_invocable",
         "absl/log:check",
         "absl/log:log",
+        "absl/types:optional",
         "absl/status",
         "absl/strings",
         "absl/synchronization",

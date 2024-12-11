@@ -21,13 +21,11 @@
 #include <array>
 #include <atomic>
 #include <type_traits>
-#include <unordered_set>
 #include <utility>
 
-#include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
+#include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
 #include "src/core/lib/iomgr/port.h"
-#include "src/core/util/sync.h"
 
 #ifdef GRPC_LINUX_EPOLL
 #include <sys/epoll.h>
@@ -83,45 +81,6 @@ struct WithFdReturn<void> {
 
 }  // namespace internal
 
-class LockedFd;
-
-ABSL_ATTRIBUTE_TRIVIAL_ABI class FileDescriptor {
- public:
-  FileDescriptor() = default;
-  explicit FileDescriptor(int fd) : fd_(fd) {}
-
-  bool ready() const { return fd_ > 0; }
-  void invalidate() { fd_ = -1; }
-
-  // Not meant to use to access FD for I/O. Only used for debug logging.
-  int debug_fd() const { return fd_; }
-
-  int fd() const { return fd_; }
-
- private:
-  friend class LockedFd;
-
-  int fd_ = -1;
-};
-
-class SystemApi;
-
-// FD that is locked for use in this thread
-class LockedFd {
- public:
-  explicit LockedFd(int fd, const SystemApi& system_api);
-  ~LockedFd();
-
-  LockedFd(const LockedFd& other) = delete;
-  LockedFd(LockedFd&& other) = default;
-
-  int fd() const { return fd_; }
-
- private:
-  int fd_;
-  const SystemApi* system_api_;
-};
-
 class SystemApi {
  public:
   static constexpr int kDscpNotSet = -1;
@@ -132,20 +91,6 @@ class SystemApi {
   ~SystemApi();
 
   absl::Status AdvanceGeneration();
-
-  void ReaderLock() const ABSL_NO_THREAD_SAFETY_ANALYSIS {
-    // Fork is not supported on Mac. This guard should be replaced accordingly.
-#ifdef GPR_ABSEIL_SYNC
-    mu_.ReaderLock();
-#endif
-  }
-
-  void ReaderUnlock() const ABSL_NO_THREAD_SAFETY_ANALYSIS {
-    // Fork is not supported on Mac. This guard should be replaced accordingly.
-#ifdef GPR_ABSEIL_SYNC
-    mu_.ReaderUnlock();
-#endif
-  }
 
   absl::StatusOr<FileDescriptor> Accept(FileDescriptor sockfd,
                                         struct sockaddr* addr,
@@ -269,12 +214,7 @@ class SystemApi {
 #endif  // TCP_USER_TIMEOUT
 #endif  // GPR_LINUX == 1
 
-  friend class LockedFd;
-
-  class ThreadLocalLocksState {};
-
   FileDescriptor RegisterFileDescriptor(int fd);
-  void Unlock(int fd) const;
 
   template <typename Fn>
   auto WithFd(const FileDescriptor& fd, const Fn& fn) const ->
@@ -290,8 +230,8 @@ class SystemApi {
   // (0: don't know, 1: support, -1: not support)
   mutable std::atomic<int> g_socket_supports_tcp_user_timeout = {
       SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT};
-  std::unordered_set<int> fds_ ABSL_GUARDED_BY(&mu_);
-  mutable grpc_core::Mutex mu_;
+
+  FileDescriptors fds_;
 
   // The default values for TCP_USER_TIMEOUT are currently configured to be in
   // line with the default values of KEEPALIVE_TIMEOUT as proposed in

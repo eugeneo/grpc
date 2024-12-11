@@ -59,55 +59,18 @@
 namespace grpc_event_engine {
 namespace experimental {
 
-namespace {
-class LocksState {
- public:
-  void Lock(const SystemApi* system_api, int fd) {
-    if (++counters_[system_api] == 1) {
-      system_api->ReaderLock();
-    }
-    LOG_EVERY_N(INFO, 1) << "Locks: " << counters_[system_api];
-  }
-
-  void Unlock(const SystemApi* system_api, int fd) {
-    CHECK_GT(counters_[system_api], 0);
-    if (--counters_[system_api] == 0) {
-      system_api->ReaderUnlock();
-    }
-  }
-
- private:
-  std::unordered_map<const SystemApi*, int> counters_;
-};
-
-thread_local LocksState locks_state;
-}  // namespace
-
-LockedFd::LockedFd(int fd, const SystemApi& system_api)
-    : fd_(fd), system_api_(&system_api) {
-  locks_state.Lock(system_api_, fd_);
-}
-
-LockedFd::~LockedFd() { locks_state.Unlock(system_api_, fd_); }
-
 SystemApi::~SystemApi() {
-  absl::MutexLock lock(&mu_);
-  for (int fd : fds_) {
+  for (int fd : fds_.Clear()) {
     close(fd);
   }
-  fds_.clear();
 }
 
 absl::StatusOr<LockedFd> SystemApi::Lock(FileDescriptor fd) const {
   if (!fd.ready()) {
     return absl::InternalError("Invalid file descriptor");
   }
-  LockedFd locked_fd{fd.fd(), *this};
-  locks_state.Lock(this, locked_fd.fd());
-  return locked_fd;
+  return fds_.Lock(fd);
 }
-
-void SystemApi::Unlock(int fd) const { locks_state.Unlock(this, fd); }
 
 #ifdef GRPC_POSIX_SOCKETUTILS
 
@@ -175,21 +138,14 @@ absl::StatusOr<FileDescriptor> SystemApi::Accept4(
 #endif  // GRPC_LINUX_SOCKETUTILS
 
 absl::Status SystemApi::AdvanceGeneration() {
-  std::unordered_set<int> fds;
-  {
-    absl::MutexLock lock(&mu_);
-    std::swap(fds, fds_);
-  }
-  for (int fd : fds) {
+  for (int fd : fds_.Clear()) {
     close(fd);
   }
   return absl::OkStatus();
 }
 
 FileDescriptor SystemApi::RegisterFileDescriptor(int fd) {
-  absl::MutexLock lock(&mu_);
-  fds_.insert(fd);
-  return FileDescriptor(fd);
+  return fds_.Add(fd);
 }
 
 absl::StatusOr<FileDescriptor> SystemApi::Accept(FileDescriptor sockfd,
@@ -215,13 +171,9 @@ absl::StatusOr<int> SystemApi::Bind(FileDescriptor fd,
 }
 
 void SystemApi::Close(FileDescriptor fd) {
-  auto locked_fd = Lock(fd);
-  if (!locked_fd.ok()) {
-    return;
-  }
-  absl::MutexLock lock(&mu_);
-  if (fds_.erase(locked_fd->fd()) > 0) {
-    close(locked_fd->fd());
+  absl::optional<int> posix_fd = fds_.Remove(fd);
+  if (posix_fd.has_value()) {
+    close(*posix_fd);
   }
 }
 
