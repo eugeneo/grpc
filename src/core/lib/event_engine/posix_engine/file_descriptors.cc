@@ -12,38 +12,131 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
+
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
+#include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+
 namespace grpc_event_engine {
 namespace experimental {
-
 namespace {
-// class LocksState {
-//  public:
-//   void Lock(const SystemApi* system_api, int fd) {
-//     if (++counters_[system_api] == 1) {
-//       system_api->ReaderLock();
-//     }
-//   }
 
-//   void Unlock(const SystemApi* system_api, int fd) {
-//     CHECK_GT(counters_[system_api], 0);
-//     if (--counters_[system_api] == 0) {
-//       system_api->ReaderUnlock();
-//     }
-//   }
+thread_local std::unordered_map<const FileDescriptors*, int> thread_locks_count;
 
-//  private:
-//   std::unordered_map<const SystemApi*, int> counters_;
-// };
+void FdLocked(const FileDescriptors* descriptors) {
+  if (descriptors != nullptr) {
+    ++thread_locks_count[descriptors];
+  }
+}
 
-// thread_local LocksState locks_state;
+void FdUnlocked(const FileDescriptors* descriptors) {
+  if (descriptors != nullptr) {
+    --thread_locks_count[descriptors];
+    CHECK_GE(thread_locks_count[descriptors], 0);
+  }
+}
+
 }  // namespace
 
-// LockedFd::LockedFd(int fd, const SystemApi& system_api)
-//     : fd_(fd), system_api_(&system_api) {
-//   locks_state.Lock(system_api_, fd_);
-// }
+ReentrantLock::ReentrantLock(const FileDescriptors* descriptors)
+    : descriptors_(descriptors) {
+  if (descriptors_ != nullptr) {
+    descriptors_->IncrementCounter();
+    FdLocked(descriptors);
+  }
+}
 
-// LockedFd::~LockedFd() { locks_state.Unlock(system_api_, fd_); }
+ReentrantLock::~ReentrantLock() noexcept {
+  if (descriptors_ != nullptr) {
+    descriptors_->DecrementCounter();
+    FdUnlocked(descriptors_);
+  }
+}
+
+FileDescriptor FileDescriptors::Add(int fd) {
+  ReentrantLock posix_lock = PosixLock();
+  grpc_core::MutexLock lock(&list_mu_);
+  fds_.insert(fd);
+  return FileDescriptor{fd};
+}
+
+absl::optional<int> FileDescriptors::Remove(const FileDescriptor& fd) {
+  auto locked_fd = Lock(fd);
+  if (locked_fd.ok()) {
+    return locked_fd->fd();
+  }
+  return absl::nullopt;
+}
+
+std::unordered_set<int> FileDescriptors::Clear() {
+  grpc_core::MutexLock lock(&list_mu_);
+  std::unordered_set<int> ret;
+  std::swap(fds_, ret);
+  return ret;
+}
+
+absl::StatusOr<LockedFd> FileDescriptors::Lock(const FileDescriptor& fd) const {
+  LockedFd locked_fd{fd.fd(), PosixLock()};
+  {
+    grpc_core::MutexLock lock(&list_mu_);
+    if (fds_.find(locked_fd.fd()) == fds_.end()) {
+      return absl::InternalError(
+          absl::StrCat("FD ", locked_fd.fd(), " not found"));
+    }
+  }
+  return locked_fd;
+}
+
+ReentrantLock FileDescriptors::PosixLock() const { return ReentrantLock(this); }
+
+void FileDescriptors::IncrementCounter() const {
+  grpc_core::MutexLock lock(&mu_);
+  ++locked_descriptors_;
+}
+
+void FileDescriptors::DecrementCounter() const {
+  grpc_core::MutexLock lock(&mu_);
+  --locked_descriptors_;
+  CHECK_GE(locked_descriptors_, 0);
+  if (locked_descriptors_ == 0 && state_ == State::kStopping) {
+    io_cond_.SignalAll();
+  }
+}
+
+absl::Status FileDescriptors::Stop() {
+  if (thread_locks_count[this] > 0) {
+    return absl::FailedPreconditionError(
+        absl::StrFormat("Current thread holds %d i/o locks that need to be "
+                        "released before calling fork",
+                        thread_locks_count[this]));
+  }
+  grpc_core::MutexLock lock(&mu_);
+  CHECK(state_ == State::kReady)
+      << (state_ == State::kStopping ? "Actual: stopping" : "Actual: stopped");
+  state_ = State::kStopping;
+  while (locked_descriptors_ > 0) {
+    io_cond_.Wait(&mu_);
+  }
+  state_ = State::kStopped;
+  return absl::OkStatus();
+}
+
+void FileDescriptors::ExpectStatusForTest(size_t locks, State state) {
+  grpc_core::MutexLock lock(&mu_);
+  while (locked_descriptors_ != locks && state_ != state) {
+    LOG(INFO) << "Locks: " << locked_descriptors_ << " state: "
+              << (state == State::kReady      ? "Ready"
+                  : state == State::kStopping ? "Stopping"
+                                              : "Stopped");
+    io_cond_.Wait(&mu_);
+  }
+}
 
 }  // namespace experimental
 }  // namespace grpc_event_engine

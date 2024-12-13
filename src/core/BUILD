@@ -2362,6 +2362,7 @@ grpc_cc_library(
         "absl/log:log",
         "absl/types:optional",
         "absl/status",
+        "absl/status:statusor",
         "absl/strings",
         "absl/synchronization",
     ],

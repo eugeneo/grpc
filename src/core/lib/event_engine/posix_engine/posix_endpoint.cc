@@ -1334,7 +1334,7 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
           .ok()) {
     inq_capable_ = true;
   } else {
-    VLOG(2) << "cannot set inq fd=" << fd_.fd() << " errno=" << errno;
+    VLOG(2) << "cannot set inq fd=" << fd_.debug_fd() << " errno=" << errno;
     inq_capable_ = false;
   }
 #else

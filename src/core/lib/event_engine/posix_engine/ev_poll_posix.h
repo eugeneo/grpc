@@ -67,10 +67,8 @@ class PollPoller : public PosixEventPoller,
 
  private:
   void KickExternal(bool ext);
-  void PollerHandlesListAddHandle(PollEventHandle* handle)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-  void PollerHandlesListRemoveHandle(PollEventHandle* handle)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+  void PollerHandlesListAddHandle(PollEventHandle* handle);
+  void PollerHandlesListRemoveHandle(PollEventHandle* handle);
   friend class PollEventHandle;
   class HandlesList {
    public:

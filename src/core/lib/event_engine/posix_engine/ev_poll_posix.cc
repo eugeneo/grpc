@@ -32,6 +32,7 @@
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
+#include "file_descriptors.h"
 #include "src/core/lib/event_engine/poller.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine_closure.h"
@@ -89,7 +90,6 @@ class PollEventHandle : public EventHandle {
         read_closure_(reinterpret_cast<PosixEngineClosure*>(kClosureNotReady)),
         write_closure_(
             reinterpret_cast<PosixEngineClosure*>(kClosureNotReady)) {
-    grpc_core::MutexLock lock(&poller_->mu_);
     poller_->PollerHandlesListAddHandle(this);
   }
   PollPoller* Poller() override { return poller_.get(); }
@@ -107,7 +107,6 @@ class PollEventHandle : public EventHandle {
     return false;
   }
   void ForceRemoveHandleFromPoller() {
-    grpc_core::MutexLock lock(&poller_->mu_);
     poller_->PollerHandlesListRemoveHandle(this);
   }
   FileDescriptor WrappedFd() override { return fd_; }
@@ -588,6 +587,7 @@ void PollPoller::KickExternal(bool ext) {
 void PollPoller::Kick() { KickExternal(true); }
 
 void PollPoller::PollerHandlesListAddHandle(PollEventHandle* handle) {
+  grpc_core::MutexLock lock(&mu_);
   handle->PollerHandlesListPos().next = poll_handles_list_head_;
   handle->PollerHandlesListPos().prev = nullptr;
   if (poll_handles_list_head_ != nullptr) {
@@ -598,6 +598,8 @@ void PollPoller::PollerHandlesListAddHandle(PollEventHandle* handle) {
 }
 
 void PollPoller::PollerHandlesListRemoveHandle(PollEventHandle* handle) {
+  ReentrantLock posix_lock = system_api_->PosixLock();
+  grpc_core::MutexLock lock(&mu_);
   if (poll_handles_list_head_ == handle) {
     poll_handles_list_head_ = handle->PollerHandlesListPos().next;
   }

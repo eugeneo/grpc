@@ -117,6 +117,8 @@ class SystemApi {
   absl::StatusOr<int> Connect(FileDescriptor sockfd,
                               const struct sockaddr* addr,
                               socklen_t addrlen) const;
+  ReentrantLock PosixLock() const { return fds_.PosixLock(); }
+
 #ifdef GRPC_LINUX_EPOLL
   absl::StatusOr<long> EventFdRead(FileDescriptor fd, uint64_t* value) const;
   absl::StatusOr<int> EventFdWrite(FileDescriptor fd, uint64_t value) const;
