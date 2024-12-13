@@ -598,7 +598,6 @@ void PollPoller::PollerHandlesListAddHandle(PollEventHandle* handle) {
 }
 
 void PollPoller::PollerHandlesListRemoveHandle(PollEventHandle* handle) {
-  ReentrantLock posix_lock = system_api_->PosixLock();
   grpc_core::MutexLock lock(&mu_);
   if (poll_handles_list_head_ == handle) {
     poll_handles_list_head_ = handle->PollerHandlesListPos().next;

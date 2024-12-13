@@ -18,7 +18,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -60,7 +59,6 @@ ReentrantLock::~ReentrantLock() noexcept {
 }
 
 FileDescriptor FileDescriptors::Add(int fd) {
-  ReentrantLock posix_lock = PosixLock();
   grpc_core::MutexLock lock(&list_mu_);
   fds_.insert(fd);
   return FileDescriptor{fd};
@@ -82,7 +80,11 @@ std::unordered_set<int> FileDescriptors::Clear() {
 }
 
 absl::StatusOr<LockedFd> FileDescriptors::Lock(const FileDescriptor& fd) const {
-  LockedFd locked_fd{fd.fd(), PosixLock()};
+  auto posix_lock = PosixLock();
+  if (!posix_lock.ok()) {
+    return std::move(posix_lock).status();
+  }
+  LockedFd locked_fd{fd.fd(), std::move(posix_lock).value()};
   {
     grpc_core::MutexLock lock(&list_mu_);
     if (fds_.find(locked_fd.fd()) == fds_.end()) {
@@ -93,20 +95,27 @@ absl::StatusOr<LockedFd> FileDescriptors::Lock(const FileDescriptor& fd) const {
   return locked_fd;
 }
 
-ReentrantLock FileDescriptors::PosixLock() const { return ReentrantLock(this); }
+absl::StatusOr<ReentrantLock> FileDescriptors::PosixLock() const {
+  {
+    grpc_core::MutexLock lock(&mu_);
+    if (state_ != State::kReady) {
+      return absl::AbortedError("I/O operations are disabled");
+    }
+  }
+  return ReentrantLock(this);
+}
 
 void FileDescriptors::IncrementCounter() const {
   grpc_core::MutexLock lock(&mu_);
   ++locked_descriptors_;
+  io_cond_.SignalAll();
 }
 
 void FileDescriptors::DecrementCounter() const {
   grpc_core::MutexLock lock(&mu_);
   --locked_descriptors_;
   CHECK_GE(locked_descriptors_, 0);
-  if (locked_descriptors_ == 0 && state_ == State::kStopping) {
-    io_cond_.SignalAll();
-  }
+  io_cond_.SignalAll();
 }
 
 absl::Status FileDescriptors::Stop() {
@@ -119,21 +128,24 @@ absl::Status FileDescriptors::Stop() {
   grpc_core::MutexLock lock(&mu_);
   CHECK(state_ == State::kReady)
       << (state_ == State::kStopping ? "Actual: stopping" : "Actual: stopped");
-  state_ = State::kStopping;
+  SetState(State::kStopping);
   while (locked_descriptors_ > 0) {
     io_cond_.Wait(&mu_);
   }
-  state_ = State::kStopped;
+  SetState(State::kStopped);
   return absl::OkStatus();
+}
+
+void FileDescriptors::Restart() {
+  grpc_core::MutexLock lock(&mu_);
+  CHECK(state_ == State::kStopped)
+      << (state_ == State::kStopping ? "Actual: stopping" : "Actual: ready");
+  SetState(State::kReady);
 }
 
 void FileDescriptors::ExpectStatusForTest(size_t locks, State state) {
   grpc_core::MutexLock lock(&mu_);
-  while (locked_descriptors_ != locks && state_ != state) {
-    LOG(INFO) << "Locks: " << locked_descriptors_ << " state: "
-              << (state == State::kReady      ? "Ready"
-                  : state == State::kStopping ? "Stopping"
-                                              : "Stopped");
+  while (locked_descriptors_ != locks || state_ != state) {
     io_cond_.Wait(&mu_);
   }
 }

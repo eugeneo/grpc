@@ -30,7 +30,9 @@ TEST(FileDescriptorsTest, WaitsForLocksToDrop) {
   std::vector<ReentrantLock> locks;
   locks.reserve(5);
   while (locks.size() < 5) {
-    locks.emplace_back(fds.PosixLock());
+    auto lock = fds.PosixLock();
+    ASSERT_TRUE(lock.ok()) << lock.status();
+    locks.emplace_back(std::move(lock).value());
   }
   grpc_core::Mutex mu;
   grpc_core::CondVar cond;
@@ -47,6 +49,8 @@ TEST(FileDescriptorsTest, WaitsForLocksToDrop) {
     locks.pop_back();
   }
   fds.ExpectStatusForTest(locks.size(), FileDescriptors::State::kStopping);
+  auto failed_lock = fds.PosixLock();
+  EXPECT_EQ(failed_lock.status().code(), absl::StatusCode::kAborted);
   locks.clear();
   fds.ExpectStatusForTest(0, FileDescriptors::State::kStopped);
   grpc_core::MutexLock lock(&mu);
@@ -54,6 +58,10 @@ TEST(FileDescriptorsTest, WaitsForLocksToDrop) {
     cond.Wait(&mu);
   }
   EXPECT_TRUE(stop_status->ok()) << *stop_status;
+  fds.Restart();
+  fds.ExpectStatusForTest(locks.size(), FileDescriptors::State::kReady);
+  auto l = fds.PosixLock();
+  EXPECT_TRUE(l.ok()) << l.status();
 }
 
 TEST(FileDescriptorsTest, DetectsIfThreadHasIOLock) {

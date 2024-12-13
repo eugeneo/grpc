@@ -93,16 +93,10 @@ class FileDescriptors {
   std::unordered_set<int> Clear();
   absl::StatusOr<LockedFd> Lock(const FileDescriptor& fd) const;
   void Unlock(const FileDescriptor& fd) const;
-  ReentrantLock PosixLock() const;
+  absl::StatusOr<ReentrantLock> PosixLock() const;
   absl::Status Stop();
-  uint32_t locked_descriptors_for_tests() const {
-    grpc_core::MutexLock lock(&mu_);
-    return locked_descriptors_;
-  }
-  State state_for_test() const {
-    grpc_core::MutexLock lock(&mu_);
-    return state_;
-  }
+  void Restart();
+
   void ExpectStatusForTest(size_t locks, State state);
 
  private:
@@ -110,6 +104,11 @@ class FileDescriptors {
 
   void IncrementCounter() const;
   void DecrementCounter() const;
+
+  void SetState(State new_state) ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
+    state_ = new_state;
+    io_cond_.SignalAll();
+  }
 
   mutable grpc_core::Mutex list_mu_;
   std::unordered_set<int> fds_ ABSL_GUARDED_BY(&list_mu_);
