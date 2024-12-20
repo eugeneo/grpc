@@ -24,7 +24,9 @@
 #include <utility>
 
 #include "absl/status/status.h"
+#include "fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
+#include "src/core/lib/event_engine/posix_engine/fork_support.h"
 #include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_LINUX_EPOLL
@@ -89,6 +91,10 @@ class SystemApi {
   SystemApi(const SystemApi& other) = delete;
 
   absl::Status AdvanceGeneration();
+  ForkSubscription OnFork(
+      absl::AnyInvocable<void(ForkSupport::ForkEvent)> listener) {
+    return fork_support_.Subscribe(std::move(listener));
+  }
 
   absl::StatusOr<FileDescriptor> Accept(FileDescriptor sockfd,
                                         struct sockaddr* addr,
@@ -234,6 +240,7 @@ class SystemApi {
       SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT};
 
   FileDescriptors fds_;
+  ForkSupport fork_support_;
 
   // The default values for TCP_USER_TIMEOUT are currently configured to be in
   // line with the default values of KEEPALIVE_TIMEOUT as proposed in

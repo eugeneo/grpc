@@ -18,6 +18,8 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "fork_support.h"
+#include "src/core/lib/event_engine/posix_engine/fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 #include "src/core/lib/event_engine/posix_engine/wakeup_fd_posix.h"
 
@@ -26,7 +28,7 @@ namespace experimental {
 
 class EventFdWakeupFd : public WakeupFd {
  public:
-  explicit EventFdWakeupFd(SystemApi* system_api) : system_api_(system_api) {}
+  explicit EventFdWakeupFd(SystemApi* system_api);
   ~EventFdWakeupFd() override;
   absl::Status ConsumeWakeup() override;
   absl::Status Wakeup() override;
@@ -39,6 +41,7 @@ class EventFdWakeupFd : public WakeupFd {
   absl::Status Init();
 
   SystemApi* system_api_;
+  ForkSubscription fork_subscription_;
 };
 
 }  // namespace experimental

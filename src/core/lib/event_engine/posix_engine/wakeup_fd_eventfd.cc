@@ -16,7 +16,10 @@
 
 #include <utility>
 
+#include "absl/cleanup/cleanup.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
+#include "fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/util/crash.h"  // IWYU pragma: keep
@@ -27,7 +30,6 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 
-#include "src/core/lib/event_engine/posix_engine/wakeup_fd_posix.h"
 #endif
 
 #include "src/core/lib/event_engine/posix_engine/wakeup_fd_eventfd.h"
@@ -37,6 +39,15 @@ namespace grpc_event_engine {
 namespace experimental {
 
 #ifdef GRPC_LINUX_EVENTFD
+
+EventFdWakeupFd::EventFdWakeupFd(SystemApi* system_api)
+    : system_api_(system_api),
+      fork_subscription_(system_api_->OnFork([](auto event) {
+        LOG(INFO) << "Forking! "
+                  << (event == ForkSupport::ForkEvent::kPreFork ? "pre fork"
+                      : event == ForkSupport::ForkEvent::kChild ? "child"
+                                                                : "parent");
+      })) {}
 
 absl::Status EventFdWakeupFd::Init() {
   FileDescriptor read_fd = system_api_->EventFd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -49,6 +60,7 @@ absl::Status EventFdWakeupFd::Init() {
 }
 
 absl::Status EventFdWakeupFd::ConsumeWakeup() {
+  LOG(INFO) << "EventFdWakeupFd::ConsumeWakeup";
   eventfd_t value;
   absl::StatusOr<int> err;
   do {
@@ -66,6 +78,9 @@ absl::Status EventFdWakeupFd::ConsumeWakeup() {
 }
 
 absl::Status EventFdWakeupFd::Wakeup() {
+  LOG(INFO) << "EventFdWakeupFd::Wakeup";
+  auto cleanup = absl::MakeCleanup(
+      []() { LOG(INFO) << "EventFdWakeupFd::Wakeup - done"; });
   absl::StatusOr<int> err;
   do {
     err = system_api_->EventFdWrite(ReadFd(), 1);

@@ -2218,6 +2218,8 @@ grpc_cc_library(
         "lib/event_engine/posix_engine/wakeup_fd_eventfd.h",
     ],
     external_deps = [
+        "absl/cleanup",
+        "absl/log",
         "absl/status",
         "absl/status:statusor",
         "absl/strings",
@@ -2354,10 +2356,12 @@ grpc_cc_library(
     name = "posix_event_engine_system_api",
     srcs = [
         "lib/event_engine/posix_engine/file_descriptors.cc",
+        "lib/event_engine/posix_engine/fork_support.cc",
         "lib/event_engine/posix_engine/posix_system_api.cc",
     ],
     hdrs = [
         "lib/event_engine/posix_engine/file_descriptors.h",
+        "lib/event_engine/posix_engine/fork_support.h",
         "lib/event_engine/posix_engine/posix_system_api.h",
     ],
     external_deps = [

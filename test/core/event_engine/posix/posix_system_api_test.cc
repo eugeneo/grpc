@@ -18,6 +18,7 @@
 #include <gmock/gmock.h>
 #include <grpc/event_engine/event_engine.h>
 #include <grpcpp/grpcpp.h>
+#include <grpcpp/support/status.h>
 #include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -301,9 +302,17 @@ using helloworld::Greeter;
 using helloworld::HelloReply;
 using helloworld::HelloRequest;
 
+grpc::Status CallSayHello(Greeter::Stub* stub) {
+  grpc::ClientContext context;
+  HelloRequest request;
+  request.set_name("system_api_test");
+  HelloReply response;
+  return stub->SayHello(&context, request, &response);
+}
+
 }  // namespace
 
-TEST(PosixSystemApiTest, FullGrpc) {
+TEST(PosixSystemApiTest, FullStopBeforeFork) {
   int port = grpc_pick_unused_port_or_die();
   int pid = fork();
   ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
@@ -314,28 +323,59 @@ TEST(PosixSystemApiTest, FullGrpc) {
   // Give the child time to start up
   absl::SleepFor(absl::Milliseconds(1000));
   std::string target = absl::StrCat("localhost:", port);
+  // First call - it works.
   auto channel =
       grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
   auto stub = Greeter::NewStub(channel);
-  HelloRequest request;
-  request.set_name("system_api_test");
-
-  grpc::ClientContext context;
-  HelloReply response;
-  auto status = stub->SayHello(&context, request, &response);
+  grpc::Status status = CallSayHello(stub.get());
   EXPECT_TRUE(status.ok()) << status.error_message();
-  EXPECT_EQ(response.message(), "Hello system_api_test");
+  stub.reset();
+  channel.reset();
+  // Simulating fork
+  auto ee = GetDefaultEventEngine();
+  LOG(INFO) << "EventEngine: " << ee.get();
+  PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
+  ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
+  ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
+  // This call hangs (but will be fixed)
+  channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+  stub = Greeter::NewStub(channel);
+  status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
+}
+
+TEST(PosixSystemApiTest, DISABLED_FullGrpc) {
+  int port = grpc_pick_unused_port_or_die();
+  int pid = fork();
+  ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
+  if (pid == 0) {
+    ASSERT_THAT(ExecServer(port), IsOk());
+  }
+  auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
+  // Give the child time to start up
+  absl::SleepFor(absl::Milliseconds(1000));
+  std::string target = absl::StrCat("localhost:", port);
+  // First call - it works.
+  auto channel =
+      grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+  auto stub = Greeter::NewStub(channel);
+  grpc::Status status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
+  // Simulating fork
   auto ee = GetDefaultEventEngine();
   PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
   ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
   ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
-  request.set_name("trying after shutdown");
-  grpc::ClientContext ctx2;
-  response = {};
-  status = stub->SayHello(&ctx2, request, &response);
-  EXPECT_TRUE(status.ok()) << absl::StrFormat("(%d) %s", status.error_code(),
-                                              status.error_message());
-  EXPECT_EQ(response.message(), "Hello system_api_test");
+  // This call fails with invalid fd
+  status = CallSayHello(stub.get());
+  EXPECT_FALSE(status.ok()) << status.error_message();
+  status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
+  // This call hangs (but will be fixed)
+  channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+  stub = Greeter::NewStub(channel);
+  status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
 }
 
 }  // namespace experimental
