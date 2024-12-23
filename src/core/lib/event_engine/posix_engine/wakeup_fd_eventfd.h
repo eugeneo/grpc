@@ -18,7 +18,6 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 #include "src/core/lib/event_engine/posix_engine/wakeup_fd_posix.h"

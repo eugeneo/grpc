@@ -1187,6 +1187,8 @@ let package = Package(
         "src/core/lib/event_engine/posix_engine/event_poller_posix_default.h",
         "src/core/lib/event_engine/posix_engine/file_descriptors.cc",
         "src/core/lib/event_engine/posix_engine/file_descriptors.h",
+        "src/core/lib/event_engine/posix_engine/fork_support.cc",
+        "src/core/lib/event_engine/posix_engine/fork_support.h",
         "src/core/lib/event_engine/posix_engine/grpc_polled_fd_posix.h",
         "src/core/lib/event_engine/posix_engine/internal_errqueue.cc",
         "src/core/lib/event_engine/posix_engine/internal_errqueue.h",

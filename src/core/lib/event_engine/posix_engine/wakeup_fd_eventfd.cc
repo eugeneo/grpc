@@ -19,7 +19,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-#include "fork_support.h"
+#include "src/core/lib/event_engine/posix_engine/fork_support.h"
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/util/crash.h"  // IWYU pragma: keep
