@@ -465,7 +465,7 @@ PosixEventEngine::~PosixEventEngine() {
     poller_manager_->TriggerShutdown();
   }
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
-  executor_->Quiesce();
+  executor_->Quiesce([]() {});
 }
 
 bool PosixEventEngine::Cancel(EventEngine::TaskHandle handle) {
@@ -754,10 +754,15 @@ PosixEventEngine::CreatePosixListener(
 absl::Status PosixEventEngine::HandlePreFork() {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::MutexLock lock(&fork_mutex_);
+  // absl::AnyInv
+
+  // action();
   auto poller = poller_manager_->Poller();
   if (poller != nullptr) {
     return poller->PrepareForkNew();
   }
+  LOG(INFO) << "Pool shutdown";
+  executor_->Quiesce([]() {});
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   return absl::OkStatus();
 }
@@ -765,6 +770,7 @@ absl::Status PosixEventEngine::HandlePreFork() {
 absl::Status PosixEventEngine::HandleForkInChild() {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::MutexLock lock(&fork_mutex_);
+  executor_->PostforkChild();
   PosixEventPoller* poller = poller_manager_->Poller();
   auto status = poller->GetSystemApi()->AdvanceGeneration();
   if (!status.ok()) {

@@ -95,6 +95,8 @@ class SystemApi {
       absl::AnyInvocable<void(ForkSupport::ForkEvent)> listener) {
     return fork_support_.Subscribe(std::move(listener));
   }
+  void PrepareFork();
+  void PostFork();
 
   absl::StatusOr<FileDescriptor> Accept(FileDescriptor sockfd,
                                         struct sockaddr* addr,

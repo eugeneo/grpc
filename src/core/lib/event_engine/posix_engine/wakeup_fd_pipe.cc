@@ -97,10 +97,6 @@ PipeWakeupFd::~PipeWakeupFd() {
   }
 }
 
-absl::StatusOr<std::unique_ptr<WakeupFd>> PipeWakeupFd::Restart() {
-  return CreatePipeWakeupFd(*system_api_);
-}
-
 bool PipeWakeupFd::IsSupported(SystemApi& system_api) {
   PipeWakeupFd pipe_wakeup_fd(&system_api);
   return pipe_wakeup_fd.Init(system_api).ok();

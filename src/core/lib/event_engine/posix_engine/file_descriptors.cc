@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -97,7 +98,14 @@ void FileDescriptors::DecrementCounter() const {
   io_cond_.SignalAll();
 }
 
-absl::Status FileDescriptors::Stop() {
+void FileDescriptors::Restart() {
+  grpc_core::MutexLock lock(&mu_);
+  CHECK(state_ == State::kStopped)
+      << (state_ == State::kStopping ? "Actual: stopping" : "Actual: ready");
+  SetState(State::kReady);
+}
+
+absl::Status FileDescriptors::PrepareFork() {
   grpc_core::MutexLock lock(&mu_);
   CHECK(state_ == State::kReady)
       << (state_ == State::kStopping ? "Actual: stopping" : "Actual: stopped");
@@ -107,13 +115,6 @@ absl::Status FileDescriptors::Stop() {
   }
   SetState(State::kStopped);
   return absl::OkStatus();
-}
-
-void FileDescriptors::Restart() {
-  grpc_core::MutexLock lock(&mu_);
-  CHECK(state_ == State::kStopped)
-      << (state_ == State::kStopping ? "Actual: stopping" : "Actual: ready");
-  SetState(State::kReady);
 }
 
 void FileDescriptors::ExpectStatusForTest(int locks, State state) {

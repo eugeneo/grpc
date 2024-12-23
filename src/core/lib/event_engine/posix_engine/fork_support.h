@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/log/log.h"
 #include "src/core/util/sync.h"
 
 namespace grpc_event_engine {
@@ -44,21 +45,33 @@ class ForkSubscription {
 
 class ForkSupport {
  public:
-  enum class ForkEvent { kPreFork, kParent, kChild };
+  enum class ForkEvent { kPreFork, kPostFork };
 
   ForkSubscription Subscribe(absl::AnyInvocable<void(ForkEvent)> listener) {
     grpc_core::MutexLock lock(&mu_);
     int key = next_key_++;
     listeners_.emplace(key, std::move(listener));
+    LOG(INFO) << "Subbed " << key;
     return ForkSubscription(this, key);
   }
+
+  void PrepareFork() { Signal(ForkEvent::kPreFork); }
+  void PostFork() { Signal(ForkEvent::kPostFork); }
 
  private:
   friend class ForkSubscription;
 
+  void Signal(ForkEvent event) {
+    grpc_core::MutexLock lock(&mu_);
+    for (auto& key_listener : listeners_) {
+      key_listener.second(event);
+    }
+  }
+
   void Unsubscribe(int key) {
     grpc_core::MutexLock lock(&mu_);
     listeners_.erase(key);
+    LOG(INFO) << "Unsubbed " << key;
   }
 
   grpc_core::Mutex mu_;

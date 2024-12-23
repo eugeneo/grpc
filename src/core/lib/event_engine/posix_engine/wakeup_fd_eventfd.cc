@@ -42,11 +42,10 @@ namespace experimental {
 
 EventFdWakeupFd::EventFdWakeupFd(SystemApi* system_api)
     : system_api_(system_api),
-      fork_subscription_(system_api_->OnFork([](auto event) {
-        LOG(INFO) << "Forking! "
-                  << (event == ForkSupport::ForkEvent::kPreFork ? "pre fork"
-                      : event == ForkSupport::ForkEvent::kChild ? "child"
-                                                                : "parent");
+      fork_subscription_(system_api_->OnFork([this](auto event) {
+        if (event == ForkSupport::ForkEvent::kPostFork) {
+          CHECK(Init().ok());
+        }
       })) {}
 
 absl::Status EventFdWakeupFd::Init() {
@@ -60,7 +59,6 @@ absl::Status EventFdWakeupFd::Init() {
 }
 
 absl::Status EventFdWakeupFd::ConsumeWakeup() {
-  LOG(INFO) << "EventFdWakeupFd::ConsumeWakeup";
   eventfd_t value;
   absl::StatusOr<int> err;
   do {
@@ -78,9 +76,6 @@ absl::Status EventFdWakeupFd::ConsumeWakeup() {
 }
 
 absl::Status EventFdWakeupFd::Wakeup() {
-  LOG(INFO) << "EventFdWakeupFd::Wakeup";
-  auto cleanup = absl::MakeCleanup(
-      []() { LOG(INFO) << "EventFdWakeupFd::Wakeup - done"; });
   absl::StatusOr<int> err;
   do {
     err = system_api_->EventFdWrite(ReadFd(), 1);
@@ -100,10 +95,6 @@ EventFdWakeupFd::~EventFdWakeupFd() {
   if (ReadFd().ready()) {
     system_api_->Close(ReadFd());
   }
-}
-
-absl::StatusOr<std::unique_ptr<WakeupFd>> EventFdWakeupFd::Restart() {
-  return CreateEventFdWakeupFd(*system_api_);
 }
 
 bool EventFdWakeupFd::IsSupported(SystemApi& system_api) {

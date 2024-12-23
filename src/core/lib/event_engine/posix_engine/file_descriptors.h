@@ -94,8 +94,8 @@ class FileDescriptors {
   absl::StatusOr<LockedFd> Lock(const FileDescriptor& fd) const;
   void Unlock(const FileDescriptor& fd) const;
   absl::StatusOr<ReentrantLock> PosixLock() const;
-  absl::Status Stop();
   void Restart();
+  absl::Status PrepareFork();
 
   void ExpectStatusForTest(int locks, State state);
 

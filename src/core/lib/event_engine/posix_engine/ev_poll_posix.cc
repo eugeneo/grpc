@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
@@ -582,7 +583,7 @@ void PollPoller::KickExternal(bool ext) {
   was_kicked_ = true;
   was_kicked_ext_ = ext;
   auto status = wakeup_fd_->Wakeup();
-  CHECK(status.ok()) << status << " " << wakeup_fd_.get();
+  LOG_IF(ERROR, !status.ok()) << status;
 }
 
 void PollPoller::Kick() { KickExternal(true); }
@@ -638,6 +639,8 @@ PollPoller::~PollPoller() {
 Poller::WorkResult PollPoller::Work(
     EventEngine::Duration timeout,
     absl::FunctionRef<void()> schedule_poll_again) {
+  LOG(INFO) << "Polling";
+  auto cleanup = absl::MakeCleanup([]() { LOG(INFO) << "Polling done"; });
   CHECK(!in_fork_.load());
   // Avoid malloc for small number of elements.
   enum { inline_elements = 96 };
@@ -842,18 +845,16 @@ void PollPoller::PostforkParent() {}
 void PollPoller::PostforkChild() {}
 
 absl::Status PollPoller::PrepareForkNew() {
-  LOG(INFO) << "Restarting!";
   bool in_fork = false;
+  system_api_.PrepareFork();
   CHECK(in_fork_.compare_exchange_strong(in_fork, true));
   return absl::OkStatus();
 }
 
 absl::Status PollPoller::RestartOnFork() {
-  auto new_wakeup_fd = wakeup_fd_->Restart();
-  if (!new_wakeup_fd.ok()) return std::move(new_wakeup_fd).status();
-  wakeup_fd_ = std::move(new_wakeup_fd).value();
   bool in_fork = true;
   CHECK(in_fork_.compare_exchange_strong(in_fork, false));
+  system_api_.PostFork();
   LOG(INFO) << "Restarted! " << wakeup_fd_.get();
   return absl::OkStatus();
 }

@@ -91,6 +91,13 @@ absl::StatusOr<LockedFd> SystemApi::Lock(FileDescriptor fd) const {
   return fds_.Lock(fd);
 }
 
+void SystemApi::PrepareFork() {
+  CHECK_OK(fds_.PrepareFork());
+  fork_support_.PrepareFork();
+}
+
+void SystemApi::PostFork() { fork_support_.PostFork(); }
+
 #ifdef GRPC_POSIX_SOCKETUTILS
 
 absl::StatusOr<FileDescriptor> SystemApi::Accept4(
