@@ -111,6 +111,11 @@ class PosixEnginePollerManager
 
   void Run(experimental::EventEngine::Closure* closure) override;
   void Run(absl::AnyInvocable<void()>) override;
+  void Suspend();
+  bool IsSuspended() {
+    return poller_state_.load(std::memory_order_relaxed) ==
+           PollerState::kSuspended;
+  }
 
   bool IsShuttingDown() {
     return poller_state_.load(std::memory_order_acquire) ==
@@ -121,7 +126,7 @@ class PosixEnginePollerManager
   ~PosixEnginePollerManager() override;
 
  private:
-  enum class PollerState { kExternal, kOk, kShuttingDown };
+  enum class PollerState { kExternal, kOk, kShuttingDown, kSuspended };
   std::shared_ptr<grpc_event_engine::experimental::PosixEventPoller> poller_;
   std::atomic<PollerState> poller_state_{PollerState::kOk};
   std::shared_ptr<ThreadPool> executor_;

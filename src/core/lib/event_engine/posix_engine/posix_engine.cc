@@ -355,6 +355,12 @@ void PosixEnginePollerManager::TriggerShutdown() {
   poller_->Kick();
 }
 
+void PosixEnginePollerManager::Suspend() {
+  PollerState expected = PollerState::kOk;
+  CHECK(poller_state_.compare_exchange_weak(expected, PollerState::kSuspended));
+  poller_->FinishPolling();
+}
+
 PosixEnginePollerManager::~PosixEnginePollerManager() {
   if (poller_ != nullptr) {
     poller_->Shutdown();
@@ -396,6 +402,10 @@ PosixEventEngine::PosixEventEngine()
 
 void PosixEventEngine::PollerWorkInternal(
     std::shared_ptr<PosixEnginePollerManager> poller_manager) {
+  if (poller_manager->IsSuspended()) {
+    LOG(INFO) << "Suspended!";
+    return;
+  }
   // TODO(vigneshbabu): The timeout specified here is arbitrary. For instance,
   // this can be improved by setting the timeout to the next expiring timer.
   PosixEventPoller* poller = poller_manager->Poller();
@@ -754,14 +764,11 @@ PosixEventEngine::CreatePosixListener(
 absl::Status PosixEventEngine::HandlePreFork() {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::MutexLock lock(&fork_mutex_);
-  // absl::AnyInv
-
-  // action();
-  auto poller = poller_manager_->Poller();
-  if (poller != nullptr) {
-    return poller->PrepareForkNew();
-  }
-  LOG(INFO) << "Pool shutdown";
+  LOG(INFO) << "Suspending poller";
+  poller_manager_->Suspend();
+  LOG(INFO) << "Suspended polling, stopping timer manager.";
+  timer_manager_->PrepareFork();
+  LOG(INFO) << "Suspended timer manager, stopping thread pool.";
   executor_->Quiesce([]() {});
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   return absl::OkStatus();

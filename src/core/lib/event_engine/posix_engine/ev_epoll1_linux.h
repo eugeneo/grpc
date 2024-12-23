@@ -80,6 +80,7 @@ class Epoll1Poller : public PosixEventPoller {
 
   void Close();
   SystemApi* GetSystemApi() override { return &system_api_; }
+  void FinishPolling() override;
 
  private:
   // This initial vector size may need to be tuned

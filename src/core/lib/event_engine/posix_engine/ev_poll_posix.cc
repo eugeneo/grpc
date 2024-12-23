@@ -639,9 +639,16 @@ PollPoller::~PollPoller() {
 Poller::WorkResult PollPoller::Work(
     EventEngine::Duration timeout,
     absl::FunctionRef<void()> schedule_poll_again) {
-  LOG(INFO) << "Polling";
-  auto cleanup = absl::MakeCleanup([]() { LOG(INFO) << "Polling done"; });
   CHECK(!in_fork_.load());
+  {
+    grpc_core::MutexLock lock(&polling_mu_);
+    polling_ = true;
+  }
+  auto cleanup = absl::MakeCleanup([this]() {
+    grpc_core::MutexLock lock(&polling_mu_);
+    polling_ = false;
+    polling_cond_.SignalAll();
+  });
   // Avoid malloc for small number of elements.
   enum { inline_elements = 96 };
   struct pollfd pollfd_space[inline_elements];
@@ -862,6 +869,14 @@ absl::Status PollPoller::RestartOnFork() {
 void PollPoller::Close() {
   grpc_core::MutexLock lock(&mu_);
   closed_ = true;
+}
+
+void PollPoller::FinishPolling() {
+  grpc_core::MutexLock lock(&polling_mu_);
+  if (polling_) {
+    Kick();
+    polling_cond_.Wait(&polling_mu_);
+  }
 }
 
 std::shared_ptr<PollPoller> MakePollPoller(Scheduler* scheduler,

@@ -107,7 +107,7 @@ class PosixEventPoller : public grpc_event_engine::experimental::Poller,
   virtual SystemApi* GetSystemApi() = 0;
   virtual absl::Status PrepareForkNew() = 0;
   virtual absl::Status RestartOnFork() = 0;
-  // virtual void Suspend() = 0;
+  virtual void FinishPolling() = 0;
   ~PosixEventPoller() override = default;
 };
 

@@ -605,6 +605,8 @@ absl::Status Epoll1Poller::RestartOnFork() {
   return absl::OkStatus();
 }
 
+void Epoll1Poller::FinishPolling() { grpc_core::Crash("Not implemented"); }
+
 }  // namespace experimental
 }  // namespace grpc_event_engine
 

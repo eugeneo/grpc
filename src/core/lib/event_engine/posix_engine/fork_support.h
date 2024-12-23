@@ -51,7 +51,6 @@ class ForkSupport {
     grpc_core::MutexLock lock(&mu_);
     int key = next_key_++;
     listeners_.emplace(key, std::move(listener));
-    LOG(INFO) << "Subbed " << key;
     return ForkSubscription(this, key);
   }
 
@@ -71,7 +70,6 @@ class ForkSupport {
   void Unsubscribe(int key) {
     grpc_core::MutexLock lock(&mu_);
     listeners_.erase(key);
-    LOG(INFO) << "Unsubbed " << key;
   }
 
   grpc_core::Mutex mu_;
