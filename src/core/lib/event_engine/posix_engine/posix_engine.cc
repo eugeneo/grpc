@@ -769,7 +769,8 @@ absl::Status PosixEventEngine::HandlePreFork() {
   LOG(INFO) << "Suspended polling, stopping timer manager.";
   timer_manager_->PrepareFork();
   LOG(INFO) << "Suspended timer manager, stopping thread pool.";
-  executor_->Quiesce([]() {});
+  executor_->PrepareFork();
+  CHECK_OK(poller_manager_->Poller()->PrepareForkNew());
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   return absl::OkStatus();
 }

@@ -341,6 +341,8 @@ TEST(PosixSystemApiTest, FullStopBeforeFork) {
   channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
   stub = Greeter::NewStub(channel);
   status = CallSayHello(stub.get());
+  EXPECT_FALSE(status.ok());
+  status = CallSayHello(stub.get());
   EXPECT_TRUE(status.ok()) << status.error_message();
 }
 
