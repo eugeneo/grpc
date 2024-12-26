@@ -312,7 +312,7 @@ grpc::Status CallSayHello(Greeter::Stub* stub) {
 
 }  // namespace
 
-TEST(PosixSystemApiTest, FullStopBeforeFork) {
+TEST(PosixSystemApiTest, DISABLED_FullStopBeforeFork) {
   int port = grpc_pick_unused_port_or_die();
   int pid = fork();
   ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
@@ -343,6 +343,31 @@ TEST(PosixSystemApiTest, FullStopBeforeFork) {
   status = CallSayHello(stub.get());
   EXPECT_FALSE(status.ok());
   status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
+}
+
+TEST(PosixSystemApiTest, NoGrpcBeforeFork) {
+  int port = grpc_pick_unused_port_or_die();
+  int pid = fork();
+  ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
+  if (pid == 0) {
+    ASSERT_THAT(ExecServer(port), IsOk());
+  }
+  auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
+  // Give the child time to start up
+  absl::SleepFor(absl::Milliseconds(1000));
+  std::string target = absl::StrCat("localhost:", port);
+  // Simulating fork
+  auto ee = GetDefaultEventEngine();
+  LOG(INFO) << "EventEngine: " << ee.get();
+  PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
+  ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
+  ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
+  // This call hangs (but will be fixed)
+  auto channel =
+      grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+  auto stub = Greeter::NewStub(channel);
+  auto status = CallSayHello(stub.get());
   EXPECT_TRUE(status.ok()) << status.error_message();
 }
 

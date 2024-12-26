@@ -96,7 +96,10 @@ void SystemApi::PrepareFork() {
   fork_support_.PrepareFork();
 }
 
-void SystemApi::PostFork() { fork_support_.PostFork(); }
+void SystemApi::PostFork() {
+  fds_.Restart();
+  fork_support_.PostFork();
+}
 
 #ifdef GRPC_POSIX_SOCKETUTILS
 
