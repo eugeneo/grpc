@@ -15,6 +15,7 @@
 #include "src/core/lib/event_engine/posix_engine/posix_system_api.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <gmock/gmock.h>
 #include <grpc/event_engine/event_engine.h>
 #include <grpcpp/grpcpp.h>
@@ -347,19 +348,35 @@ TEST(PosixSystemApiTest, DISABLED_FullStopBeforeFork) {
 }
 
 TEST(PosixSystemApiTest, NoGrpcBeforeFork) {
-  int port = grpc_pick_unused_port_or_die();
+  std::array<int, 2> pipe_fds;
+  ASSERT_GE(pipe(pipe_fds.data()), 0)
+      << absl::ErrnoToStatus(errno, "Creating pipe");
   int pid = fork();
   ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
   if (pid == 0) {
+    int port = grpc_pick_unused_port_or_die();
+    close(pipe_fds[0]);
+    ASSERT_EQ(write(pipe_fds[1], &port, sizeof(port)), sizeof(port))
+        << absl::ErrnoToStatus(errno, "Writing port");
+    close(pipe_fds[1]);
+    LOG(INFO) << "Child PID: " << getpid() << " port " << port;
     ASSERT_THAT(ExecServer(port), IsOk());
   }
+  close(pipe_fds[1]);
+  int port;
+  int r = 0;
+  while (r < sizeof(port)) {
+    int rd = read(pipe_fds[0], &port + r, sizeof(port) - r);
+    ASSERT_GE(rd, 0) << absl::ErrnoToStatus(errno, "Reading the pipe");
+    r += rd;
+  }
+  grpc_init();
+  LOG(INFO) << "Parent pid: " << getpid() << " port: " << port;
   auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
-  // Give the child time to start up
-  absl::SleepFor(absl::Milliseconds(1000));
   std::string target = absl::StrCat("localhost:", port);
   // Simulating fork
   auto ee = GetDefaultEventEngine();
-  LOG(INFO) << "EventEngine: " << ee.get();
+  ASSERT_NE(ee, nullptr);
   PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
   ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
   ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());

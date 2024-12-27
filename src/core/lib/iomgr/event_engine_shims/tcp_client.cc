@@ -53,12 +53,15 @@ int64_t event_engine_tcp_client_connect(
   EventEngine::ConnectionHandle handle = engine_ptr->Connect(
       [on_connect,
        endpoint](absl::StatusOr<std::unique_ptr<EventEngine::Endpoint>> ep) {
+        LOG(INFO) << 3;
         grpc_core::ApplicationCallbackExecCtx app_ctx;
         grpc_core::ExecCtx exec_ctx;
         absl::Status conn_status = ep.ok() ? absl::OkStatus() : ep.status();
         if (ep.ok()) {
+          LOG(INFO) << 1;
           *endpoint = grpc_event_engine_endpoint_create(std::move(*ep));
         } else {
+          LOG(INFO) << 2;
           *endpoint = nullptr;
         }
         GRPC_TRACE_LOG(event_engine, INFO)
