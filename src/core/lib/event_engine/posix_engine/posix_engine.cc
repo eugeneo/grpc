@@ -120,7 +120,6 @@ void AsyncConnect::OnTimeoutExpired(absl::Status status) {
 
 void AsyncConnect::OnWritable(absl::Status status)
     ABSL_NO_THREAD_SAFETY_ANALYSIS {
-  LOG(INFO) << "\n\n\n\n" << getpid() << " OnWritable\n\n\n";
   int so_error = 0;
   socklen_t so_error_size;
   absl::StatusOr<int> err;
@@ -133,31 +132,25 @@ void AsyncConnect::OnWritable(absl::Status status)
   CHECK_NE(fd_, nullptr);
   fd = std::exchange(fd_, nullptr);
   bool connect_cancelled = connect_cancelled_;
-  LOG(INFO) << 1;
   if (fd->IsHandleShutdown() && status.ok()) {
     if (!connect_cancelled) {
-      LOG(INFO) << 2;
       // status is OK and handle has been shutdown but the connect was not
       // cancelled. This can happen if the timeout expired and the while the
       // OnWritable just started executing.
       status = absl::DeadlineExceededError("connect() timed out");
     } else {
-      LOG(INFO) << 3;
       // This can happen if the connection was cancelled while the OnWritable
       // just started executing.
       status = absl::FailedPreconditionError("Connection cancelled");
     }
   }
   mu_.Unlock();
-  LOG(INFO) << 4;
 
   if (engine_->Cancel(alarm_handle_)) {
-    LOG(INFO) << 5;
     ++consumed_refs;
   }
 
   auto on_writable_finish = absl::MakeCleanup([&]() -> void {
-    LOG(INFO) << 6;
     mu_.AssertHeld();
     if (!connect_cancelled) {
       reinterpret_cast<PosixEventEngine*>(engine_.get())
@@ -189,12 +182,10 @@ void AsyncConnect::OnWritable(absl::Status status)
 
   mu_.Lock();
   if (!status.ok() || connect_cancelled) {
-    LOG(INFO) << 7;
     return;
   }
 
   do {
-    LOG(INFO) << 8;
     so_error_size = sizeof(so_error);
     err = fd->Poller()->GetSystemApi()->GetSockOpt(
         fd->WrappedFd(), SOL_SOCKET, SO_ERROR, &so_error, &so_error_size);
@@ -370,6 +361,12 @@ void PosixEnginePollerManager::Suspend() {
   poller_->FinishPolling();
 }
 
+void PosixEnginePollerManager::Resume() {
+  PollerState expected = PollerState::kSuspended;
+  CHECK(poller_state_.compare_exchange_weak(expected, PollerState::kOk));
+  poller_->Resume();
+}
+
 PosixEnginePollerManager::~PosixEnginePollerManager() {
   if (poller_ != nullptr) {
     poller_->Shutdown();
@@ -412,7 +409,6 @@ PosixEventEngine::PosixEventEngine()
 void PosixEventEngine::PollerWorkInternal(
     std::shared_ptr<PosixEnginePollerManager> poller_manager) {
   if (poller_manager->IsSuspended()) {
-    LOG(INFO) << "Suspended!";
     return;
   }
   // TODO(vigneshbabu): The timeout specified here is arbitrary. For instance,
@@ -656,7 +652,6 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
   absl::StatusOr<PosixSocketCreateResult> socket =
       CreateAndPrepareTcpClientSocket(system_api, options, addr);
   if (!socket.ok()) {
-    LOG(INFO) << socket.status();
     Run([on_connect = std::move(on_connect),
          status = socket.status()]() mutable { on_connect(status); });
     return EventEngine::ConnectionHandle::kInvalid;
@@ -787,11 +782,15 @@ absl::Status PosixEventEngine::HandleForkInChild() {
   grpc_core::MutexLock lock(&fork_mutex_);
   executor_->PostforkChild();
   timer_manager_->PostforkChild();
+  poller_manager_->Resume();
   PosixEventPoller* poller = poller_manager_->Poller();
   absl::Status status = poller->RestartOnFork();
   if (!status.ok()) {
     return status;
   }
+  executor_->Run([poller_manager = poller_manager_]() {
+    PollerWorkInternal(poller_manager);
+  });
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   return absl::OkStatus();
 }

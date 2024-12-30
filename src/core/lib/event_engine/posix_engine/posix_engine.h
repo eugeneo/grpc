@@ -112,6 +112,7 @@ class PosixEnginePollerManager
   void Run(experimental::EventEngine::Closure* closure) override;
   void Run(absl::AnyInvocable<void()>) override;
   void Suspend();
+  void Resume();
   bool IsSuspended() {
     return poller_state_.load(std::memory_order_relaxed) ==
            PollerState::kSuspended;

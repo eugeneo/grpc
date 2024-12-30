@@ -65,6 +65,7 @@ class PollPoller : public PosixEventPoller,
   SystemApi* GetSystemApi() override { return &system_api_; }
 
   void FinishPolling() override;
+  void Resume() override;
 
  private:
   void KickExternal(bool ext);
@@ -91,7 +92,8 @@ class PollPoller : public PosixEventPoller,
   std::atomic_bool in_fork_{false};
   grpc_core::Mutex polling_mu_;
   grpc_core::CondVar polling_cond_;
-  bool polling_;
+  int polling_ ABSL_GUARDED_BY(&polling_mu_) = 0;
+  bool suspended ABSL_GUARDED_BY(&polling_mu_) = false;
 };
 
 // Return an instance of a poll based poller tied to the specified scheduler.

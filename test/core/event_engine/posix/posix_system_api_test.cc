@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -350,16 +351,36 @@ TEST(PosixSystemApiTest, DISABLED_FullStopBeforeFork) {
 
 namespace {
 
-absl::StatusOr<std::pair<int, int>> StartServerGetPort() {
+class ServerProcess {
+ public:
+  ServerProcess(pid_t pid, int port) : pid_(pid), port_(port) {}
+  ServerProcess(const ServerProcess& /* other */) = delete;
+  ServerProcess(ServerProcess&& other) noexcept
+      : pid_(other.pid_), port_(other.port_) {
+    other.pid_ = 0;
+  }
+  ~ServerProcess() {
+    if (pid_ != 0) {
+      ShutdownChild(pid_);
+    }
+  }
+
+  std::string url() const { return absl::StrCat("localhost:", port_); }
+
+ private:
+  pid_t pid_;
+  int port_;
+};
+
+absl::StatusOr<ServerProcess> StartServerGetPort() {
   std::array<int, 2> pipe_fds;
   if (pipe(pipe_fds.data()) != 0) {
     return absl::ErrnoToStatus(errno, "Creating pipe");
   }
-  int pid = fork();
+  pid_t pid = fork();
   if (pid < 0) {
     return absl::ErrnoToStatus(errno, "Fork");
-  }
-  if (pid == 0) {
+  } else if (pid == 0) {
     int port = grpc_pick_unused_port_or_die();
     close(pipe_fds[0]);
     if (write(pipe_fds[1], &port, sizeof(port)) < 0) {
@@ -367,12 +388,12 @@ absl::StatusOr<std::pair<int, int>> StartServerGetPort() {
       exit(1);
     }
     close(pipe_fds[1]);
-    std::cout << "Child PID: " << getpid() << " port " << port << "\n";
     absl::Status server_status = ExecServer(port);
     if (!server_status.ok()) {
       std::cerr << server_status << "\n";
       exit(1);
     }
+    exit(0);
   }
   close(pipe_fds[1]);
   int port;
@@ -385,31 +406,30 @@ absl::StatusOr<std::pair<int, int>> StartServerGetPort() {
     r += rd;
   }
   close(pipe_fds[0]);
-  return std::make_pair(port, pid);
+  return ServerProcess(pid, port);
 }
 
 }  // namespace
 
 TEST(PosixSystemApiTest, NoGrpcBeforeFork) {
-  absl::StatusOr<std::pair<int, int>> port_pid = StartServerGetPort();
-  ASSERT_TRUE(port_pid.ok()) << port_pid.status();
-  int port = port_pid->first;
-  int pid = port_pid->second;
-  grpc_init();
-  LOG(INFO) << "Parent pid: " << getpid() << " port: " << port;
-  auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
-  std::string target = absl::StrCat("localhost:", port);
+  absl::StatusOr<ServerProcess> server_process = StartServerGetPort();
+  ASSERT_TRUE(server_process.ok()) << server_process.status();
+  LOG(INFO) << "Parent pid: " << getpid() << " url: " << server_process->url();
+  absl::SleepFor(absl::Milliseconds(200));
   // Simulating fork
+  grpc_init();
   auto ee = GetDefaultEventEngine();
   ASSERT_NE(ee, nullptr);
   PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
   ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
   ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
   // This call hangs (but will be fixed)
-  auto channel =
-      grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+  auto channel = grpc::CreateChannel(server_process->url(),
+                                     grpc::InsecureChannelCredentials());
   auto stub = Greeter::NewStub(channel);
   auto status = CallSayHello(stub.get());
+  EXPECT_TRUE(status.ok()) << status.error_message();
+  status = CallSayHello(stub.get());
   EXPECT_TRUE(status.ok()) << status.error_message();
 }
 

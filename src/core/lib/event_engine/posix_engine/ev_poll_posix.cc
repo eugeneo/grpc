@@ -642,11 +642,11 @@ Poller::WorkResult PollPoller::Work(
   CHECK(!in_fork_.load());
   {
     grpc_core::MutexLock lock(&polling_mu_);
-    polling_ = true;
+    ++polling_;
   }
   auto cleanup = absl::MakeCleanup([this]() {
     grpc_core::MutexLock lock(&polling_mu_);
-    polling_ = false;
+    --polling_;
     polling_cond_.SignalAll();
   });
   // Avoid malloc for small number of elements.
@@ -862,7 +862,6 @@ absl::Status PollPoller::RestartOnFork() {
   bool in_fork = true;
   CHECK(in_fork_.compare_exchange_strong(in_fork, false));
   system_api_.PostFork();
-  LOG(INFO) << "Restarted! " << wakeup_fd_.get();
   return absl::OkStatus();
 }
 
@@ -873,10 +872,18 @@ void PollPoller::Close() {
 
 void PollPoller::FinishPolling() {
   grpc_core::MutexLock lock(&polling_mu_);
-  if (polling_) {
+  CHECK(!suspended);
+  suspended = true;
+  while (polling_ > 0) {
     Kick();
     polling_cond_.Wait(&polling_mu_);
   }
+}
+
+void PollPoller::Resume() {
+  grpc_core::MutexLock lock(&polling_mu_);
+  CHECK(suspended);
+  suspended = false;
 }
 
 std::shared_ptr<PollPoller> MakePollPoller(Scheduler* scheduler,
