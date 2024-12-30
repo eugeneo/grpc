@@ -37,13 +37,13 @@
 #include <memory>
 #include <utility>
 
-#include "absl/cleanup/cleanup.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "examples/protos/helloworld.grpc.pb.h"
 #include "examples/protos/helloworld.pb.h"
+#include "gmock/gmock.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller_posix_default.h"
@@ -71,6 +71,14 @@ MATCHER_P(IsOkWith, value, "") {
 MATCHER(IsOk, "Is ok") {
   if ((!arg.ok())) {
     *result_listener << arg;
+    return false;
+  }
+  return true;
+}
+
+MATCHER(IsOkStatus, "Is ok") {
+  if ((!arg.ok())) {
+    *result_listener << arg.error_message();
     return false;
   }
   return true;
@@ -161,10 +169,97 @@ class EventEngineForTest {
   std::unique_ptr<TestScheduler> scheduler;
 };
 
+absl::Status ExecServer(int port) {
+  char kExecutable[] = "examples/cpp/helloworld/greeter_server";
+  std::string port_arg = absl::StrCat("--port=", port);
+  std::vector<char> v = {port_arg.begin(), port_arg.end()};
+  v.push_back('\0');
+  char* const args[] = {kExecutable, v.data(), nullptr};
+  if (execve(kExecutable, args, nullptr) < 0) {
+    return absl::ErrnoToStatus(errno, "execve");
+  } else {
+    // Should never happen
+    return absl::OkStatus();
+  }
+}
+
+using helloworld::Greeter;
+using helloworld::HelloReply;
+using helloworld::HelloRequest;
+
+grpc::Status CallSayHello(const std::unique_ptr<Greeter::Stub>& stub) {
+  grpc::ClientContext context;
+  HelloRequest request;
+  request.set_name("system_api_test");
+  HelloReply response;
+  return stub->SayHello(&context, request, &response);
+}
+
 grpc_core::ChannelArgs BuildChannelArgs() {
   grpc_core::ChannelArgs args;
   auto quota = grpc_core::ResourceQuota::Default();
   return args.Set(GRPC_ARG_RESOURCE_QUOTA, quota);
+}
+
+class OutOfProcessServer {
+ public:
+  OutOfProcessServer(pid_t pid, int port) : pid_(pid), port_(port) {}
+  OutOfProcessServer(const OutOfProcessServer& /* other */) = delete;
+  OutOfProcessServer(OutOfProcessServer&& other) noexcept
+      : pid_(other.pid_), port_(other.port_) {
+    other.pid_ = 0;
+  }
+  ~OutOfProcessServer() {
+    if (pid_ != 0) {
+      int stat;
+      kill(pid_, SIGTERM);
+      waitpid(pid_, &stat, 0);
+      LOG(INFO) << stat;
+    }
+  }
+
+  std::string url() const { return absl::StrCat("localhost:", port_); }
+
+ private:
+  pid_t pid_;
+  int port_;
+};
+
+absl::StatusOr<OutOfProcessServer> StartServerGetPort() {
+  std::array<int, 2> pipe_fds;
+  if (pipe(pipe_fds.data()) != 0) {
+    return absl::ErrnoToStatus(errno, "Creating pipe");
+  }
+  pid_t pid = fork();
+  if (pid < 0) {
+    return absl::ErrnoToStatus(errno, "Fork");
+  } else if (pid == 0) {
+    int port = grpc_pick_unused_port_or_die();
+    close(pipe_fds[0]);
+    if (write(pipe_fds[1], &port, sizeof(port)) < 0) {
+      std::cerr << absl::ErrnoToStatus(errno, "Writing port") << "\n";
+      exit(1);
+    }
+    close(pipe_fds[1]);
+    absl::Status server_status = ExecServer(port);
+    if (!server_status.ok()) {
+      std::cerr << server_status << "\n";
+      exit(1);
+    }
+    exit(0);
+  }
+  close(pipe_fds[1]);
+  int port;
+  int r = 0;
+  while (r < sizeof(port)) {
+    int rd = read(pipe_fds[0], &port + r, sizeof(port) - r);
+    if (rd < 0) {
+      return absl::ErrnoToStatus(errno, "Reading the pipe");
+    }
+    r += rd;
+  }
+  close(pipe_fds[0]);
+  return OutOfProcessServer(pid, port);
 }
 
 }  // namespace
@@ -191,7 +286,7 @@ TEST(PosixSystemApiTest, PosixLevel) {
   EXPECT_THAT(absl::MakeSpan(rcv).first(buf.size()),
               ::testing::ElementsAreArray(buf));
   // Client "forks"
-  EXPECT_THAT(client_api.AdvanceGeneration(), IsOk());
+  client_api.AdvanceGeneration();
   ASSERT_EQ(client_api.Write(server_client->client, buf.data(), buf.size())
                 .status()
                 .code(),
@@ -278,141 +373,32 @@ TEST(PosixSystemApiTest, DISABLED_IncompleteEventEndpointLevel) {
   // worker_->Start();
 }
 
-namespace {
-
-absl::Status ExecServer(int port) {
-  char kExecutable[] = "examples/cpp/helloworld/greeter_server";
-  std::string port_arg = absl::StrCat("--port=", port);
-  std::vector<char> v = {port_arg.begin(), port_arg.end()};
-  v.push_back('\0');
-  char* const args[] = {kExecutable, v.data(), nullptr};
-  if (execve(kExecutable, args, nullptr) < 0) {
-    return absl::ErrnoToStatus(errno, "execve");
-  } else {
-    // Should never happen
-    return absl::OkStatus();
-  }
-}
-
-void ShutdownChild(int pid) {
-  int stat;
-  kill(pid, SIGTERM);
-  waitpid(pid, &stat, 0);
-  LOG(INFO) << stat;
-}
-
-using helloworld::Greeter;
-using helloworld::HelloReply;
-using helloworld::HelloRequest;
-
-grpc::Status CallSayHello(Greeter::Stub* stub) {
-  grpc::ClientContext context;
-  HelloRequest request;
-  request.set_name("system_api_test");
-  HelloReply response;
-  return stub->SayHello(&context, request, &response);
-}
-
-}  // namespace
-
-TEST(PosixSystemApiTest, DISABLED_FullStopBeforeFork) {
-  int port = grpc_pick_unused_port_or_die();
-  int pid = fork();
-  ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
-  if (pid == 0) {
-    ASSERT_THAT(ExecServer(port), IsOk());
-  }
-  auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
+TEST(PosixSystemApiTest, ChildFork) {
+  absl::StatusOr<OutOfProcessServer> server = StartServerGetPort();
+  ASSERT_TRUE(server.ok()) << server.status();
   // Give the child time to start up
   absl::SleepFor(absl::Milliseconds(1000));
-  std::string target = absl::StrCat("localhost:", port);
   // First call - it works.
   auto channel =
-      grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+      grpc::CreateChannel(server->url(), grpc::InsecureChannelCredentials());
   auto stub = Greeter::NewStub(channel);
-  grpc::Status status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
-  stub.reset();
-  channel.reset();
+  EXPECT_THAT(CallSayHello(stub), IsOkStatus());
   // Simulating fork
   auto ee = GetDefaultEventEngine();
   LOG(INFO) << "EventEngine: " << ee.get();
   PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
   ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
   ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
+  EXPECT_THAT(CallSayHello(stub), ::testing::Not(IsOkStatus()));
+  EXPECT_THAT(CallSayHello(stub), IsOkStatus());
   // This call hangs (but will be fixed)
-  channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
-  stub = Greeter::NewStub(channel);
-  status = CallSayHello(stub.get());
-  EXPECT_FALSE(status.ok());
-  status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
+  auto channel2 =
+      grpc::CreateChannel(server->url(), grpc::InsecureChannelCredentials());
+  EXPECT_THAT(CallSayHello(Greeter::NewStub(channel)), IsOkStatus());
 }
 
-namespace {
-
-class ServerProcess {
- public:
-  ServerProcess(pid_t pid, int port) : pid_(pid), port_(port) {}
-  ServerProcess(const ServerProcess& /* other */) = delete;
-  ServerProcess(ServerProcess&& other) noexcept
-      : pid_(other.pid_), port_(other.port_) {
-    other.pid_ = 0;
-  }
-  ~ServerProcess() {
-    if (pid_ != 0) {
-      ShutdownChild(pid_);
-    }
-  }
-
-  std::string url() const { return absl::StrCat("localhost:", port_); }
-
- private:
-  pid_t pid_;
-  int port_;
-};
-
-absl::StatusOr<ServerProcess> StartServerGetPort() {
-  std::array<int, 2> pipe_fds;
-  if (pipe(pipe_fds.data()) != 0) {
-    return absl::ErrnoToStatus(errno, "Creating pipe");
-  }
-  pid_t pid = fork();
-  if (pid < 0) {
-    return absl::ErrnoToStatus(errno, "Fork");
-  } else if (pid == 0) {
-    int port = grpc_pick_unused_port_or_die();
-    close(pipe_fds[0]);
-    if (write(pipe_fds[1], &port, sizeof(port)) < 0) {
-      std::cerr << absl::ErrnoToStatus(errno, "Writing port") << "\n";
-      exit(1);
-    }
-    close(pipe_fds[1]);
-    absl::Status server_status = ExecServer(port);
-    if (!server_status.ok()) {
-      std::cerr << server_status << "\n";
-      exit(1);
-    }
-    exit(0);
-  }
-  close(pipe_fds[1]);
-  int port;
-  int r = 0;
-  while (r < sizeof(port)) {
-    int rd = read(pipe_fds[0], &port + r, sizeof(port) - r);
-    if (rd < 0) {
-      return absl::ErrnoToStatus(errno, "Reading the pipe");
-    }
-    r += rd;
-  }
-  close(pipe_fds[0]);
-  return ServerProcess(pid, port);
-}
-
-}  // namespace
-
-TEST(PosixSystemApiTest, NoGrpcBeforeFork) {
-  absl::StatusOr<ServerProcess> server_process = StartServerGetPort();
+TEST(PosixSystemApiTest, ParentFork) {
+  absl::StatusOr<OutOfProcessServer> server_process = StartServerGetPort();
   ASSERT_TRUE(server_process.ok()) << server_process.status();
   LOG(INFO) << "Parent pid: " << getpid() << " url: " << server_process->url();
   absl::SleepFor(absl::Milliseconds(200));
@@ -422,49 +408,12 @@ TEST(PosixSystemApiTest, NoGrpcBeforeFork) {
   ASSERT_NE(ee, nullptr);
   PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
   ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
-  ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
+  ASSERT_THAT(posix_ee->HandleFork(), IsOk());
   // This call hangs (but will be fixed)
   auto channel = grpc::CreateChannel(server_process->url(),
                                      grpc::InsecureChannelCredentials());
   auto stub = Greeter::NewStub(channel);
-  auto status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
-  status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
-}
-
-TEST(PosixSystemApiTest, DISABLED_FullGrpc) {
-  int port = grpc_pick_unused_port_or_die();
-  int pid = fork();
-  ASSERT_GE(pid, 0) << absl::ErrnoToStatus(errno, "Fork");
-  if (pid == 0) {
-    ASSERT_THAT(ExecServer(port), IsOk());
-  }
-  auto cleanup = absl::MakeCleanup([pid]() { ShutdownChild(pid); });
-  // Give the child time to start up
-  absl::SleepFor(absl::Milliseconds(1000));
-  std::string target = absl::StrCat("localhost:", port);
-  // First call - it works.
-  auto channel =
-      grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
-  auto stub = Greeter::NewStub(channel);
-  grpc::Status status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
-  // Simulating fork
-  auto ee = GetDefaultEventEngine();
-  PosixEventEngine* posix_ee = static_cast<PosixEventEngine*>(ee.get());
-  ASSERT_THAT(posix_ee->HandlePreFork(), IsOk());
-  ASSERT_THAT(posix_ee->HandleForkInChild(), IsOk());
-  // This call fails with invalid fd
-  status = CallSayHello(stub.get());
-  EXPECT_FALSE(status.ok()) << status.error_message();
-  status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
-  // This call hangs (but will be fixed)
-  channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
-  stub = Greeter::NewStub(channel);
-  status = CallSayHello(stub.get());
-  EXPECT_TRUE(status.ok()) << status.error_message();
+  EXPECT_THAT(CallSayHello(stub), IsOkStatus());
 }
 
 }  // namespace experimental

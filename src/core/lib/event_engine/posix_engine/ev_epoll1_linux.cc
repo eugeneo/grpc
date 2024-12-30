@@ -599,7 +599,7 @@ absl::Status Epoll1Poller::PrepareForkNew() {
   return absl::OkStatus();
 }
 
-absl::Status Epoll1Poller::RestartOnFork() {
+absl::Status Epoll1Poller::RestartOnFork(bool child) {
   bool in_fork = true;
   CHECK(in_fork_.compare_exchange_weak(in_fork, false));
   return absl::OkStatus();

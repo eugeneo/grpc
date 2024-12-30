@@ -89,7 +89,7 @@ class SystemApi {
   SystemApi() = default;
   SystemApi(const SystemApi& other) = delete;
 
-  absl::Status AdvanceGeneration();
+  void AdvanceGeneration();
   ForkSubscription OnFork(
       absl::AnyInvocable<void(ForkSupport::ForkEvent)> listener) {
     return fork_support_.Subscribe(std::move(listener));

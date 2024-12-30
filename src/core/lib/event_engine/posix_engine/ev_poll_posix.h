@@ -58,7 +58,7 @@ class PollPoller : public PosixEventPoller,
   void PostforkChild() override;
 
   absl::Status PrepareForkNew() override;
-  absl::Status RestartOnFork() override;
+  absl::Status RestartOnFork(bool child) override;
 
   void Close();
 

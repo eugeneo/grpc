@@ -216,6 +216,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
                       absl::AnyInvocable<void()> closure) override;
   bool Cancel(TaskHandle handle) override;
   absl::Status HandlePreFork();
+  absl::Status HandleFork();
   absl::Status HandleForkInChild();
 
 #ifdef GRPC_POSIX_SOCKET_TCP

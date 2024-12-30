@@ -858,9 +858,12 @@ absl::Status PollPoller::PrepareForkNew() {
   return absl::OkStatus();
 }
 
-absl::Status PollPoller::RestartOnFork() {
+absl::Status PollPoller::RestartOnFork(bool child) {
   bool in_fork = true;
   CHECK(in_fork_.compare_exchange_strong(in_fork, false));
+  if (child) {
+    system_api_.AdvanceGeneration();
+  }
   system_api_.PostFork();
   return absl::OkStatus();
 }

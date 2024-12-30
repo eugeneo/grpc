@@ -166,11 +166,12 @@ absl::StatusOr<FileDescriptor> SystemApi::Accept4(
 
 #endif  // GRPC_LINUX_SOCKETUTILS
 
-absl::Status SystemApi::AdvanceGeneration() {
+void SystemApi::AdvanceGeneration() {
+  LOG(INFO) << "Advancing generation!";
   for (int fd : fds_.Clear()) {
+    LOG(INFO) << "Closing " << fd;
     close(fd);
   }
-  return absl::OkStatus();
 }
 
 FileDescriptor SystemApi::RegisterFileDescriptor(int fd) {
@@ -202,6 +203,7 @@ absl::StatusOr<int> SystemApi::Bind(FileDescriptor fd,
 void SystemApi::Close(FileDescriptor fd) {
   absl::optional<int> posix_fd = fds_.Remove(fd);
   if (posix_fd.has_value()) {
+    LOG(INFO) << "Closing " << *posix_fd;
     close(*posix_fd);
   }
 }
@@ -705,7 +707,9 @@ absl::StatusOr<long> SystemApi::EventFdRead(FileDescriptor fd,
 }
 
 FileDescriptor SystemApi::EventFd(unsigned int initval, int flags) {
-  return RegisterFileDescriptor(eventfd(initval, flags));
+  int fd = eventfd(initval, flags);
+  LOG(INFO) << "Event fd: " << fd;
+  return RegisterFileDescriptor(fd);
 }
 
 absl::StatusOr<int> SystemApi::EventFdWrite(FileDescriptor fd,

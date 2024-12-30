@@ -41,12 +41,16 @@ ReentrantLock::~ReentrantLock() noexcept {
 }
 
 FileDescriptor FileDescriptors::Add(int fd) {
-  grpc_core::MutexLock lock(&list_mu_);
-  fds_.insert(fd);
+  if (fd > 0) {
+    LOG(INFO) << "Adding FD: " << fd;
+    grpc_core::MutexLock lock(&list_mu_);
+    fds_.insert(fd);
+  }
   return FileDescriptor{fd};
 }
 
 absl::optional<int> FileDescriptors::Remove(const FileDescriptor& fd) {
+  LOG(INFO) << "Removing FD: " << fd.debug_fd();
   auto locked_fd = Lock(fd);
   if (locked_fd.ok()) {
     return locked_fd->fd();
@@ -58,6 +62,7 @@ std::unordered_set<int> FileDescriptors::Clear() {
   grpc_core::MutexLock lock(&list_mu_);
   std::unordered_set<int> ret;
   std::swap(fds_, ret);
+  LOG(INFO) << "Clearing FDs";
   return ret;
 }
 

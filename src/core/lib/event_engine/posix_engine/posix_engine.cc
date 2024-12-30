@@ -777,6 +777,24 @@ absl::Status PosixEventEngine::HandlePreFork() {
   return absl::OkStatus();
 }
 
+absl::Status PosixEventEngine::HandleFork() {
+#if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+  grpc_core::MutexLock lock(&fork_mutex_);
+  executor_->PostforkChild();
+  timer_manager_->PostforkChild();
+  poller_manager_->Resume();
+  PosixEventPoller* poller = poller_manager_->Poller();
+  absl::Status status = poller->RestartOnFork(false);
+  if (!status.ok()) {
+    return status;
+  }
+  executor_->Run([poller_manager = poller_manager_]() {
+    PollerWorkInternal(poller_manager);
+  });
+#endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+  return absl::OkStatus();
+}
+
 absl::Status PosixEventEngine::HandleForkInChild() {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   grpc_core::MutexLock lock(&fork_mutex_);
@@ -784,7 +802,7 @@ absl::Status PosixEventEngine::HandleForkInChild() {
   timer_manager_->PostforkChild();
   poller_manager_->Resume();
   PosixEventPoller* poller = poller_manager_->Poller();
-  absl::Status status = poller->RestartOnFork();
+  absl::Status status = poller->RestartOnFork(true);
   if (!status.ok()) {
     return status;
   }
