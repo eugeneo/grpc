@@ -136,6 +136,28 @@ TEST_F(ServerBuilderTest, PassiveListenerAcceptConnectedEndpoint) {
   server->Shutdown();
 }
 
+TEST_F(ServerBuilderTest, PortZeroIsBoundOnce) {
+  int selected_port = -1;
+  ServerBuilder builder;
+  builder.RegisterService(&g_service)
+      .AddListeningPort("localhost:0", InsecureServerCredentials(),
+                        &selected_port);
+  std::vector<std::unique_ptr<::grpc::ServerCompletionQueue>> cqs;
+  cqs.reserve(10);
+  for (int i = 0; i < 10; ++i) {
+    cqs.emplace_back(builder.AddCompletionQueue());
+  }
+  auto server = builder.BuildAndStart();
+  ASSERT_NE(server, nullptr);
+  EXPECT_GE(selected_port, 0);
+  LOG(INFO) << "Port selected: " << selected_port << " CQs: " << cqs.size();
+  absl::SleepFor(absl::Minutes(3));
+  server->Shutdown();
+  for (auto& cq : cqs) {
+    cq->Shutdown();
+  }
+}
+
 }  // namespace
 }  // namespace grpc
 

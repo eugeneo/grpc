@@ -777,6 +777,7 @@ static void tcp_server_start(grpc_tcp_server* s,
   size_t i;
   grpc_tcp_listener* sp;
   gpr_mu_lock(&s->mu);
+  LOG(INFO) << s->head;
   CHECK(s->on_accept_cb);
   CHECK_EQ(s->active_ports, 0u);
   s->pollsets = pollsets;
