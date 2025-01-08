@@ -142,7 +142,7 @@ TEST_F(ServerBuilderTest, PortZeroIsBoundOnce) {
   builder.RegisterService(&g_service)
       .AddListeningPort("localhost:0", InsecureServerCredentials(),
                         &selected_port);
-  std::vector<std::unique_ptr<::grpc::ServerCompletionQueue>> cqs;
+  std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> cqs;
   cqs.reserve(10);
   for (int i = 0; i < 10; ++i) {
     cqs.emplace_back(builder.AddCompletionQueue());
