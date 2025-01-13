@@ -45,7 +45,7 @@ class WorkStealingThreadPool final : public ThreadPool {
  public:
   explicit WorkStealingThreadPool(size_t reserve_threads);
   // Asserts Quiesce was called.
-  ~WorkStealingThreadPool();
+  ~WorkStealingThreadPool() override;
   // Shut down the pool, and wait for all threads to exit.
   // This method is safe to call from within a ThreadPool thread.
   void Quiesce() override;
