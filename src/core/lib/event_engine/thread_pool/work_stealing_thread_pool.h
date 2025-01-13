@@ -45,7 +45,7 @@ class WorkStealingThreadPool final : public ThreadPool {
  public:
   explicit WorkStealingThreadPool(size_t reserve_threads);
   // Asserts Quiesce was called.
-  ~WorkStealingThreadPool() override;
+  ~WorkStealingThreadPool();
   // Shut down the pool, and wait for all threads to exit.
   // This method is safe to call from within a ThreadPool thread.
   void Quiesce() override;
@@ -55,9 +55,9 @@ class WorkStealingThreadPool final : public ThreadPool {
 
   // Forkable
   // These methods are exposed on the public object to allow for testing.
-  void PrepareFork() override;
-  void PostforkParent() override;
-  void PostforkChild() override;
+  void PrepareFork();
+  void PostforkParent();
+  void PostforkChild();
 
  private:
   // A basic communication mechanism to signal waiting threads that work is
