@@ -27,7 +27,7 @@ namespace grpc_event_engine::experimental {
 class ThreadPool {
  public:
   // Asserts Quiesce was called.
-  ~ThreadPool() = default;
+  virtual ~ThreadPool() = default;
   // Shut down the pool, and wait for all threads to exit.
   // This method is safe to call from within a ThreadPool thread.
   virtual void Quiesce() = 0;
