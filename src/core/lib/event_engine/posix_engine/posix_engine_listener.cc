@@ -29,7 +29,6 @@
 #include <atomic>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 
 #include "absl/functional/any_invocable.h"
@@ -40,6 +39,7 @@
 #include "absl/types/optional.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
+#include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
 #include "src/core/lib/event_engine/posix_engine/posix_endpoint.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine_listener.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
@@ -138,7 +138,8 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     memset(const_cast<sockaddr*>(addr.address()), 0, addr.size());
     // Note: If we ever decide to return this address to the user, remember to
     // strip off the ::ffff:0.0.0.0/96 prefix first.
-    int fd = Accept4(handle_->WrappedFd(), addr, 1, 1);
+    FileDescriptors fd = handle_->Poller()->GetFileDescriptors().Accept4(
+        handle_->WrappedFd(), addr, 1, 1);
     if (fd < 0) {
       switch (errno) {
         case EINTR:
@@ -251,7 +252,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
 }
 
 absl::Status PosixEngineListenerImpl::HandleExternalConnection(
-    int listener_fd, int fd, SliceBuffer* pending_data) {
+    int listener_fd, FileDescriptor fd, SliceBuffer* pending_data) {
   if (listener_fd < 0) {
     return absl::UnknownError(absl::StrCat(
         "HandleExternalConnection: Invalid listener socket: ", listener_fd));
@@ -260,7 +261,7 @@ absl::Status PosixEngineListenerImpl::HandleExternalConnection(
     return absl::UnknownError(
         absl::StrCat("HandleExternalConnection: Invalid peer socket: ", fd));
   }
-  PosixSocketWrapper sock(fd);
+  PosixSocketWrapper sock(fd.fd());
   (void)sock.SetSocketNoSigpipeIfPossible();
   auto peer_name = sock.PeerAddressString();
   if (!peer_name.ok()) {
