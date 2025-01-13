@@ -27,6 +27,7 @@
 #include "absl/strings/string_view.h"
 #include "src/core/lib/event_engine/poller.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
+#include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
 #include "src/core/lib/event_engine/posix_engine/internal_errqueue.h"
 #include "src/core/lib/event_engine/posix_engine/wakeup_fd_posix.h"
 #include "src/core/lib/iomgr/port.h"
@@ -55,6 +56,7 @@ class Epoll1Poller : public PosixEventPoller {
   void Kick() override;
   Scheduler* GetScheduler() { return scheduler_; }
   void Shutdown() override;
+  FileDescriptors& GetFileDescriptors() override { return file_descriptors_; }
   bool CanTrackErrors() const override {
 #ifdef GRPC_POSIX_SOCKET_TCP
     return KernelSupportsErrqueue();
@@ -123,6 +125,7 @@ class Epoll1Poller : public PosixEventPoller {
   std::list<EventHandle*> free_epoll1_handles_list_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<WakeupFd> wakeup_fd_;
   bool closed_;
+  FileDescriptors file_descriptors_;
 };
 
 // Return an instance of a epoll1 based poller tied to the specified event

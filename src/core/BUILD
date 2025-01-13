@@ -2110,6 +2110,17 @@ grpc_cc_library(
 )
 
 grpc_cc_library(
+    name = "posix_event_engine_file_descriptors",
+    srcs = ["lib/event_engine/posix_engine/file_descriptors.cc"],
+    hdrs = ["lib/event_engine/posix_engine/file_descriptors.h"],
+    external_deps = [],
+    deps = [
+        "//:event_engine_base_hdrs",
+        "//:gpr_platform",
+    ],
+)
+
+grpc_cc_library(
     name = "posix_event_engine_event_poller",
     srcs = [],
     hdrs = [
@@ -2124,6 +2135,7 @@ grpc_cc_library(
         "event_engine_poller",
         "forkable",
         "posix_event_engine_closure",
+        "posix_event_engine_file_descriptors",
         "//:event_engine_base_hdrs",
         "//:gpr_platform",
     ],
@@ -2263,6 +2275,7 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "posix_event_engine_lockfree_event",
         "posix_event_engine_wakeup_fd_posix",
@@ -2301,6 +2314,7 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "posix_event_engine_wakeup_fd_posix_default",
         "status_helper",
