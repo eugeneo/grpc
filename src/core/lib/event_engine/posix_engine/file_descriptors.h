@@ -18,7 +18,6 @@
 #include <grpc/event_engine/event_engine.h>
 
 #include "absl/log/check.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 
 namespace grpc_event_engine::experimental {

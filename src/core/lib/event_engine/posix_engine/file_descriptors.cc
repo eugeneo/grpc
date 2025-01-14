@@ -39,8 +39,6 @@ namespace grpc_event_engine::experimental {
 
 FileDescriptor FileDescriptors::Adopt(int fd) { return FileDescriptor(fd); }
 
-void FileDescriptors::Close(const FileDescriptor& fd) { close(fd.fd()); }
-
 FileDescriptorResult FileDescriptors::RegisterPosixResult(int result) {
   if (result > 0) {
     return FileDescriptorResult::FD(Adopt(result));
@@ -48,6 +46,10 @@ FileDescriptorResult FileDescriptors::RegisterPosixResult(int result) {
     return FileDescriptorResult::Error();
   }
 }
+
+#ifdef GRPC_POSIX_SOCKET
+
+void FileDescriptors::Close(const FileDescriptor& fd) { close(fd.fd()); }
 
 //
 // Factories
@@ -90,5 +92,25 @@ close_and_error:
   Close(fd.fd);
   return FileDescriptorResult::Error();
 }
+
+#else  // GRPC_POSIX_SOCKET
+
+#include "src/core/util/crash.h"
+
+FileDescriptorResult FileDescriptors::Accept(int sockfd, struct sockaddr* addr,
+                                             socklen_t* addrlen) {
+  grpc_core::Crash("unimplemented");
+}
+
+FileDescriptorResult FileDescriptors::Accept4(
+    int sockfd, EventEngine::ResolvedAddress& addr, int nonblock, int cloexec) {
+  grpc_core::Crash("unimplemented");
+}
+
+void FileDescriptors::Close(const FileDescriptor& fd) {
+  grpc_core::Crash("unimplemented");
+}
+
+#endif  // GRPC_POSIX_SOCKET
 
 }  // namespace grpc_event_engine::experimental
