@@ -138,10 +138,18 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     memset(const_cast<sockaddr*>(addr.address()), 0, addr.size());
     // Note: If we ever decide to return this address to the user, remember to
     // strip off the ::ffff:0.0.0.0/96 prefix first.
-    FileDescriptors fd = handle_->Poller()->GetFileDescriptors().Accept4(
+    FileDescriptorResult fd = handle_->Poller()->GetFileDescriptors().Accept4(
         handle_->WrappedFd(), addr, 1, 1);
-    if (fd < 0) {
-      switch (errno) {
+    if (fd.kind == OperationResultKind::kWrongGeneration) {
+      LOG(ERROR) << "Closing acceptor. accept4 was called with fd from a wrong "
+                    "generation";
+      // Shutting down the acceptor. Unref the ref grabbed in
+      // AsyncConnectionAcceptor::Start().
+      Unref();
+      return;
+    }
+    if (fd.kind == OperationResultKind::kError) {
+      switch (fd.errno_value) {
         case EINTR:
           continue;
         case EMFILE:
@@ -188,7 +196,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     // sun_path of sockaddr_un, so explicitly call getpeername to get it.
     if (addr.address()->sa_family == AF_UNIX) {
       socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
-      if (getpeername(fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
+      if (getpeername(*fd, const_cast<sockaddr*>(addr.address()), &len) < 0) {
         auto listener_addr_uri = ResolvedAddressToURI(socket_.addr);
         LOG(ERROR) << "Failed getpeername: " << grpc_core::StrError(errno)
                    << ". Dropping the connection, and continuing "
@@ -196,14 +204,14 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
                    << (listener_addr_uri.ok() ? *listener_addr_uri
                                               : "<unknown>")
                    << ":" << socket_.port;
-        close(fd);
+        handle_->Poller()->GetFileDescriptors().Close(fd.fd);
         handle_->NotifyOnRead(notify_on_accept_);
         return;
       }
       addr = EventEngine::ResolvedAddress(addr.address(), len);
     }
 
-    PosixSocketWrapper sock(fd);
+    PosixSocketWrapper sock(*fd);
     (void)sock.SetSocketNoSigpipeIfPossible();
     auto result = sock.ApplySocketMutatorInOptions(
         GRPC_FD_SERVER_CONNECTION_USAGE, listener_->options_);
@@ -227,7 +235,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
     }
     auto endpoint = CreatePosixEndpoint(
         /*handle=*/listener_->poller_->CreateHandle(
-            fd, *peer_name, listener_->poller_->CanTrackErrors()),
+            fd.fd, *peer_name, listener_->poller_->CanTrackErrors()),
         /*on_shutdown=*/nullptr, /*engine=*/listener_->engine_,
         // allocator=
         listener_->memory_allocator_factory_->CreateMemoryAllocator(
@@ -252,7 +260,7 @@ void PosixEngineListenerImpl::AsyncConnectionAcceptor::NotifyOnAccept(
 }
 
 absl::Status PosixEngineListenerImpl::HandleExternalConnection(
-    int listener_fd, FileDescriptor fd, SliceBuffer* pending_data) {
+    int listener_fd, int fd, SliceBuffer* pending_data) {
   if (listener_fd < 0) {
     return absl::UnknownError(absl::StrCat(
         "HandleExternalConnection: Invalid listener socket: ", listener_fd));
@@ -261,7 +269,7 @@ absl::Status PosixEngineListenerImpl::HandleExternalConnection(
     return absl::UnknownError(
         absl::StrCat("HandleExternalConnection: Invalid peer socket: ", fd));
   }
-  PosixSocketWrapper sock(fd.fd());
+  PosixSocketWrapper sock(fd);
   (void)sock.SetSocketNoSigpipeIfPossible();
   auto peer_name = sock.PeerAddressString();
   if (!peer_name.ok()) {
@@ -269,24 +277,25 @@ absl::Status PosixEngineListenerImpl::HandleExternalConnection(
         absl::StrCat("HandleExternalConnection: peer not connected: ",
                      peer_name.status().ToString()));
   }
-  grpc_core::EnsureRunInExecCtx([this, peer_name = std::move(*peer_name),
-                                 pending_data, listener_fd, fd]() mutable {
-    auto endpoint = CreatePosixEndpoint(
-        /*handle=*/poller_->CreateHandle(fd, peer_name,
-                                         poller_->CanTrackErrors()),
-        /*on_shutdown=*/nullptr, /*engine=*/engine_,
-        /*allocator=*/
-        memory_allocator_factory_->CreateMemoryAllocator(absl::StrCat(
-            "external:endpoint-tcp-server-connection: ", peer_name)),
-        /*options=*/options_);
-    on_accept_(
-        /*listener_fd=*/listener_fd, /*endpoint=*/std::move(endpoint),
-        /*is_external=*/true,
-        /*memory_allocator=*/
-        memory_allocator_factory_->CreateMemoryAllocator(absl::StrCat(
-            "external:on-accept-tcp-server-connection: ", peer_name)),
-        /*pending_data=*/pending_data);
-  });
+  grpc_core::EnsureRunInExecCtx(
+      [this, peer_name = std::move(*peer_name), pending_data, listener_fd,
+       wrapped = poller_->GetFileDescriptors().Adopt(fd)]() mutable {
+        auto endpoint = CreatePosixEndpoint(
+            /*handle=*/poller_->CreateHandle(wrapped, peer_name,
+                                             poller_->CanTrackErrors()),
+            /*on_shutdown=*/nullptr, /*engine=*/engine_,
+            /*allocator=*/
+            memory_allocator_factory_->CreateMemoryAllocator(absl::StrCat(
+                "external:endpoint-tcp-server-connection: ", peer_name)),
+            /*options=*/options_);
+        on_accept_(
+            /*listener_fd=*/listener_fd, /*endpoint=*/std::move(endpoint),
+            /*is_external=*/true,
+            /*memory_allocator=*/
+            memory_allocator_factory_->CreateMemoryAllocator(absl::StrCat(
+                "external:on-accept-tcp-server-connection: ", peer_name)),
+            /*pending_data=*/pending_data);
+      });
   return absl::OkStatus();
 }
 

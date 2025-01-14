@@ -17,6 +17,9 @@
 
 #include <grpc/event_engine/event_engine.h>
 
+#include "absl/log/check.h"
+#include "absl/status/status.h"
+
 namespace grpc_event_engine::experimental {
 
 class FileDescriptor {
@@ -47,16 +50,49 @@ struct FileDescriptorResult {
   FileDescriptor fd;
   // errno value on call completion, in order to reduce the race conditions
   // from relying on global variable.
-  int errno;
+  int errno_value;
+
+  static FileDescriptorResult FD(const FileDescriptor& fd) {
+    return {OperationResultKind::kOk, fd, 0};
+  }
+
+  static FileDescriptorResult Error() {
+    return {OperationResultKind::kError, {}, errno};
+  }
+
+  int operator*() const {
+    CHECK_OK(status());
+    return fd.fd();
+  }
+
+  bool ok() const { return kind == OperationResultKind::kOk && fd.fd() > 0; }
+
+  absl::Status status() const {
+    switch (kind) {
+      case OperationResultKind::kOk:
+        return absl::OkStatus();
+      case OperationResultKind::kError:
+        return absl::ErrnoToStatus(errno_value, "");
+      case OperationResultKind::kWrongGeneration:
+        return absl::InternalError(
+            "File descriptor is from the wrong generation");
+    }
+  }
 };
 
 class FileDescriptors {
  public:
-  FileDescriptorResult Accept4(FileDescriptor sockfd,
-                               EventEngine::ResolvedAddress& addr, int nonblock,
-                               int cloexec);
-  FileDescriptorResult Accept4(FileDescriptor sockfd, struct sockaddr* addr,
-                               socklen_t* addrlen, int flags);
+  FileDescriptorResult Accept(int sockfd, struct sockaddr* addr,
+                              socklen_t* addrlen);
+  FileDescriptorResult Accept4(int sockfd, EventEngine::ResolvedAddress& addr,
+                               int nonblock, int cloexec);
+
+  FileDescriptor Adopt(int fd);
+
+  void Close(const FileDescriptor& fd);
+
+ private:
+  FileDescriptorResult RegisterPosixResult(int result);
 };
 
 }  // namespace grpc_event_engine::experimental
