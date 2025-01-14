@@ -26,7 +26,6 @@
 #include "absl/strings/string_view.h"
 #include "src/core/lib/event_engine/poller.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
-#include "src/core/lib/event_engine/posix_engine/file_descriptors.h"
 #include "src/core/lib/event_engine/posix_engine/wakeup_fd_posix.h"
 #include "src/core/util/sync.h"
 
@@ -51,8 +50,6 @@ class PollPoller : public PosixEventPoller,
   void Shutdown() override;
   bool CanTrackErrors() const override { return false; }
   ~PollPoller() override;
-
-  FileDescriptors& GetFileDescriptors() override { return file_descriptors_; }
 
   // Forkable
   void PrepareFork() override;
@@ -84,7 +81,6 @@ class PollPoller : public PosixEventPoller,
   PollEventHandle* poll_handles_list_head_ ABSL_GUARDED_BY(mu_) = nullptr;
   std::unique_ptr<WakeupFd> wakeup_fd_;
   bool closed_ ABSL_GUARDED_BY(mu_);
-  FileDescriptors file_descriptors_;
 };
 
 // Return an instance of a poll based poller tied to the specified scheduler.

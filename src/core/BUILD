@@ -2114,9 +2114,10 @@ grpc_cc_library(
     srcs = ["lib/event_engine/posix_engine/file_descriptors.cc"],
     hdrs = ["lib/event_engine/posix_engine/file_descriptors.h"],
     external_deps = [
-        "absl/status",
         "absl/log:check",
         "absl/log:log",
+        "absl/status",
+        "absl/strings:string_view",
     ],
     deps = [
         "iomgr_port",
@@ -2280,7 +2281,6 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
-        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "posix_event_engine_lockfree_event",
         "posix_event_engine_wakeup_fd_posix",
@@ -2319,7 +2319,6 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
-        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "posix_event_engine_wakeup_fd_posix_default",
         "status_helper",
