@@ -18,6 +18,7 @@
 #include <grpc/event_engine/event_engine.h>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 
 namespace grpc_event_engine::experimental {
@@ -34,13 +35,20 @@ class FileDescriptor {
 };
 
 enum class OperationResultKind {
-  kOk,               // Operation does not return a file descriptor and
+  kSuccess,          // Operation does not return a file descriptor and
                      // return value was >= 0. native_result holds the
                      // original return value.
   kError,            // Check native_result and errno for details
   kWrongGeneration,  // System call was not performed because file
                      // descriptor belongs to the wrong generation.
 };
+
+template <typename Sink>
+void AbslStringify(Sink& sink, OperationResultKind kind) {
+  sink.Append(kind == OperationResultKind::kSuccess ? "(Success)"
+              : kind == OperationResultKind::kError ? "(Posix Error)"
+                                                    : "(Wrong Generation)");
+}
 
 // Result of the factory call. kWrongGeneration may happen in the call to
 // Accept*
@@ -53,7 +61,7 @@ struct FileDescriptorResult {
   int errno_value;
 
   static FileDescriptorResult FD(const FileDescriptor& fd) {
-    return {OperationResultKind::kOk, fd, 0};
+    return {OperationResultKind::kSuccess, fd, 0};
   }
 
   static FileDescriptorResult Error() {
@@ -65,11 +73,13 @@ struct FileDescriptorResult {
     return fd.fd();
   }
 
-  bool ok() const { return kind == OperationResultKind::kOk && fd.fd() > 0; }
+  bool ok() const {
+    return kind == OperationResultKind::kSuccess && fd.fd() > 0;
+  }
 
   absl::Status status() const {
     switch (kind) {
-      case OperationResultKind::kOk:
+      case OperationResultKind::kSuccess:
         return absl::OkStatus();
       case OperationResultKind::kError:
         return absl::ErrnoToStatus(errno_value, "");
@@ -77,6 +87,10 @@ struct FileDescriptorResult {
         return absl::InternalError(
             "File descriptor is from the wrong generation");
     }
+  }
+
+  bool IsPosixError(int err) const {
+    return kind == OperationResultKind::kError && errno_value == err;
   }
 };
 

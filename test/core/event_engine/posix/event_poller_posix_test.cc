@@ -225,17 +225,17 @@ void ListenCb(server* sv, absl::Status status) {
     fd = g_event_poller->GetFileDescriptors().Accept(
         listen_em_fd->WrappedFd(), reinterpret_cast<struct sockaddr*>(&ss),
         &slen);
-  } while (fd.kind == OperationResultKind::kError && fd.errno_value == EINTR);
-  if (fd.kind == OperationResultKind::kError && fd.errno_value == EINTR) {
+  } while (fd.IsPosixError(EINTR));
+  if (fd.IsPosixError(EAGAIN)) {
     sv->listen_closure = PosixEngineClosure::TestOnlyToClosure(
         [sv](absl::Status status) { ListenCb(sv, status); });
     listen_em_fd->NotifyOnRead(sv->listen_closure);
     return;
-  } else if (fd.kind == OperationResultKind::kError) {
+  } else if (!fd.ok()) {
     LOG(ERROR) << "Failed to accept a connection, returned error: "
-               << grpc_core::StrError(errno);
+               << fd.status();
   }
-  EXPECT_TRUE(fd.ok()) << fd.status();
+  ASSERT_TRUE(fd.ok()) << fd.status();
   EXPECT_LT(*fd, FD_SETSIZE);
   flags = fcntl(*fd, F_GETFL, 0);
   fcntl(*fd, F_SETFL, flags | O_NONBLOCK);

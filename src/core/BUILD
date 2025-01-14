@@ -2116,6 +2116,7 @@ grpc_cc_library(
     external_deps = [
         "absl/status",
         "absl/log:check",
+        "absl/log:log",
     ],
     deps = [
         "iomgr_port",
