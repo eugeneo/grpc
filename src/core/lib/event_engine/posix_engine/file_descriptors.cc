@@ -59,6 +59,8 @@ FileDescriptorResult FileDescriptors::Accept(int sockfd, struct sockaddr* addr,
   return RegisterPosixResult(accept(sockfd, addr, addrlen));
 }
 
+#ifdef GRPC_POSIX_SOCKETUTILS
+
 FileDescriptorResult FileDescriptors::Accept4(
     int sockfd,
     grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
@@ -92,6 +94,25 @@ close_and_error:
   Close(fd.fd);
   return FileDescriptorResult::Error();
 }
+
+#else  // GRPC_POSIX_SOCKETUTILS
+
+FileDescriptorResult FileDescriptors::Accept4(
+    int sockfd,
+    grpc_event_engine::experimental::EventEngine::ResolvedAddress& addr,
+    int nonblock, int cloexec) {
+  int flags = 0;
+  flags |= nonblock ? SOCK_NONBLOCK : 0;
+  flags |= cloexec ? SOCK_CLOEXEC : 0;
+  EventEngine::ResolvedAddress peer_addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  FileDescriptorResult ret = RegisterPosixResult(
+      accept4(sockfd, const_cast<sockaddr*>(peer_addr.address()), &len, flags));
+  addr = EventEngine::ResolvedAddress(peer_addr.address(), len);
+  return ret;
+}
+
+#endif  // GRPC_POSIX_SOCKETUTILS
 
 #else  // GRPC_POSIX_SOCKET
 
