@@ -19,7 +19,7 @@
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/str_format.h"
 
 namespace grpc_event_engine::experimental {
 
@@ -45,13 +45,10 @@ enum class OperationResultKind {
 
 template <typename Sink>
 void AbslStringify(Sink& sink, OperationResultKind kind) {
-  // Explicit absl::string_view here makes sure the ABSL header is used.
-  // Inclusion of the header is necessary for this template compiling on
-  // all platforms.
-  sink.Append(
-      absl::string_view(kind == OperationResultKind::kSuccess ? "(Success)"
-                        : kind == OperationResultKind::kError ? "(Success)"
-                                                              : "(Success)"));
+  absl::Format(sink, "%s",
+               kind == OperationResultKind::kSuccess ? "(Success)"
+               : kind == OperationResultKind::kError ? "(Success)"
+                                                     : "(Success)");
 }
 
 // Result of the factory call. kWrongGeneration may happen in the call to

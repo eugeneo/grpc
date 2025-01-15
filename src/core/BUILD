@@ -2117,7 +2117,7 @@ grpc_cc_library(
         "absl/log:check",
         "absl/log:log",
         "absl/status",
-        "absl/strings:string_view",
+        "absl/strings:str_format",
     ],
     deps = [
         "iomgr_port",
