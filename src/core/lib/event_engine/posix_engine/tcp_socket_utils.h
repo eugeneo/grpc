@@ -22,7 +22,6 @@
 #include <grpc/support/port_platform.h>
 
 #include <functional>
-#include <string>
 #include <utility>
 
 #include "absl/log/check.h"
@@ -215,18 +214,6 @@ class PosixSocketWrapper {
   // Extracts the first socket mutator from config if any and applies on the fd.
   absl::Status ApplySocketMutatorInOptions(grpc_fd_usage usage,
                                            const PosixTcpOptions& options);
-
-  // Return LocalAddress as EventEngine::ResolvedAddress
-  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress();
-
-  // Return PeerAddress as EventEngine::ResolvedAddress
-  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress();
-
-  // Return LocalAddress as string
-  absl::StatusOr<std::string> LocalAddressString();
-
-  // Return PeerAddress as string
-  absl::StatusOr<std::string> PeerAddressString();
 
   // An enum to keep track of IPv4/IPv6 socket modes.
 

@@ -2099,10 +2099,13 @@ grpc_cc_library(
         "absl/log:check",
         "absl/log:log",
         "absl/status",
+        "absl/strings",
         "absl/strings:str_format",
     ],
     deps = [
         "iomgr_port",
+        "strerror",
+        "event_engine_tcp_socket_utils",
         "//:event_engine_base_hdrs",
         "//:gpr",
         "//:gpr_platform",

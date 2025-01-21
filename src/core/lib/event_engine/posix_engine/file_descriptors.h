@@ -172,6 +172,17 @@ class FileDescriptors {
   PosixResult EpollCtlAdd(int epfd, const FileDescriptor& fd, void* data);
   PosixResult EpollCtlDel(int epfd, const FileDescriptor& fd);
 
+  // Return LocalAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> LocalAddress(
+      const FileDescriptor& fd);
+  // Return LocalAddress as string
+  absl::StatusOr<std::string> LocalAddressString(const FileDescriptor& fd);
+  // Return PeerAddress as EventEngine::ResolvedAddress
+  absl::StatusOr<EventEngine::ResolvedAddress> PeerAddress(
+      const FileDescriptor& fd);
+  // Return PeerAddress as string
+  absl::StatusOr<std::string> PeerAddressString(const FileDescriptor& fd);
+
  private:
   FileDescriptorResult RegisterPosixResult(int result);
 };

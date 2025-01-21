@@ -1280,22 +1280,20 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
                                      std::shared_ptr<EventEngine> engine,
                                      MemoryAllocator&& /*allocator*/,
                                      const PosixTcpOptions& options)
-    : on_done_(on_done),
-      traced_buffers_(),
-      handle_(handle),
-      poller_(handle->Poller()),
-      engine_(engine) {
+    : on_done_(on_done), traced_buffers_(), handle_(handle), engine_(engine) {
+  poller_ = handle->Poller();
   fd_ = handle_->WrappedFd();
   CHECK(options.resource_quota != nullptr);
-  auto peer_addr_string = sock.PeerAddressString();
+  auto& fds = poller_->GetFileDescriptors();
+  auto peer_addr_string = fds.PeerAddressString(fd_);
   mem_quota_ = options.resource_quota->memory_quota();
   memory_owner_ = mem_quota_->CreateMemoryOwner();
   self_reservation_ = memory_owner_.MakeReservation(sizeof(PosixEndpointImpl));
-  auto local_address = sock.LocalAddress();
+  auto local_address = fds.LocalAddress(fd_);
   if (local_address.ok()) {
     local_address_ = *local_address;
   }
-  auto peer_address = sock.PeerAddress();
+  auto peer_address = fds.PeerAddress(fd_);
   if (peer_address.ok()) {
     peer_address_ = *peer_address;
   }
@@ -1305,7 +1303,6 @@ PosixEndpointImpl::PosixEndpointImpl(EventHandle* handle,
   max_read_chunk_size_ = options.tcp_max_read_chunk_size;
   bool zerocopy_enabled =
       options.tcp_tx_zero_copy_enabled && poller_->CanTrackErrors();
-  FileDescriptors& fds = poller_->GetFileDescriptors();
 #ifdef GRPC_LINUX_ERRQUEUE
   if (zerocopy_enabled) {
     if (GetRLimitMemLockMax() == 0) {

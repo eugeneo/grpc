@@ -21,7 +21,10 @@
 #include <cerrno>
 #include <cstdint>
 
+#include "absl/strings/str_cat.h"
+#include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/lib/iomgr/port.h"
+#include "src/core/util/strerror.h"
 
 #ifdef GRPC_POSIX_SOCKET_UTILS_COMMON
 #include <arpa/inet.h>  // IWYU pragma: keep
@@ -229,5 +232,45 @@ IF_EPOLL(PosixResult FileDescriptors::EpollCtlAdd(int epfd,
            return PosixResultWrap(
                epoll_ctl(epfd, EPOLL_CTL_ADD, fd.fd(), &event));
          })
+
+absl::StatusOr<EventEngine::ResolvedAddress> FileDescriptors::LocalAddress(
+    const FileDescriptor& fd) {
+  EventEngine::ResolvedAddress addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  if (getsockname(fd.fd(), const_cast<sockaddr*>(addr.address()), &len) < 0) {
+    return absl::InternalError(
+        absl::StrCat("getsockname:", grpc_core::StrError(errno)));
+  }
+  return EventEngine::ResolvedAddress(addr.address(), len);
+}
+
+absl::StatusOr<std::string> FileDescriptors::LocalAddressString(
+    const FileDescriptor& fd) {
+  auto status = LocalAddress(fd);
+  if (!status.ok()) {
+    return status.status();
+  }
+  return ResolvedAddressToNormalizedString((*status));
+}
+
+absl::StatusOr<EventEngine::ResolvedAddress> FileDescriptors::PeerAddress(
+    const FileDescriptor& fd) {
+  EventEngine::ResolvedAddress addr;
+  socklen_t len = EventEngine::ResolvedAddress::MAX_SIZE_BYTES;
+  if (getpeername(fd.fd(), const_cast<sockaddr*>(addr.address()), &len) < 0) {
+    return absl::InternalError(
+        absl::StrCat("getpeername:", grpc_core::StrError(errno)));
+  }
+  return EventEngine::ResolvedAddress(addr.address(), len);
+}
+
+absl::StatusOr<std::string> FileDescriptors::PeerAddressString(
+    const FileDescriptor& fd) {
+  auto status = PeerAddress(fd);
+  if (!status.ok()) {
+    return status.status();
+  }
+  return ResolvedAddressToNormalizedString((*status));
+}
 
 }  // namespace grpc_event_engine::experimental
