@@ -2103,9 +2103,9 @@ grpc_cc_library(
         "absl/strings:str_format",
     ],
     deps = [
+        "event_engine_tcp_socket_utils",
         "iomgr_port",
         "strerror",
-        "event_engine_tcp_socket_utils",
         "//:event_engine_base_hdrs",
         "//:gpr",
         "//:gpr_platform",
