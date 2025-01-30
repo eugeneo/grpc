@@ -882,7 +882,8 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
   // Only save timestamps if all the bytes were taken by sendmsg.
   if (sending_length == static_cast<size_t>(length)) {
     traced_buffers_.AddNewEntry(static_cast<uint32_t>(bytes_counter_ + length),
-                                fd, outgoing_buffer_arg_);
+                                &poller_->GetFileDescriptors(), fd_,
+                                outgoing_buffer_arg_);
     outgoing_buffer_arg_ = nullptr;
   }
   return true;

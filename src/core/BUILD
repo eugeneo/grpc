@@ -2351,6 +2351,7 @@ grpc_cc_library(
     ],
     external_deps = ["absl/log"],
     deps = [
+        "posix_event_engine_file_descriptors",
         "iomgr_port",
         "strerror",
         "//:gpr",
@@ -2372,6 +2373,7 @@ grpc_cc_library(
     ],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "sync",
         "//:gpr",
