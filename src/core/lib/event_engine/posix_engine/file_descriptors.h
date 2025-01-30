@@ -23,127 +23,10 @@
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_format.h"
+#include "src/core/lib/event_engine/posix_engine/file_descriptor_collection.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
 
 namespace grpc_event_engine::experimental {
-
-class FileDescriptor {
- public:
-  FileDescriptor() = default;
-  explicit FileDescriptor(int fd) : fd_(fd) {};
-  bool ready() const { return fd_ > 0; }
-  // Escape for iomgr and tests. Not to be used elsewhere
-  int iomgr_fd() const { return fd_; }
-  // For logging/debug purposes - may consider including generation, do not
-  // use for Posix calls!
-  int debug_fd() const { return fd_; }
-
-  template <typename Sink>
-  friend void AbslStringify(Sink& sink, FileDescriptor fd) {
-    sink.Append(absl::StrFormat("FD(%d)", fd.fd()));
-  }
-
- private:
-  int fd() const { return fd_; }
-
-  // Can get fd_!
-  friend class FileDescriptors;
-
-  int fd_ = 0;
-};
-
-enum class OperationResultKind {
-  kSuccess,          // Operation does not return a file descriptor and
-                     // return value was >= 0. native_result holds the
-                     // original return value.
-  kError,            // Check native_result and errno for details
-  kWrongGeneration,  // System call was not performed because file
-                     // descriptor belongs to the wrong generation.
-};
-
-template <typename Sink>
-void AbslStringify(Sink& sink, OperationResultKind kind) {
-  sink.Append(kind == OperationResultKind::kSuccess ? "(Success)"
-              : kind == OperationResultKind::kError ? "(Success)"
-                                                    : "(Success)");
-}
-
-// Result of the factory call. kWrongGeneration may happen in the call to
-// Accept*
-class PosixResult {
- public:
-  constexpr PosixResult() = default;
-  explicit constexpr PosixResult(OperationResultKind kind, int errno_value)
-      : kind_(kind), errno_value_(errno_value) {}
-
-  virtual ~PosixResult() = default;
-
-  absl::Status status() const {
-    switch (kind_) {
-      case OperationResultKind::kSuccess:
-        return absl::OkStatus();
-      case OperationResultKind::kError:
-        return absl::ErrnoToStatus(errno_value_, "");
-      case OperationResultKind::kWrongGeneration:
-        return absl::InternalError(
-            "File descriptor is from the wrong generation");
-      default:
-        return absl::InvalidArgumentError("Unexpected kind_");
-    }
-  }
-
-  virtual bool ok() const { return kind_ == OperationResultKind::kSuccess; }
-
-  bool IsPosixError(int err) const {
-    return kind_ == OperationResultKind::kError && errno_value_ == err;
-  }
-
-  OperationResultKind kind() const { return kind_; }
-  int errno_value() const { return errno_value_; }
-
- private:
-  OperationResultKind kind_ = OperationResultKind::kSuccess;
-  // errno value on call completion, in order to reduce the race conditions
-  // from relying on global variable.
-  int errno_value_ = 0;
-};
-
-// Result of the factory call. kWrongGeneration may happen in the call to
-// Accept*
-class FileDescriptorResult final : public PosixResult {
- public:
-  FileDescriptorResult() = default;
-  explicit FileDescriptorResult(const FileDescriptor& fd)
-      : PosixResult(OperationResultKind::kSuccess, 0), fd_(fd) {}
-  FileDescriptorResult(OperationResultKind kind, int errno_value)
-      : PosixResult(kind, errno_value) {}
-
-  FileDescriptor operator*() const {
-    CHECK_OK(status());
-    return fd_;
-  }
-
-  const FileDescriptor* operator->() const {
-    CHECK_OK(status());
-    return &fd_;
-  }
-
-  bool ok() const override { return PosixResult::ok() && fd_.ready(); }
-
-  template <typename R, typename Fn>
-  R if_ok(R if_bad, const Fn& fn) {
-    if (ok()) {
-      return fn(fd_);
-    } else {
-      return std::move(if_bad);
-    }
-  }
-
- private:
-  // gRPC wrapped FileDescriptor, as described above
-  FileDescriptor fd_;
-};
 
 // Result of the call that returns error or ssize_t. Smaller integer types
 // will also be packed here.
@@ -188,9 +71,12 @@ class FileDescriptors {
 
   // Represents fd as integer. Needed for APIs like ARES, that need to have
   // a single int as a handle.
-  int AsInteger(const FileDescriptor& fd);
+  int ToInteger(const FileDescriptor& fd) { return descriptors_.ToInteger(fd); }
+
   // May return a wrong generation error
-  FileDescriptorResult FromInteger(int fd);
+  FileDescriptorResult FromInteger(int fd) {
+    return descriptors_.FromInteger(fd);
+  }
 
   // Creates a new socket for connecting to (or listening on) an address.
   //
@@ -299,6 +185,8 @@ class FileDescriptors {
                                       const PosixTcpOptions& options);
 
   FileDescriptorResult RegisterPosixResult(int result);
+
+  FileDescriptorCollection descriptors_;
 };
 
 }  // namespace grpc_event_engine::experimental

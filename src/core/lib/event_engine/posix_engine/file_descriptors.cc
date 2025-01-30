@@ -435,7 +435,7 @@ bool IsSocketReusePortSupported() {
   return kSupportSoReusePort;
 }
 
-FileDescriptor FileDescriptors::Adopt(int fd) { return FileDescriptor(fd); }
+FileDescriptor FileDescriptors::Adopt(int fd) { return descriptors_.Add(fd); }
 
 std::optional<int> FileDescriptors::GetFdForPolling(const FileDescriptor& fd) {
   return fd.fd();
@@ -623,12 +623,6 @@ FileDescriptorResult FileDescriptors::EpollCreateAndCloexec() {
 #else   // GRPC_LINUX_EPOLL
   grpc_core::Crash("Not supported");
 #endif  // GRPC_LINUX_EPOLL
-}
-
-int FileDescriptors::AsInteger(const FileDescriptor& fd) { return fd.fd(); }
-
-FileDescriptorResult FileDescriptors::FromInteger(int fd) {
-  return FileDescriptorResult(FileDescriptor(fd));
 }
 
 IF_POSIX_SOCKET(
