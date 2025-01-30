@@ -441,11 +441,6 @@ std::optional<int> FileDescriptors::GetFdForPolling(const FileDescriptor& fd) {
   return fd.fd();
 }
 
-std::optional<int> FileDescriptors::GetRawFileDescriptor(
-    const FileDescriptor& fd) {
-  return fd.fd();
-}
-
 FileDescriptorResult FileDescriptors::RegisterPosixResult(int result) {
   if (result > 0) {
     return FileDescriptorResult(Adopt(result));

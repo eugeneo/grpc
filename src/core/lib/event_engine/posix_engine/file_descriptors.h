@@ -214,9 +214,6 @@ class FileDescriptors {
 
   void Close(const FileDescriptor& fd);
 
-  // Returns nullopt if the file descriptor is not usable
-  std::optional<int> GetRawFileDescriptor(const FileDescriptor& fd);
-
   // Posix
   PosixResult Connect(const FileDescriptor& sockfd, const struct sockaddr* addr,
                       socklen_t addrlen);
