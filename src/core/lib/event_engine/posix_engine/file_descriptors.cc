@@ -21,6 +21,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 #include "absl/cleanup/cleanup.h"
@@ -438,12 +439,8 @@ bool IsSocketReusePortSupported() {
 FileDescriptor FileDescriptors::Adopt(int fd) { return descriptors_.Add(fd); }
 
 std::optional<int> FileDescriptors::GetFdForPolling(const FileDescriptor& fd) {
-  return fd.fd();
-}
-
-std::optional<int> FileDescriptors::GetRawFileDescriptor(
-    const FileDescriptor& fd) {
-  return fd.fd();
+  return descriptors_.RunIfCorrectGeneration<std::optional<int>>(
+      fd, [](int fd) -> std::optional<int> { return fd; }, std::nullopt);
 }
 
 FileDescriptorResult FileDescriptors::RegisterPosixResult(int result) {

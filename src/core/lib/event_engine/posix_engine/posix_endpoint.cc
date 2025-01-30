@@ -879,13 +879,10 @@ bool PosixEndpointImpl::WriteWithTimestamps(struct msghdr* msg,
   grpc_core::global_stats().IncrementTcpWriteSize(sending_length);
   ssize_t length = TcpSend(&fds, fd_, msg, saved_errno, additional_flags);
   *sent_length = length;
-  auto fd = fds.GetRawFileDescriptor(fd_);
   // Only save timestamps if all the bytes were taken by sendmsg.
-  if (!fd.has_value()) {
-    LOG(ERROR) << "File descriptor " << fd_ << " is not usable";
-  } else if (sending_length == static_cast<size_t>(length)) {
+  if (sending_length == static_cast<size_t>(length)) {
     traced_buffers_.AddNewEntry(static_cast<uint32_t>(bytes_counter_ + length),
-                                *fd, outgoing_buffer_arg_);
+                                fd, outgoing_buffer_arg_);
     outgoing_buffer_arg_ = nullptr;
   }
   return true;

@@ -49,8 +49,7 @@ class FileDescriptor {
  private:
   int fd() const { return fd_; }
 
-  // Can get fd_!
-  friend class FileDescriptors;
+  // Can get fd!
   friend class FileDescriptorCollection;
 
   int fd_ = 0;
@@ -166,6 +165,19 @@ class FileDescriptorCollection {
   std::unordered_set<int> AdvanceGeneration();
   int generation() const {
     return current_generation_.load(std::memory_order_relaxed);
+  }
+
+  template <typename R, typename Fn>
+  R RunIfCorrectGeneration(const FileDescriptor& fd, Fn fn, R&& r) {
+    if (!IsCorrectGeneration(fd)) {
+      return std::forward<R>(r);
+    }
+    return fn(fd);
+  }
+
+  bool IsCorrectGeneration(const FileDescriptor& fd) const {
+    return fd.generation() ==
+           current_generation_.load(std::memory_order_relaxed);
   }
 
  private:
