@@ -116,6 +116,10 @@ class PosixResult {
 // Accept*
 class FileDescriptorResult final : public PosixResult {
  public:
+  static FileDescriptorResult WrongGeneration() {
+    return FileDescriptorResult(OperationResultKind::kWrongGeneration, 0);
+  }
+
   FileDescriptorResult() = default;
   explicit FileDescriptorResult(const FileDescriptor& fd)
       : PosixResult(OperationResultKind::kSuccess, 0), fd_(fd) {}
@@ -155,6 +159,8 @@ class FileDescriptorCollection {
 
   FileDescriptor Add(int fd);
   void Remove(const FileDescriptor& fd);
+
+  FileDescriptorResult RegisterPosixResult(int result);
 
   std::optional<int> GetRawFileDescriptor(const FileDescriptor& fd) const;
 

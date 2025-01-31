@@ -32,6 +32,10 @@ namespace grpc_event_engine::experimental {
 // will also be packed here.
 class Int64Result final : public PosixResult {
  public:
+  static Int64Result WrongGeneration() {
+    return Int64Result(OperationResultKind::kWrongGeneration, 0, 0);
+  }
+
   Int64Result() = default;
   explicit Int64Result(int64_t result)
       : PosixResult(OperationResultKind::kSuccess, 0), result_(result) {}
@@ -181,7 +185,9 @@ class FileDescriptors {
                                       const EventEngine::ResolvedAddress& addr,
                                       const PosixTcpOptions& options);
 
-  FileDescriptorResult RegisterPosixResult(int result);
+  PosixResult PosixResultWrap(
+      const FileDescriptor& wrapped,
+      const absl::AnyInvocable<int(int) const>& fn) const;
 
   FileDescriptorCollection descriptors_;
 };

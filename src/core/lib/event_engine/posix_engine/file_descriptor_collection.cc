@@ -64,4 +64,12 @@ FileDescriptorResult FileDescriptorCollection::FromInteger(int fd) const {
       FileDescriptor(fd & ((1 << kIntFdBits) - 1), generation));
 }
 
+FileDescriptorResult FileDescriptorCollection::RegisterPosixResult(int result) {
+  if (result > 0) {
+    return FileDescriptorResult(Add(result));
+  } else {
+    return FileDescriptorResult(OperationResultKind::kError, errno);
+  }
+}
+
 }  // namespace grpc_event_engine::experimental
