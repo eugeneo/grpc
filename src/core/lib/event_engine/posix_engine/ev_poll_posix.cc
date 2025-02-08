@@ -26,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/any_invocable.h"
@@ -639,6 +640,7 @@ Poller::WorkResult PollPoller::Work(
     pfds[0].fd = *wakeup_fd;
     pfds[0].events = POLLIN;
     pfds[0].revents = 0;
+    // Event handles from before fork, need to be notified
     PollEventHandle* head = poll_handles_list_head_;
     while (head != nullptr) {
       {
@@ -669,7 +671,6 @@ Poller::WorkResult PollPoller::Work(
       head = head->PollerHandlesListPos().next;
     }
     mu_.Unlock();
-
     if (!use_phony_poll_ || timeout_ms == 0 || pfd_count == 1) {
       std::set<std::string> fds;
       for (int i = 0; i < pfd_count; i++) {
@@ -807,8 +808,19 @@ void PollPoller::Close() {
 }
 
 void PollPoller::AdvanceGeneration() {
-  LOG(INFO) << "Advancing generation";
   GetFileDescriptors().AdvanceGeneration();
+  PollEventHandle* handle;
+  {
+    absl::MutexLock lock(&mu_);
+    handle = poll_handles_list_head_;
+  }
+  while (handle != nullptr) {
+    LOG(INFO) << "###### " << handle->WrappedFd() << " "
+              << handle->PollerHandlesListPos().next;
+    handle->ShutdownHandle(
+        absl::InternalError("Closing file descriptor on fork"));
+    handle = handle->PollerHandlesListPos().next;
+  }
   wakeup_fd_ = *CreateWakeupFd(&GetFileDescriptors());
 }
 

@@ -264,9 +264,10 @@ TEST_F(PollerForkTest, ListenerInChild) {
   ee()->AfterForkInChild();
   auto failure =
       SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello again");
-  ASSERT_THAT(failure, absl_testing::StatusIs(absl::StatusCode::kInternal));
+  ASSERT_THAT(failure,
+              absl_testing::StatusIs(absl::StatusCode::kResourceExhausted));
   ASSERT_THAT(failure.message(),
-              ::testing::StartsWith("Descriptor was opened before fork"));
+              ::testing::StartsWith("File descriptor was closed on fork"));
   listener_and_address->first.reset();
   absl::Condition cond(&listener_done, &std::optional<absl::Status>::has_value);
   {
