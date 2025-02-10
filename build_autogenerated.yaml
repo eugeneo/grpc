@@ -15149,6 +15149,7 @@ targets:
   - test/core/event_engine/posix/posix_engine_test_utils.cc
   deps:
   - gtest
+  - absl/status:status_matchers
   - grpc++
   - grpc_test_util
   platforms:

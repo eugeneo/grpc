@@ -55,7 +55,6 @@ class Epoll1Poller : public PosixEventPoller {
   std::string Name() override { return "epoll1"; }
   void Kick() override;
   Scheduler* GetScheduler() { return scheduler_; }
-  void Shutdown() override;
   bool CanTrackErrors() const override {
 #ifdef GRPC_POSIX_SOCKET_TCP
     return KernelSupportsErrqueue();

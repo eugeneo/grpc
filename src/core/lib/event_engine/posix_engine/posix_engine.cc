@@ -340,12 +340,6 @@ void PosixEnginePollerManager::TriggerShutdown() {
   poller_->Kick();
 }
 
-PosixEnginePollerManager::~PosixEnginePollerManager() {
-  if (poller_ != nullptr) {
-    poller_->Shutdown();
-  }
-}
-
 PosixEventEngine::PosixEventEngine(std::shared_ptr<PosixEventPoller> poller)
     : grpc_core::KeepsGrpcInitialized(
           /*enabled=*/!grpc_core::IsPosixEeSkipGrpcInitEnabled()),

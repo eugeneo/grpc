@@ -72,12 +72,17 @@ class EventHandle {
   // appropriate actions (for instance it should not try to invoke another
   // recursive NotifyOnError if the handle is shutdown).
   virtual void NotifyOnError(PosixEngineClosure* on_error) = 0;
+  // Schedule on_fork to be invoked when the underlying file descriptor becomes
+  // closed after fork in the child process.
+  virtual void NotifyOnFork(PosixEngineClosure* on_fork) = 0;
   // Force set a readable event on the underlying file descriptor.
   virtual void SetReadable() = 0;
   // Force set a writable event on the underlying file descriptor.
   virtual void SetWritable() = 0;
   // Force set a error event on the underlying file descriptor.
   virtual void SetHasError() = 0;
+  // Called on fork when the underlying file descriptor becomes closed.
+  virtual void CloseHandleOnFork() = 0;
   // Returns true if the handle has been shutdown.
   virtual bool IsHandleShutdown() = 0;
   // Returns the poller which was used to create this handle.
@@ -92,15 +97,6 @@ class PosixEventPoller : public grpc_event_engine::experimental::Poller {
                                     bool track_err) = 0;
   virtual bool CanTrackErrors() const = 0;
   virtual std::string Name() = 0;
-  // Shuts down and deletes the poller. It is legal to call this function
-  // only when no other poller method is in progress. For instance, it is
-  // not safe to call this method, while a thread is blocked on Work(...).
-  // A graceful way to terminate the poller could be to:
-  // 1. First orphan all created handles.
-  // 2. Send a Kick() to the thread executing Work(...) and wait for the
-  //    thread to return.
-  // 3. Call Shutdown() on the poller.
-  virtual void Shutdown() = 0;
   virtual void AdvanceGeneration() = 0;
   FileDescriptors& GetFileDescriptors() { return file_descriptors_; }
   ~PosixEventPoller() override = default;

@@ -116,7 +116,6 @@ class PosixEnginePollerManager
            PollerState::kShuttingDown;
   }
   void TriggerShutdown();
-  ~PosixEnginePollerManager() override;
 
  private:
   enum class PollerState { kExternal, kOk, kShuttingDown };

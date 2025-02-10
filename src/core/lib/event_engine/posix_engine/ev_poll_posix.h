@@ -37,8 +37,7 @@ class PollEventHandle;
 class PollPoller : public PosixEventPoller,
                    public std::enable_shared_from_this<PollPoller> {
  public:
-  explicit PollPoller(Scheduler* scheduler);
-  PollPoller(Scheduler* scheduler, bool use_phony_poll);
+  PollPoller(Scheduler* scheduler, bool use_phony_poll = false);
   EventHandle* CreateHandle(FileDescriptor fd, absl::string_view name,
                             bool track_err) override;
   Poller::WorkResult Work(
@@ -47,7 +46,6 @@ class PollPoller : public PosixEventPoller,
   std::string Name() override { return "poll"; }
   void Kick() override;
   Scheduler* GetScheduler() { return scheduler_; }
-  void Shutdown() override;
   bool CanTrackErrors() const override { return false; }
   ~PollPoller() override;
 
