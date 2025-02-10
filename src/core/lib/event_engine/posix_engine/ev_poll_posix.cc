@@ -90,7 +90,6 @@ class PollEventHandle : public EventHandle {
     poller_->PollerHandlesListAddHandle(this);
   }
   PollPoller* Poller() override { return poller_.get(); }
-  void CloseHandleOnFork() override;
   bool SetPendingActions(bool pending_read, bool pending_write) {
     pending_actions_ |= pending_read;
     if (pending_write) {
@@ -138,7 +137,6 @@ class PollEventHandle : public EventHandle {
   void NotifyOnRead(PosixEngineClosure* on_read) override;
   void NotifyOnWrite(PosixEngineClosure* on_write) override;
   void NotifyOnError(PosixEngineClosure* on_error) override;
-  void NotifyOnFork(PosixEngineClosure* on_fork) override;
   void SetReadable() override;
   void SetWritable() override;
   void SetHasError() override;
@@ -213,7 +211,6 @@ class PollEventHandle : public EventHandle {
   absl::Status shutdown_error_;
   AnyInvocableClosure exec_actions_closure_;
   PosixEngineClosure* on_done_;
-  PosixEngineClosure* on_fork_;
   PosixEngineClosure* read_closure_;
   PosixEngineClosure* write_closure_;
 };
@@ -406,32 +403,6 @@ void PollEventHandle::NotifyOnWrite(PosixEngineClosure* on_write) {
   Unref();
 }
 
-void PollEventHandle::NotifyOnFork(PosixEngineClosure* on_fork) {
-  // // We need to take a Ref here because NotifyOnLocked may trigger execution
-  // // of a closure which calls OrphanHandle that may delete this object or
-  // call
-  // // poller->Shutdown() prematurely.
-  // Ref();
-  // {
-  //   grpc_core::ReleasableMutexLock lock(&mu_);
-  //   if (NotifyOnLocked(&fork_closure_, on_fork)) {
-  //     lock.Release();
-  //     // NotifyOnLocked immediately scheduled some closure. It would have set
-  //     // the closure state to NOT_READY. We need to wakeup the Work(...)
-  //     thread
-  //     // to start polling on this fd. If this call is not made, it is
-  //     possible
-  //     // that the poller will reach a state where all the fds under the
-  //     // poller's control are not polled for POLLIN/POLLOUT events thus
-  //     leading
-  //     // to an indefinitely blocked Work(..) method.
-  //     poller_->KickExternal(false);
-  //   }
-  // }
-  // // For the Ref() taken at the beginning of this function.
-  // Unref();
-}
-
 void PollEventHandle::NotifyOnError(PosixEngineClosure* on_error) {
   on_error->SetStatus(
       absl::Status(absl::StatusCode::kCancelled,
@@ -492,11 +463,6 @@ bool PollEventHandle::EndPollLocked(bool got_read, bool got_write) {
     return SetPendingActions(got_read, got_write);
   }
   return false;
-}
-
-void PollEventHandle::CloseHandleOnFork() {
-  on_fork_->SetStatus(absl::UnavailableError("Closed on fork"));
-  on_fork_->Run();
 }
 
 void PollPoller::KickExternal(bool ext) {
@@ -777,6 +743,7 @@ void PollPoller::AdvanceGeneration() {
     handle = poll_handles_list_head_;
   }
   while (handle != nullptr) {
+    handle->ShutdownHandle(absl::ResourceExhaustedError("Closed on fork"));
     handle = handle->PollerHandlesListPos().next;
   }
   wakeup_fd_ = *CreateWakeupFd(&GetFileDescriptors());

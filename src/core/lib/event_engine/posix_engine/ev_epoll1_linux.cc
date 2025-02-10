@@ -108,14 +108,10 @@ class Epoll1EventHandle : public EventHandle {
   FileDescriptor WrappedFd() override { return fd_; }
   void OrphanHandle(PosixEngineClosure* on_done, FileDescriptor* release_fd,
                     absl::string_view reason) override;
-  void CloseHandleOnFork() override { grpc_core::Crash("Not implemented"); }
   void ShutdownHandle(absl::Status why) override;
   void NotifyOnRead(PosixEngineClosure* on_read) override;
   void NotifyOnWrite(PosixEngineClosure* on_write) override;
   void NotifyOnError(PosixEngineClosure* on_error) override;
-  void NotifyOnFork(PosixEngineClosure* on_error) override {
-    grpc_core::Crash("Not implemented");
-  }
   void SetReadable() override;
   void SetWritable() override;
   void SetHasError() override;

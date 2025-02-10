@@ -266,8 +266,7 @@ TEST_F(PollerForkTest, ListenerInChild) {
       SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello again");
   ASSERT_THAT(failure,
               absl_testing::StatusIs(absl::StatusCode::kResourceExhausted));
-  ASSERT_THAT(failure.message(),
-              ::testing::StartsWith("File descriptor was closed on fork"));
+  ASSERT_THAT(failure.message(), ::testing::StartsWith("Handle was shut down"));
   listener_and_address->first.reset();
   absl::Condition cond(&listener_done, &std::optional<absl::Status>::has_value);
   {

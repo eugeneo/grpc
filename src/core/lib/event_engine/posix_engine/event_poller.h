@@ -72,17 +72,12 @@ class EventHandle {
   // appropriate actions (for instance it should not try to invoke another
   // recursive NotifyOnError if the handle is shutdown).
   virtual void NotifyOnError(PosixEngineClosure* on_error) = 0;
-  // Schedule on_fork to be invoked when the underlying file descriptor becomes
-  // closed after fork in the child process.
-  virtual void NotifyOnFork(PosixEngineClosure* on_fork) = 0;
   // Force set a readable event on the underlying file descriptor.
   virtual void SetReadable() = 0;
   // Force set a writable event on the underlying file descriptor.
   virtual void SetWritable() = 0;
   // Force set a error event on the underlying file descriptor.
   virtual void SetHasError() = 0;
-  // Called on fork when the underlying file descriptor becomes closed.
-  virtual void CloseHandleOnFork() = 0;
   // Returns true if the handle has been shutdown.
   virtual bool IsHandleShutdown() = 0;
   // Returns the poller which was used to create this handle.
