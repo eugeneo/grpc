@@ -32,12 +32,15 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/status_matchers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "gmock/gmock.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
@@ -46,18 +49,120 @@
 #include "src/core/util/wait_for_single_owner.h"
 #include "test/core/test_util/port.h"
 
-namespace grpc_event_engine {
-namespace experimental {
+namespace grpc_event_engine::experimental {
 
 namespace {
 
+class StatusListener {
+ public:
+  explicit StatusListener(absl::Mutex* mu) : mu_(mu) {}
+
+  absl::Status AwaitStatus() {
+    absl::MutexLock lock(mu_);
+    mu_->Await({&status_, &decltype(status_)::has_value});
+    return std::move(status_).value();
+  }
+
+  absl::AnyInvocable<void(absl::Status)> Setter() {
+    return [&](absl::Status status) {
+      absl::MutexLock lock(mu_);
+      status_ = std::move(status);
+    };
+  }
+
+ private:
+  absl::Mutex* mu_;
+  std::optional<absl::Status> status_ ABSL_GUARDED_BY(mu_);
+};
+
+class RawPosixClient {
+ public:
+  explicit RawPosixClient(const EventEngine::ResolvedAddress& address) {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+      status_ = absl::ErrnoToStatus(errno, "socket call");
+    } else {
+      int result =
+          connect(sockfd, address.address(), sizeof(*address.address()));
+      if (result < 0) {
+        status_ = absl::ErrnoToStatus(errno, "connect call");
+      } else {
+        socket_ = sockfd;
+        status_ = absl::OkStatus();
+      }
+    }
+  }
+
+  RawPosixClient(const RawPosixClient& /* other */) = delete;
+
+  RawPosixClient(RawPosixClient&& other) noexcept
+      : socket_(other.socket_), status_(other.status()) {
+    other.socket_ = -1;
+    other.status_ = absl::OkStatus();
+  }
+
+  ~RawPosixClient() {
+    if (socket_ > 0) {
+      close(socket_);
+      socket_ = -1;
+    }
+  }
+
+  absl::Status status() const& { return status_; }
+
+  absl::Status&& status() && { return std::move(status_); }
+
+  int socket_fd() const { return socket_; }
+
+ private:
+  int socket_ = -1;
+  absl::Status status_;
+};
+
 class PollerForkTest : public ::testing::Test {
  public:
-  void SetUp() override { ee_ = GetDefaultEventEngine(); }
+  void SetUp() override {
+    ee_ = GetDefaultEventEngine();
+    // Setup listener and establish socket connection, confirm they work
+    auto listener_and_address = SetupListener(
+        [&](auto endpoint, MemoryAllocator /* memory */) {
+          absl::MutexLock lock(&mu_);
+          endpoints_.emplace(std::move(endpoint));
+        },
+        listener_done_.Setter());
+    ASSERT_THAT(listener_and_address, absl_testing::IsOk());
+    address_ = listener_and_address->second;
+    listener_ = std::move(listener_and_address->first);
+    RawPosixClient client(listener_and_address->second);
+    ASSERT_THAT(client.status(), absl_testing::IsOk());
+    // Sanity check - confirm a read operation works
+    ASSERT_THAT(SendFromRawToEE(client.socket_fd(), *AwaitEndpoint(), "Hello"),
+                absl_testing::IsOk());
+  }
 
   void TearDown() override {
+    {
+      absl::MutexLock lock(&mu_);
+      EXPECT_THAT(endpoints_, ::testing::IsEmpty());
+      endpoints_ = {};
+    }
+    listener_.reset();
+    EXPECT_THAT(listener_done_.AwaitStatus(), ::absl_testing::IsOk());
     grpc_core::WaitForSingleOwnerWithTimeout(std::move(ee_),
                                              grpc_core::Duration::Seconds(30));
+  }
+
+  std::unique_ptr<EventEngine::Endpoint> AwaitEndpoint() {
+    mu_.LockWhen(absl::Condition(
+        +[](decltype(endpoints_)* endpoints) { return !endpoints->empty(); },
+        &endpoints_));
+    std::unique_ptr<EventEngine::Endpoint> endpoint =
+        std::move(endpoints_.back());
+    endpoints_.pop();
+    LOG(INFO) << "Endpoint connected: "
+              << ResolvedAddressToNormalizedString(endpoint->GetPeerAddress());
+    mu_.Unlock();
+    return endpoint;
   }
 
   PosixEventEngine* ee() { return static_cast<PosixEventEngine*>(ee_.get()); }
@@ -101,15 +206,10 @@ class PollerForkTest : public ::testing::Test {
                                absl::string_view data) {
     absl::Mutex mu;
     SliceBuffer buffer;
-    std::optional<absl::Status> read_status;
+    StatusListener read_status(&mu);
     EventEngine::Endpoint::ReadArgs read_args = {
         static_cast<int64_t>(data.length())};
-    if (endpoint.Read(
-            [&](absl::Status status) {
-              absl::MutexLock lock(&mu);
-              read_status = absl::move(status);
-            },
-            &buffer, &read_args)) {
+    if (endpoint.Read(read_status.Setter(), &buffer, &read_args)) {
       return absl::FailedPreconditionError("Endpoint has pending data");
     }
     ssize_t wrote = write(socket_fd, data.data(), data.size());
@@ -119,165 +219,64 @@ class PollerForkTest : public ::testing::Test {
     if (wrote < data.size()) {
       return absl::DataLossError("Did not write all the data");
     }
-    {
-      absl::MutexLock lock(&mu);
-      mu.Await({&read_status, &decltype(read_status)::has_value});
-      if (!read_status->ok()) {
-        return std::move(read_status).value();
-      }
-      if (buffer.Length() != data.size()) {
-        return absl::InternalError(absl::StrFormat(
-            "Read %ld instead of %ld", buffer.Length(), data.size()));
-      }
-      Slice slice = buffer.TakeFirst();
-      if (slice.as_string_view() != data) {
-        return absl::InternalError(absl::StrFormat(
-            "Read %v, expected %v", slice.as_string_view(), data));
-      }
-      LOG(INFO) << "Read " << slice.as_string_view();
+    auto status = read_status.AwaitStatus();
+    if (!status.ok()) {
+      return status;
     }
+    if (buffer.Length() != data.size()) {
+      return absl::InternalError(absl::StrFormat("Read %ld instead of %ld",
+                                                 buffer.Length(), data.size()));
+    }
+    Slice slice = buffer.TakeFirst();
+    if (slice.as_string_view() != data) {
+      return absl::InternalError(absl::StrFormat("Read %v, expected %v",
+                                                 slice.as_string_view(), data));
+    }
+    LOG(INFO) << "Read " << slice.as_string_view();
     return absl::OkStatus();
   }
 
- private:
+ protected:
   std::shared_ptr<EventEngine> ee_;
-};
-
-class RawPosixClient {
- public:
-  explicit RawPosixClient(const EventEngine::ResolvedAddress& address) {
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-      status_ = absl::ErrnoToStatus(errno, "socket call");
-    } else {
-      int result =
-          connect(sockfd, address.address(), sizeof(*address.address()));
-      if (result < 0) {
-        status_ = absl::ErrnoToStatus(errno, "connect call");
-      }
-    }
-    socket_ = sockfd;
-    status_ = absl::OkStatus();
-  }
-
-  RawPosixClient(const RawPosixClient& /* other */) = delete;
-
-  RawPosixClient(RawPosixClient&& other) noexcept
-      : socket_(other.socket_), status_(other.status()) {
-    other.socket_ = -1;
-    other.status_ = absl::OkStatus();
-  }
-
-  ~RawPosixClient() {
-    if (socket_ > 0) {
-      close(socket_);
-      socket_ = -1;
-    }
-  }
-
-  absl::Status status() const& { return status_; }
-
-  absl::Status&& status() && { return std::move(status_); }
-
-  int socket_fd() const { return socket_; }
-
- private:
-  int socket_ = -1;
-  absl::Status status_;
+  absl::Mutex mu_;
+  StatusListener listener_done_{&mu_};
+  std::unique_ptr<EventEngine::Listener> listener_;
+  std::queue<std::unique_ptr<EventEngine::Endpoint>> endpoints_
+      ABSL_GUARDED_BY(&mu_);
+  EventEngine::ResolvedAddress address_;
 };
 
 }  // namespace
 
 TEST_F(PollerForkTest, ListenerInParent) {
-  absl::Mutex mu;
-  std::optional<absl::Status> listener_done;
-  std::vector<std::unique_ptr<EventEngine::Endpoint>> endpoints;
-  auto listener_and_address = SetupListener(
-      [&](auto endpoint, MemoryAllocator /* memory */) {
-        absl::MutexLock lock(&mu);
-        endpoints.emplace_back(std::move(endpoint));
-      },
-      [&](absl::Status status) {
-        absl::MutexLock lock(&mu);
-        listener_done.emplace(std::move(status));
-      });
-  ASSERT_THAT(listener_and_address, absl_testing::IsOk());
-  RawPosixClient client(listener_and_address->second);
+  // Connect before "fork"
+  RawPosixClient client(address_);
   ASSERT_THAT(client.status(), absl_testing::IsOk());
-  {
-    absl::MutexLock lock(&mu);
-    mu.Await(
-        {+[](std::vector<std::unique_ptr<EventEngine::Endpoint>>* endpoints) {
-           return !endpoints->empty();
-         },
-         &endpoints});
-    LOG(INFO) << "Endpoint connected: "
-              << ResolvedAddressToNormalizedString(
-                     endpoints.front()->GetPeerAddress());
-  }
-  ASSERT_THAT(SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello"),
-              absl_testing::IsOk());
+  auto endpoint = AwaitEndpoint();
+  // Start read and write, cause the fork. Both operations should succeed
+  // post-fork.
+  FAIL() << "Implement this!";
   ee()->BeforeFork();
   ee()->AfterForkInParent();
-  ASSERT_THAT(
-      SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello again"),
-      absl_testing::IsOk());
-  listener_and_address->first.reset();
-  absl::Condition cond(&listener_done, &std::optional<absl::Status>::has_value);
-  {
-    absl::MutexLock lock(&mu);
-    mu.Await(cond);
-    EXPECT_TRUE(listener_done->ok()) << *listener_done;
-  }
+  // Read and Write operations work.
+  ASSERT_THAT(SendFromRawToEE(client.socket_fd(), *endpoint, "Hello again"),
+              absl_testing::IsOk());
 }
 
 TEST_F(PollerForkTest, ListenerInChild) {
-  absl::Mutex mu;
-  std::optional<absl::Status> listener_done;
-  std::vector<std::unique_ptr<EventEngine::Endpoint>> endpoints;
-  auto listener_and_address = SetupListener(
-      [&](auto endpoint, MemoryAllocator /* memory */) {
-        absl::MutexLock lock(&mu);
-        endpoints.emplace_back(std::move(endpoint));
-      },
-      [&](absl::Status status) {
-        absl::MutexLock lock(&mu);
-        listener_done.emplace(std::move(status));
-      });
-  ASSERT_THAT(listener_and_address, absl_testing::IsOk());
-  RawPosixClient client(listener_and_address->second);
+  // Connect before "fork"
+  RawPosixClient client(address_);
   ASSERT_THAT(client.status(), absl_testing::IsOk());
-  {
-    absl::MutexLock lock(&mu);
-    mu.Await(
-        {+[](std::vector<std::unique_ptr<EventEngine::Endpoint>>* endpoints) {
-           return !endpoints->empty();
-         },
-         &endpoints});
-    LOG(INFO) << "Endpoint connected: "
-              << ResolvedAddressToNormalizedString(
-                     endpoints.front()->GetPeerAddress());
-  }
-  ASSERT_THAT(SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello"),
-              absl_testing::IsOk());
+  auto endpoint = AwaitEndpoint();
   ee()->BeforeFork();
   ee()->AfterForkInChild();
-  auto failure =
-      SendFromRawToEE(client.socket_fd(), *endpoints.front(), "Hello again");
+  auto failure = SendFromRawToEE(client.socket_fd(), *endpoint, "Hello again");
   ASSERT_THAT(failure,
               absl_testing::StatusIs(absl::StatusCode::kResourceExhausted));
   ASSERT_THAT(failure.message(), ::testing::StartsWith("Handle was shut down"));
-  listener_and_address->first.reset();
-  absl::Condition cond(&listener_done, &std::optional<absl::Status>::has_value);
-  {
-    absl::MutexLock lock(&mu);
-    mu.Await(cond);
-    EXPECT_TRUE(listener_done->ok()) << *listener_done;
-  }
 }
 
-}  // namespace experimental
-}  // namespace grpc_event_engine
+}  // namespace grpc_event_engine::experimental
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
