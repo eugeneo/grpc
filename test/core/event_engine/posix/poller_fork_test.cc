@@ -41,7 +41,6 @@
 #include "absl/status/status_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
-#include "gmock/gmock.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
