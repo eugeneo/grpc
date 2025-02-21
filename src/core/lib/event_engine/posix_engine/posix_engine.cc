@@ -413,73 +413,59 @@ void PosixEventEngine::OnConnectFinishInternal(int connection_handle) {
   }
 }
 
-class PosixEventEngine::PollCycle {
- public:
-  explicit PollCycle(std::shared_ptr<PosixEnginePollerManager> poller_manager)
-      : poller_manager_(std::move(poller_manager)), is_scheduled_(1) {
-    poller_manager_->Executor()->Run([this]() { Op(); });
-  }
+PosixEventEngine::PollingCycle::PollingCycle(
+    std::shared_ptr<PosixEnginePollerManager> poller_manager)
+    : poller_manager_(std::move(poller_manager)), is_scheduled_(1) {
+  poller_manager_->Executor()->Run([this]() { PollerWorkInternal(); });
+}
 
-  ~PollCycle() {
-    auto poller = poller_manager_->Poller();
-    if (poller != nullptr) {
+PosixEventEngine::PollingCycle::~PollingCycle() {
+  auto poller = poller_manager_->Poller();
+  if (poller != nullptr) {
+    poller->Kick();
+  }
+  grpc_core::MutexLock lock(&mu_);
+  done_ = true;
+  while (is_scheduled_ > 0) {
+    cond_.Wait(&mu_);
+  }
+}
+
+void PosixEventEngine::PollingCycle::PollerWorkInternal() {
+  grpc_core::MutexLock lock(&mu_);
+  --is_scheduled_;
+  CHECK_EQ(is_scheduled_, 0);
+  bool again = false;
+  // TODO(vigneshbabu): The timeout specified here is arbitrary. For
+  // instance, this can be improved by setting the timeout to the next
+  // expiring timer.
+  PosixEventPoller* poller = poller_manager_->Poller();
+  auto result = poller->Work(24h, [&]() { again = true; });
+  if (result == Poller::WorkResult::kDeadlineExceeded) {
+    // The EventEngine is not shutting down but the next asynchronous
+    // PollerWorkInternal did not get scheduled. Schedule it now.
+    again = true;
+  } else if (result == Poller::WorkResult::kKicked &&
+             poller_manager_->IsShuttingDown()) {
+    // The Poller Got Kicked and poller_state_ is set to
+    // PollerState::kShuttingDown. This can currently happen only from the
+    // EventEngine destructor. Sample the use_count of poller_manager. If
+    // the sampled use_count is > 1, there is one more instance of Work(...)
+    // which hasn't returned yet. Send another Kick to be safe to ensure the
+    // pending instance of Work(..) also breaks out. Its possible that the
+    // other instance of Work(..) had already broken out before this Kick is
+    // sent. In that case, the Kick is spurious but it shouldn't cause any
+    // side effects.
+    if (poller_manager_.use_count() > 1) {
       poller->Kick();
     }
-    grpc_core::MutexLock lock(&mu_);
-    done_ = true;
-    while (is_scheduled_ > 0) {
-      cond_.Wait(&mu_);
-    }
   }
-
- private:
-  void Op() {
-    grpc_core::MutexLock lock(&mu_);
-    --is_scheduled_;
-    CHECK_EQ(is_scheduled_, 0);
-    bool again = PollerWorkInternal();
-    if (!done_ && again) {
-      poller_manager_->Executor()->Run([this]() { Op(); });
-      ++is_scheduled_;
-    }
-    cond_.SignalAll();
+  if (!done_ && again) {
+    poller_manager_->Executor()->Run([this]() { PollerWorkInternal(); });
+    ++is_scheduled_;
   }
-
-  bool PollerWorkInternal() ABSL_EXCLUSIVE_LOCKS_REQUIRED(&mu_) {
-    bool again = false;
-    // TODO(vigneshbabu): The timeout specified here is arbitrary. For
-    // instance, this can be improved by setting the timeout to the next
-    // expiring timer.
-    PosixEventPoller* poller = poller_manager_->Poller();
-    auto result = poller->Work(24h, [&]() { again = true; });
-    if (result == Poller::WorkResult::kDeadlineExceeded) {
-      // The EventEngine is not shutting down but the next asynchronous
-      // PollerWorkInternal did not get scheduled. Schedule it now.
-      again = true;
-    } else if (result == Poller::WorkResult::kKicked &&
-               poller_manager_->IsShuttingDown()) {
-      // The Poller Got Kicked and poller_state_ is set to
-      // PollerState::kShuttingDown. This can currently happen only from the
-      // EventEngine destructor. Sample the use_count of poller_manager. If
-      // the sampled use_count is > 1, there is one more instance of Work(...)
-      // which hasn't returned yet. Send another Kick to be safe to ensure the
-      // pending instance of Work(..) also breaks out. Its possible that the
-      // other instance of Work(..) had already broken out before this Kick is
-      // sent. In that case, the Kick is spurious but it shouldn't cause any
-      // side effects.
-      if (poller_manager_.use_count() > 1) {
-        poller->Kick();
-      }
-    }
-    return again;
-  }
-
-  std::shared_ptr<PosixEnginePollerManager> poller_manager_;
-  grpc_core::Mutex mu_;
-  bool done_ ABSL_GUARDED_BY(&mu_) = false;
-  int is_scheduled_ ABSL_GUARDED_BY(&mu_) = 0;
-  grpc_core::CondVar cond_;
-};
+  cond_.SignalAll();
+}
 
 PosixEnginePollerManager::PosixEnginePollerManager(
     std::shared_ptr<ThreadPool> executor)
@@ -553,8 +539,8 @@ void PosixEventEngine::SchedulePoller() {
 #ifdef GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   if (poller_manager_->Poller() != nullptr) {
     grpc_core::MutexLock lock(&poll_cycle_mu_);
-    CHECK_EQ(poll_cycle_.get(), nullptr) << "Already polling";
-    poll_cycle_ = std::make_unique<PollCycle>(poller_manager_);
+    CHECK(!polling_cycle_.has_value());
+    polling_cycle_.emplace(poller_manager_);
   }
 #endif
 }
@@ -596,7 +582,7 @@ PosixEventEngine::~PosixEventEngine() {
 #if GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   {
     grpc_core::MutexLock lock(&poll_cycle_mu_);
-    poll_cycle_.reset();
+    polling_cycle_.reset();
   }
   if (poller_manager_ != nullptr) {
     poller_manager_->TriggerShutdown();
@@ -886,7 +872,7 @@ void PosixEventEngine::BeforeFork() {
 #ifdef GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   {
     grpc_core::MutexLock lock(&poll_cycle_mu_);
-    poll_cycle_.reset();
+    polling_cycle_.reset();
   }
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
   executor_->PrepareFork();

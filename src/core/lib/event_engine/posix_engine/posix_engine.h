@@ -206,7 +206,24 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
                                            absl::AnyInvocable<void()> cb);
 
 #ifdef GRPC_POSIX_SOCKET_TCP
-  class PollCycle;
+  // RAII wrapper for a polling cycle. Starts a new one in ctor and stops
+  // in dtor.
+  class PollingCycle {
+   public:
+    explicit PollingCycle(
+        std::shared_ptr<PosixEnginePollerManager> poller_manager);
+    ~PollingCycle();
+
+   private:
+    void PollerWorkInternal();
+
+    std::shared_ptr<PosixEnginePollerManager> poller_manager_;
+    grpc_core::Mutex mu_;
+    bool done_ ABSL_GUARDED_BY(&mu_) = false;
+    int is_scheduled_ ABSL_GUARDED_BY(&mu_) = 0;
+    grpc_core::CondVar cond_;
+  };
+
   friend class AsyncConnect;
   struct ConnectionShard {
     grpc_core::Mutex mu;
@@ -236,7 +253,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 #ifdef GRPC_POSIX_SOCKET_TCP
   std::shared_ptr<PosixEnginePollerManager> poller_manager_;
   grpc_core::Mutex poll_cycle_mu_;
-  std::unique_ptr<PollCycle> poll_cycle_ ABSL_GUARDED_BY(&poll_cycle_mu_);
+  // Ensures there's ever only one of these.
+  std::optional<PollingCycle> polling_cycle_ ABSL_GUARDED_BY(&poll_cycle_mu_);
 #endif  // GRPC_POSIX_SOCKET_TCP
 };
 
