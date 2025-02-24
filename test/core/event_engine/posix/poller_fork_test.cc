@@ -45,7 +45,6 @@
 #include "absl/status/status.h"
 #include "absl/status/status_matchers.h"
 #include "absl/strings/str_cat.h"
-#include "absl/synchronization/mutex.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
@@ -61,13 +60,11 @@ thread_local bool is_in_scheduler = false;
 
 class StatusListener {
  public:
-  explicit StatusListener(absl::Mutex* mu) : mu_(mu) {}
-
   absl::Status AwaitStatus() {
-    absl::MutexLock lock(mu_);
-    mu_->Await(
-        {+[](decltype(statuses_)* statuses) { return !statuses->empty(); },
-         &statuses_});
+    grpc_core::MutexLock lock(&mu_);
+    while (statuses_.empty()) {
+      cond_.Wait(&mu_);
+    }
     absl::Status status = std::move(statuses_).back();
     statuses_.pop_back();
     for (const auto& s : statuses_) {
@@ -78,14 +75,16 @@ class StatusListener {
 
   absl::AnyInvocable<void(absl::Status)> Setter() {
     return [&](absl::Status status) {
-      absl::MutexLock lock(mu_);
+      grpc_core::MutexLock lock(&mu_);
       statuses_.emplace_back(std::move(status));
+      cond_.SignalAll();
     };
   }
 
  private:
-  absl::Mutex* mu_;
-  std::vector<absl::Status> statuses_ ABSL_GUARDED_BY(mu_);
+  grpc_core::Mutex mu_;
+  grpc_core::CondVar cond_;
+  std::vector<absl::Status> statuses_ ABSL_GUARDED_BY(&mu_);
 };
 
 class RawPosixClient {
@@ -174,8 +173,9 @@ class PollerForkTest : public ::testing::Test {
     // Setup listener and establish socket connection, confirm they work
     auto listener_and_address = SetupListener(
         [&](auto endpoint, MemoryAllocator /* memory */) {
-          absl::MutexLock lock(&mu_);
+          grpc_core::MutexLock lock(&mu_);
           endpoints_.emplace(std::move(endpoint));
+          cond_.SignalAll();
         },
         listener_done_.Setter());
     ASSERT_THAT(listener_and_address, absl_testing::IsOk());
@@ -190,7 +190,7 @@ class PollerForkTest : public ::testing::Test {
 
   void TearDown() override {
     {
-      absl::MutexLock lock(&mu_);
+      grpc_core::MutexLock lock(&mu_);
       EXPECT_THAT(endpoints_, ::testing::IsEmpty());
       endpoints_ = {};
     }
@@ -201,15 +201,15 @@ class PollerForkTest : public ::testing::Test {
   }
 
   std::unique_ptr<EventEngine::Endpoint> AwaitEndpoint() {
-    mu_.LockWhen(absl::Condition(
-        +[](decltype(endpoints_)* endpoints) { return !endpoints->empty(); },
-        &endpoints_));
+    grpc_core::MutexLock lock(&mu_);
+    while (endpoints_.empty()) {
+      cond_.Wait(&mu_);
+    }
     std::unique_ptr<EventEngine::Endpoint> endpoint =
         std::move(endpoints_.back());
     endpoints_.pop();
     LOG(INFO) << "Endpoint connected: "
               << ResolvedAddressToNormalizedString(endpoint->GetPeerAddress());
-    mu_.Unlock();
     return endpoint;
   }
 
@@ -252,9 +252,8 @@ class PollerForkTest : public ::testing::Test {
 
   absl::Status SendFromRawToEE(int socket_fd, EventEngine::Endpoint& endpoint,
                                absl::string_view data) {
-    absl::Mutex mu;
     SliceBuffer buffer;
-    StatusListener read_status(&mu);
+    StatusListener read_status;
     EventEngine::Endpoint::ReadArgs read_args = {
         static_cast<int64_t>(data.length())};
     if (endpoint.Read(read_status.Setter(), &buffer, &read_args)) {
@@ -286,8 +285,9 @@ class PollerForkTest : public ::testing::Test {
 
  protected:
   std::shared_ptr<EventEngine> ee_;
-  absl::Mutex mu_;
-  StatusListener listener_done_{&mu_};
+  grpc_core::Mutex mu_;
+  grpc_core::CondVar cond_;
+  StatusListener listener_done_;
   std::unique_ptr<EventEngine::Listener> listener_;
   std::queue<std::unique_ptr<EventEngine::Endpoint>> endpoints_
       ABSL_GUARDED_BY(&mu_);
@@ -303,8 +303,8 @@ TEST_F(PollerForkTest, ListenerInParent) {
   auto endpoint = AwaitEndpoint();
   // Start read and write, cause the fork. Both operations should succeed
   // post-fork.
-  StatusListener read_status(&mu_);
-  StatusListener write_status(&mu_);
+  StatusListener read_status;
+  StatusListener write_status;
   SliceBuffer read_buffer;
   SliceBuffer write_buffer;
   // 4M seems to be enough to fill the buffers on my Linux instance. May need to
@@ -342,8 +342,8 @@ TEST_F(PollerForkTest, ListenerInChild) {
   ASSERT_THAT(client.status(), absl_testing::IsOk());
   auto endpoint = AwaitEndpoint();
   // Start read and write
-  StatusListener read_status(&mu_);
-  StatusListener write_status(&mu_);
+  StatusListener read_status;
+  StatusListener write_status;
   SliceBuffer read_buffer;
   SliceBuffer write_buffer;
   // 4M seems to be enough to fill the buffers on my Linux instance. May need to
