@@ -293,7 +293,6 @@ grpc_cc_test(
     srcs = ["poller_fork_test.cc"],
     external_deps = [
         "absl/log:log",
-        "absl/status:status_matchers",
         "gtest",
     ],
     tags = [

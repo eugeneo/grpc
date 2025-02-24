@@ -41,8 +41,8 @@
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
-#include "absl/status/status_matchers.h"
 #include "absl/strings/str_cat.h"
+#include "gmock/gmock.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
@@ -53,6 +53,13 @@
 namespace grpc_event_engine::experimental {
 
 namespace {
+
+MATCHER(IsOk, "is ok") { return arg.ok(); }
+
+MATCHER_P(StatusIs, status, "") {
+  *result_listener << "where the status is " << status;
+  return arg.code() == status;
+}
 
 class StatusListener {
  public:
@@ -174,14 +181,14 @@ class PollerForkTest : public ::testing::Test {
           cond_.SignalAll();
         },
         listener_done_.Setter());
-    ASSERT_THAT(listener_and_address, absl_testing::IsOk());
+    ASSERT_THAT(listener_and_address, IsOk());
     address_ = listener_and_address->second;
     listener_ = std::move(listener_and_address->first);
     RawPosixClient client(listener_and_address->second);
-    ASSERT_THAT(client.status(), absl_testing::IsOk());
+    ASSERT_THAT(client.status(), IsOk());
     // Sanity check - confirm a read operation works
     ASSERT_THAT(SendFromRawToEE(client.socket_fd(), *AwaitEndpoint(), "Hello"),
-                absl_testing::IsOk());
+                IsOk());
   }
 
   void TearDown() override {
@@ -191,7 +198,7 @@ class PollerForkTest : public ::testing::Test {
       endpoints_ = {};
     }
     listener_.reset();
-    EXPECT_THAT(listener_done_.AwaitStatus(), ::absl_testing::IsOk());
+    EXPECT_THAT(listener_done_.AwaitStatus(), IsOk());
     grpc_core::WaitForSingleOwnerWithTimeout(std::move(ee_),
                                              grpc_core::Duration::Seconds(30));
   }
@@ -295,7 +302,7 @@ class PollerForkTest : public ::testing::Test {
 TEST_F(PollerForkTest, ListenerInParent) {
   // Connect before "fork"
   RawPosixClient client(address_);
-  ASSERT_THAT(client.status(), absl_testing::IsOk());
+  ASSERT_THAT(client.status(), IsOk());
   auto endpoint = AwaitEndpoint();
   // Start read and write, cause the fork. Both operations should succeed
   // post-fork.
@@ -314,28 +321,28 @@ TEST_F(PollerForkTest, ListenerInParent) {
   ee()->BeforeFork();
   ee()->AfterForkInParent();
   LOG(INFO) << "After fork in parent";
-  ASSERT_THAT(client.Read(write_buffer.Length()), absl_testing::IsOk());
-  ASSERT_THAT(client.Write("Hi!"), absl_testing::IsOk());
-  EXPECT_THAT(read_status.AwaitStatus(), absl_testing::IsOk());
-  EXPECT_THAT(write_status.AwaitStatus(), absl_testing::IsOk());
+  ASSERT_THAT(client.Read(write_buffer.Length()), IsOk());
+  ASSERT_THAT(client.Write("Hi!"), IsOk());
+  EXPECT_THAT(read_status.AwaitStatus(), IsOk());
+  EXPECT_THAT(write_status.AwaitStatus(), IsOk());
   // Starting read and write post-fork will fail asynchronously and return the
   // status.
   ASSERT_FALSE(endpoint->Read(read_status.Setter(), &read_buffer, nullptr));
-  ASSERT_THAT(client.Write("Hi again"), absl_testing::IsOk());
-  EXPECT_THAT(read_status.AwaitStatus(), absl_testing::IsOk());
+  ASSERT_THAT(client.Write("Hi again"), IsOk());
+  EXPECT_THAT(read_status.AwaitStatus(), IsOk());
   bool write_result =
       endpoint->Write(write_status.Setter(), &write_buffer, nullptr);
-  ASSERT_THAT(client.Read(write_buffer.Length()), absl_testing::IsOk());
+  ASSERT_THAT(client.Read(write_buffer.Length()), IsOk());
   if (!write_result) {
     EXPECT_THAT(write_status.AwaitStatus(),
-                absl_testing::StatusIs(absl::StatusCode::kInternal));
+                StatusIs(absl::StatusCode::kInternal));
   }
 }
 
 TEST_F(PollerForkTest, ListenerInChild) {
   // Connect before "fork"
   RawPosixClient client(address_);
-  ASSERT_THAT(client.status(), absl_testing::IsOk());
+  ASSERT_THAT(client.status(), IsOk());
   auto endpoint = AwaitEndpoint();
   // Start read and write
   StatusListener read_status;
@@ -354,17 +361,16 @@ TEST_F(PollerForkTest, ListenerInChild) {
   ee()->AfterForkInChild();
   LOG(INFO) << "After fork in child";
   EXPECT_THAT(read_status.AwaitStatus(),
-              absl_testing::StatusIs(absl::StatusCode::kResourceExhausted));
+              StatusIs(absl::StatusCode::kResourceExhausted));
   EXPECT_THAT(write_status.AwaitStatus(),
-              absl_testing::StatusIs(absl::StatusCode::kResourceExhausted));
+              StatusIs(absl::StatusCode::kResourceExhausted));
   // Starting read and write post-fork will fail asynchronously and return the
   // status.
   ASSERT_FALSE(endpoint->Read(read_status.Setter(), &read_buffer, nullptr));
   ASSERT_FALSE(endpoint->Write(write_status.Setter(), &write_buffer, nullptr));
-  EXPECT_THAT(read_status.AwaitStatus(),
-              absl_testing::StatusIs(absl::StatusCode::kInternal));
+  EXPECT_THAT(read_status.AwaitStatus(), StatusIs(absl::StatusCode::kInternal));
   EXPECT_THAT(write_status.AwaitStatus(),
-              absl_testing::StatusIs(absl::StatusCode::kInternal));
+              StatusIs(absl::StatusCode::kInternal));
 }
 
 }  // namespace grpc_event_engine::experimental
