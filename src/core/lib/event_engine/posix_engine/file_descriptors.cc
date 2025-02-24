@@ -1095,6 +1095,7 @@ PosixResult FileDescriptors::PosixResultWrap(
 IF_POSIX_SOCKET(void FileDescriptors::AdvanceGeneration(), {
   for (int fd : descriptors_.AdvanceGeneration()) {
     if (fd > 0) {
+      LOG(INFO) << "Closing FD " << fd;
       close(fd);
     }
   }
