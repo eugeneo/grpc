@@ -22350,7 +22350,6 @@ if(_gRPC_PLATFORM_LINUX OR _gRPC_PLATFORM_MAC OR _gRPC_PLATFORM_POSIX)
   target_link_libraries(poller_fork_test
     ${_gRPC_ALLTARGETS_LIBRARIES}
     gtest
-    absl::status_matchers
     grpc++
     grpc_test_util
   )
