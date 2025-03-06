@@ -3098,7 +3098,7 @@ add_library(grpc_test_util
   test/core/event_engine/test_init.cc
   test/core/test_util/build.cc
   test/core/test_util/port.cc
-  test/core/test_util/port_isolated_runtime_environment.cc
+  test/core/test_util/port_ci.cc
   test/core/test_util/port_server_client.cc
   test/core/test_util/reconnect_server.cc
   test/core/test_util/stack_tracer.cc
@@ -3165,7 +3165,7 @@ add_library(grpc_test_util_unsecure
   test/core/event_engine/test_init.cc
   test/core/test_util/build.cc
   test/core/test_util/port.cc
-  test/core/test_util/port_isolated_runtime_environment.cc
+  test/core/test_util/port_ci.cc
   test/core/test_util/port_server_client.cc
   test/core/test_util/reconnect_server.cc
   test/core/test_util/stack_tracer.cc
@@ -3562,6 +3562,7 @@ add_library(grpc_unsecure
   src/core/load_balancing/outlier_detection/outlier_detection.cc
   src/core/load_balancing/pick_first/pick_first.cc
   src/core/load_balancing/priority/priority.cc
+  src/core/load_balancing/ring_hash/ring_hash.cc
   src/core/load_balancing/rls/rls.cc
   src/core/load_balancing/round_robin/round_robin.cc
   src/core/load_balancing/weighted_round_robin/static_stride_scheduler.cc

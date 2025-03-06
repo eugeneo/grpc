@@ -38,11 +38,6 @@ const char* const additional_constraints_callv3_client_auth_filter = "{}";
 const char* const description_chaotic_good_framing_layer =
     "Enable the chaotic good framing layer.";
 const char* const additional_constraints_chaotic_good_framing_layer = "{}";
-const char* const description_disable_buffer_hint_on_high_memory_pressure =
-    "Disable buffer hint flag parsing in the transport under high memory "
-    "pressure.";
-const char* const
-    additional_constraints_disable_buffer_hint_on_high_memory_pressure = "{}";
 const char* const description_event_engine_client =
     "Use EventEngine clients instead of iomgr's grpc_tcp_client";
 const char* const additional_constraints_event_engine_client = "{}";
@@ -113,6 +108,10 @@ const char* const description_rq_fast_reject =
     "Resource quota rejects requests immediately (before allocating the "
     "request structure) under very high memory pressure.";
 const char* const additional_constraints_rq_fast_reject = "{}";
+const char* const description_rst_stream_fix =
+    "Fix for RST_STREAM - do not send for idle streams "
+    "(https://github.com/grpc/grpc/issues/38758)";
+const char* const additional_constraints_rst_stream_fix = "{}";
 const char* const description_schedule_cancellation_over_write =
     "Allow cancellation op to be scheduled over a write";
 const char* const additional_constraints_schedule_cancellation_over_write =
@@ -149,10 +148,6 @@ const ExperimentMetadata g_experiment_metadata[] = {
     {"chaotic_good_framing_layer", description_chaotic_good_framing_layer,
      additional_constraints_chaotic_good_framing_layer, nullptr, 0, false,
      true},
-    {"disable_buffer_hint_on_high_memory_pressure",
-     description_disable_buffer_hint_on_high_memory_pressure,
-     additional_constraints_disable_buffer_hint_on_high_memory_pressure,
-     nullptr, 0, false, true},
     {"event_engine_client", description_event_engine_client,
      additional_constraints_event_engine_client, nullptr, 0, false, false},
     {"event_engine_dns", description_event_engine_dns,
@@ -199,6 +194,8 @@ const ExperimentMetadata g_experiment_metadata[] = {
      additional_constraints_retry_in_callv3, nullptr, 0, false, true},
     {"rq_fast_reject", description_rq_fast_reject,
      additional_constraints_rq_fast_reject, nullptr, 0, false, true},
+    {"rst_stream_fix", description_rst_stream_fix,
+     additional_constraints_rst_stream_fix, nullptr, 0, true, true},
     {"schedule_cancellation_over_write",
      description_schedule_cancellation_over_write,
      additional_constraints_schedule_cancellation_over_write, nullptr, 0, false,
@@ -234,11 +231,6 @@ const char* const additional_constraints_callv3_client_auth_filter = "{}";
 const char* const description_chaotic_good_framing_layer =
     "Enable the chaotic good framing layer.";
 const char* const additional_constraints_chaotic_good_framing_layer = "{}";
-const char* const description_disable_buffer_hint_on_high_memory_pressure =
-    "Disable buffer hint flag parsing in the transport under high memory "
-    "pressure.";
-const char* const
-    additional_constraints_disable_buffer_hint_on_high_memory_pressure = "{}";
 const char* const description_event_engine_client =
     "Use EventEngine clients instead of iomgr's grpc_tcp_client";
 const char* const additional_constraints_event_engine_client = "{}";
@@ -309,6 +301,10 @@ const char* const description_rq_fast_reject =
     "Resource quota rejects requests immediately (before allocating the "
     "request structure) under very high memory pressure.";
 const char* const additional_constraints_rq_fast_reject = "{}";
+const char* const description_rst_stream_fix =
+    "Fix for RST_STREAM - do not send for idle streams "
+    "(https://github.com/grpc/grpc/issues/38758)";
+const char* const additional_constraints_rst_stream_fix = "{}";
 const char* const description_schedule_cancellation_over_write =
     "Allow cancellation op to be scheduled over a write";
 const char* const additional_constraints_schedule_cancellation_over_write =
@@ -345,10 +341,6 @@ const ExperimentMetadata g_experiment_metadata[] = {
     {"chaotic_good_framing_layer", description_chaotic_good_framing_layer,
      additional_constraints_chaotic_good_framing_layer, nullptr, 0, false,
      true},
-    {"disable_buffer_hint_on_high_memory_pressure",
-     description_disable_buffer_hint_on_high_memory_pressure,
-     additional_constraints_disable_buffer_hint_on_high_memory_pressure,
-     nullptr, 0, false, true},
     {"event_engine_client", description_event_engine_client,
      additional_constraints_event_engine_client, nullptr, 0, true, false},
     {"event_engine_dns", description_event_engine_dns,
@@ -395,6 +387,8 @@ const ExperimentMetadata g_experiment_metadata[] = {
      additional_constraints_retry_in_callv3, nullptr, 0, false, true},
     {"rq_fast_reject", description_rq_fast_reject,
      additional_constraints_rq_fast_reject, nullptr, 0, false, true},
+    {"rst_stream_fix", description_rst_stream_fix,
+     additional_constraints_rst_stream_fix, nullptr, 0, true, true},
     {"schedule_cancellation_over_write",
      description_schedule_cancellation_over_write,
      additional_constraints_schedule_cancellation_over_write, nullptr, 0, false,
@@ -430,11 +424,6 @@ const char* const additional_constraints_callv3_client_auth_filter = "{}";
 const char* const description_chaotic_good_framing_layer =
     "Enable the chaotic good framing layer.";
 const char* const additional_constraints_chaotic_good_framing_layer = "{}";
-const char* const description_disable_buffer_hint_on_high_memory_pressure =
-    "Disable buffer hint flag parsing in the transport under high memory "
-    "pressure.";
-const char* const
-    additional_constraints_disable_buffer_hint_on_high_memory_pressure = "{}";
 const char* const description_event_engine_client =
     "Use EventEngine clients instead of iomgr's grpc_tcp_client";
 const char* const additional_constraints_event_engine_client = "{}";
@@ -505,6 +494,10 @@ const char* const description_rq_fast_reject =
     "Resource quota rejects requests immediately (before allocating the "
     "request structure) under very high memory pressure.";
 const char* const additional_constraints_rq_fast_reject = "{}";
+const char* const description_rst_stream_fix =
+    "Fix for RST_STREAM - do not send for idle streams "
+    "(https://github.com/grpc/grpc/issues/38758)";
+const char* const additional_constraints_rst_stream_fix = "{}";
 const char* const description_schedule_cancellation_over_write =
     "Allow cancellation op to be scheduled over a write";
 const char* const additional_constraints_schedule_cancellation_over_write =
@@ -541,10 +534,6 @@ const ExperimentMetadata g_experiment_metadata[] = {
     {"chaotic_good_framing_layer", description_chaotic_good_framing_layer,
      additional_constraints_chaotic_good_framing_layer, nullptr, 0, false,
      true},
-    {"disable_buffer_hint_on_high_memory_pressure",
-     description_disable_buffer_hint_on_high_memory_pressure,
-     additional_constraints_disable_buffer_hint_on_high_memory_pressure,
-     nullptr, 0, false, true},
     {"event_engine_client", description_event_engine_client,
      additional_constraints_event_engine_client, nullptr, 0, true, false},
     {"event_engine_dns", description_event_engine_dns,
@@ -591,6 +580,8 @@ const ExperimentMetadata g_experiment_metadata[] = {
      additional_constraints_retry_in_callv3, nullptr, 0, false, true},
     {"rq_fast_reject", description_rq_fast_reject,
      additional_constraints_rq_fast_reject, nullptr, 0, false, true},
+    {"rst_stream_fix", description_rst_stream_fix,
+     additional_constraints_rst_stream_fix, nullptr, 0, true, true},
     {"schedule_cancellation_over_write",
      description_schedule_cancellation_over_write,
      additional_constraints_schedule_cancellation_over_write, nullptr, 0, false,
