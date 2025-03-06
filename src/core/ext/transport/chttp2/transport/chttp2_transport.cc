@@ -2322,7 +2322,7 @@ void grpc_chttp2_cancel_stream(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
               return;
             }
             grpc_chttp2_add_rst_stream_to_next_write(
-                t, s->id, static_cast<uint32_t>(http_error), nullptr);
+                t, id, static_cast<uint32_t>(http_error), nullptr);
             grpc_chttp2_initiate_write(t,
                                        GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM);
           });
