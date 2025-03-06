@@ -42,13 +42,19 @@
 # state of each experiment.
 - name: backoff_cap_initial_at_max
   description: Backoff library applies max_backoff even on initial_backoff.
-  expiry: 2025/03/01
+  expiry: 2025/05/01
   owner: roth@google.com
   test_tags: []
 - name: call_tracer_in_transport
   description: Transport directly passes byte counts to CallTracer.
   expiry: 2025/06/01
   owner: roth@google.com
+  test_tags: []
+  allow_in_fuzzing_config: false
+- name: call_tracer_transport_fix
+  description: Use the correct call tracer in transport
+  expiry: 2025/06/01
+  owner: yashkt@google.com
   test_tags: []
 - name: callv3_client_auth_filter
   description: Use the CallV3 client auth filter.
@@ -135,14 +141,14 @@
   test_tags: [flow_control_test]
 - name: pick_first_new
   description: New pick_first impl with memory reduction.
-  expiry: 2025/03/01
+  expiry: 2025/05/01
   owner: roth@google.com
   test_tags: ["lb_unit_test", "cpp_lb_end2end_test", "xds_end2end_test"]
 - name: posix_ee_skip_grpc_init
   description:
     Prevent the PosixEventEngine from calling grpc_init & grpc_shutdown on
     creation and destruction.
-  expiry: 2025/03/02
+  expiry: 2025/06/01
   owner: hork@google.com
   test_tags: ["core_end2end_test", "cpp_end2end_test"]
 - name: promise_based_http2_client_transport

@@ -624,6 +624,7 @@ grpc_cc_library(
     external_deps = [
         "absl/log:check",
         "absl/strings:str_format",
+        "absl/strings",
     ],
     public_hdrs = [
         "lib/promise/poll.h",
@@ -1466,7 +1467,7 @@ grpc_cc_library(
 grpc_cc_library(
     name = "channel_creds_registry",
     hdrs = [
-        "lib/security/credentials/channel_creds_registry.h",
+        "credentials/transport/channel_creds_registry.h",
     ],
     external_deps = ["absl/strings"],
     deps = [
@@ -1857,22 +1858,6 @@ grpc_cc_library(
 )
 
 grpc_cc_library(
-    name = "forkable",
-    srcs = [
-        "lib/event_engine/forkable.cc",
-    ],
-    hdrs = [
-        "lib/event_engine/forkable.h",
-    ],
-    external_deps = ["absl/log:check"],
-    deps = [
-        "//:config_vars",
-        "//:gpr_platform",
-        "//:grpc_trace",
-    ],
-)
-
-grpc_cc_library(
     name = "event_engine_poller",
     hdrs = [
         "lib/event_engine/poller.h",
@@ -2024,7 +2009,6 @@ grpc_cc_library(
         "event_engine_thread_local",
         "event_engine_work_queue",
         "examine_stack",
-        "forkable",
         "no_destruct",
         "notification",
         "sync",
@@ -2064,7 +2048,6 @@ grpc_cc_library(
     ],
     deps = [
         "event_engine_thread_pool",
-        "forkable",
         "notification",
         "posix_event_engine_timer",
         "sync",
@@ -2072,6 +2055,37 @@ grpc_cc_library(
         "//:event_engine_base_hdrs",
         "//:gpr",
         "//:grpc_trace",
+    ],
+)
+
+grpc_cc_library(
+    name = "posix_event_engine_file_descriptors",
+    srcs = [
+        "lib/event_engine/posix_engine/file_descriptor_collection.cc",
+        "lib/event_engine/posix_engine/file_descriptors.cc",
+    ],
+    hdrs = [
+        "lib/event_engine/posix_engine/file_descriptor_collection.h",
+        "lib/event_engine/posix_engine/file_descriptors.h",
+    ],
+    external_deps = [
+        "absl/cleanup",
+        "absl/log:check",
+        "absl/log:log",
+        "absl/status",
+        "absl/strings",
+        "absl/strings:str_format",
+    ],
+    deps = [
+        "event_engine_tcp_socket_utils",
+        "iomgr_port",
+        "posix_event_engine_tcp_socket_utils",
+        "status_helper",
+        "strerror",
+        "sync",
+        "//:event_engine_base_hdrs",
+        "//:gpr",
+        "//:gpr_platform",
     ],
 )
 
@@ -2088,8 +2102,8 @@ grpc_cc_library(
     ],
     deps = [
         "event_engine_poller",
-        "forkable",
         "posix_event_engine_closure",
+        "posix_event_engine_file_descriptors",
         "//:event_engine_base_hdrs",
         "//:gpr_platform",
     ],
@@ -2138,7 +2152,10 @@ grpc_cc_library(
         "lib/event_engine/posix_engine/wakeup_fd_posix.h",
     ],
     external_deps = ["absl/status"],
-    deps = ["//:gpr_platform"],
+    deps = [
+        "posix_event_engine_file_descriptors",
+        "//:gpr_platform",
+    ],
 )
 
 grpc_cc_library(
@@ -2156,6 +2173,7 @@ grpc_cc_library(
     ],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "strerror",
         "//:gpr",
@@ -2177,6 +2195,7 @@ grpc_cc_library(
     ],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "strerror",
         "//:gpr",
@@ -2197,6 +2216,7 @@ grpc_cc_library(
     ],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "posix_event_engine_wakeup_fd_posix_eventfd",
         "posix_event_engine_wakeup_fd_posix_pipe",
@@ -2229,6 +2249,7 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "posix_event_engine_lockfree_event",
         "posix_event_engine_wakeup_fd_posix",
@@ -2252,6 +2273,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/base:core_headers",
+        "absl/cleanup",
         "absl/container:inlined_vector",
         "absl/functional:any_invocable",
         "absl/functional:function_ref",
@@ -2268,6 +2290,7 @@ grpc_cc_library(
         "iomgr_port",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_wakeup_fd_posix",
         "posix_event_engine_wakeup_fd_posix_default",
         "status_helper",
@@ -2290,7 +2313,6 @@ grpc_cc_library(
     ],
     external_deps = ["absl/strings"],
     deps = [
-        "forkable",
         "iomgr_port",
         "no_destruct",
         "posix_event_engine_event_poller",
@@ -2312,6 +2334,7 @@ grpc_cc_library(
     external_deps = ["absl/log"],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "strerror",
         "//:gpr",
     ],
@@ -2332,6 +2355,7 @@ grpc_cc_library(
     ],
     deps = [
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "sync",
         "//:gpr",
@@ -2368,6 +2392,7 @@ grpc_cc_library(
         "posix_event_engine_base_hdrs",
         "posix_event_engine_closure",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_internal_errqueue",
         "posix_event_engine_tcp_socket_utils",
         "posix_event_engine_traced_buffer_list",
@@ -2456,6 +2481,7 @@ grpc_cc_library(
     deps = [
         "event_engine_tcp_socket_utils",
         "iomgr_port",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_tcp_socket_utils",
         "socket_mutator",
         "status_helper",
@@ -2488,6 +2514,7 @@ grpc_cc_library(
         "posix_event_engine_closure",
         "posix_event_engine_endpoint",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_listener_utils",
         "posix_event_engine_tcp_socket_utils",
         "socket_mutator",
@@ -2526,7 +2553,6 @@ grpc_cc_library(
         "event_engine_thread_pool",
         "event_engine_utils",
         "experiments",
-        "forkable",
         "init_internally",
         "iomgr_port",
         "native_posix_dns_resolver",
@@ -2535,6 +2561,7 @@ grpc_cc_library(
         "posix_event_engine_closure",
         "posix_event_engine_endpoint",
         "posix_event_engine_event_poller",
+        "posix_event_engine_file_descriptors",
         "posix_event_engine_listener",
         "posix_event_engine_poller_posix_default",
         "posix_event_engine_tcp_socket_utils",
@@ -3926,7 +3953,7 @@ grpc_cc_library(
 grpc_cc_library(
     name = "certificate_provider_factory",
     hdrs = [
-        "lib/security/certificate_provider/certificate_provider_factory.h",
+        "credentials/transport/tls/certificate_provider_factory.h",
     ],
     external_deps = ["absl/strings"],
     deps = [
@@ -3944,10 +3971,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "certificate_provider_registry",
     srcs = [
-        "lib/security/certificate_provider/certificate_provider_registry.cc",
+        "credentials/transport/tls/certificate_provider_registry.cc",
     ],
     hdrs = [
-        "lib/security/certificate_provider/certificate_provider_registry.h",
+        "credentials/transport/tls/certificate_provider_registry.h",
     ],
     external_deps = [
         "absl/log",
@@ -4033,10 +4060,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_crl_provider",
     srcs = [
-        "lib/security/credentials/tls/grpc_tls_crl_provider.cc",
+        "credentials/transport/tls/grpc_tls_crl_provider.cc",
     ],
     hdrs = [
-        "lib/security/credentials/tls/grpc_tls_crl_provider.h",
+        "credentials/transport/tls/grpc_tls_crl_provider.h",
     ],
     external_deps = [
         "absl/base:core_headers",
@@ -4065,12 +4092,12 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_fake_credentials",
     srcs = [
-        "lib/security/credentials/fake/fake_credentials.cc",
-        "lib/security/security_connector/fake/fake_security_connector.cc",
+        "credentials/transport/fake/fake_credentials.cc",
+        "credentials/transport/fake/fake_security_connector.cc",
     ],
     hdrs = [
-        "lib/security/credentials/fake/fake_credentials.h",
-        "lib/security/security_connector/fake/fake_security_connector.h",
+        "credentials/transport/fake/fake_credentials.h",
+        "credentials/transport/fake/fake_security_connector.h",
         "load_balancing/grpclb/grpclb.h",
     ],
     external_deps = [
@@ -4110,12 +4137,12 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_insecure_credentials",
     srcs = [
-        "lib/security/credentials/insecure/insecure_credentials.cc",
-        "lib/security/security_connector/insecure/insecure_security_connector.cc",
+        "credentials/transport/insecure/insecure_credentials.cc",
+        "credentials/transport/insecure/insecure_security_connector.cc",
     ],
     hdrs = [
-        "lib/security/credentials/insecure/insecure_credentials.h",
-        "lib/security/security_connector/insecure/insecure_security_connector.h",
+        "credentials/transport/insecure/insecure_credentials.h",
+        "credentials/transport/insecure/insecure_security_connector.h",
     ],
     external_deps = [
         "absl/log:check",
@@ -4164,12 +4191,12 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_local_credentials",
     srcs = [
-        "lib/security/credentials/local/local_credentials.cc",
-        "lib/security/security_connector/local/local_security_connector.cc",
+        "credentials/transport/local/local_credentials.cc",
+        "credentials/transport/local/local_security_connector.cc",
     ],
     hdrs = [
-        "lib/security/credentials/local/local_credentials.h",
-        "lib/security/security_connector/local/local_security_connector.h",
+        "credentials/transport/local/local_credentials.h",
+        "credentials/transport/local/local_security_connector.h",
     ],
     external_deps = [
         "absl/log",
@@ -4211,12 +4238,12 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_ssl_credentials",
     srcs = [
-        "lib/security/credentials/ssl/ssl_credentials.cc",
-        "lib/security/security_connector/ssl/ssl_security_connector.cc",
+        "credentials/transport/ssl/ssl_credentials.cc",
+        "credentials/transport/ssl/ssl_security_connector.cc",
     ],
     hdrs = [
-        "lib/security/credentials/ssl/ssl_credentials.h",
-        "lib/security/security_connector/ssl/ssl_security_connector.h",
+        "credentials/transport/ssl/ssl_credentials.h",
+        "credentials/transport/ssl/ssl_security_connector.h",
     ],
     external_deps = [
         "absl/log",
@@ -4255,11 +4282,11 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_google_default_credentials",
     srcs = [
-        "lib/security/credentials/google_default/credentials_generic.cc",
-        "lib/security/credentials/google_default/google_default_credentials.cc",
+        "credentials/transport/google_default/credentials_generic.cc",
+        "credentials/transport/google_default/google_default_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/google_default/google_default_credentials.h",
+        "credentials/transport/google_default/google_default_credentials.h",
         "load_balancing/grpclb/grpclb.h",
     ],
     external_deps = [
@@ -4324,21 +4351,21 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_tls_credentials",
     srcs = [
-        "lib/security/credentials/tls/grpc_tls_certificate_distributor.cc",
-        "lib/security/credentials/tls/grpc_tls_certificate_match.cc",
-        "lib/security/credentials/tls/grpc_tls_certificate_provider.cc",
-        "lib/security/credentials/tls/grpc_tls_certificate_verifier.cc",
-        "lib/security/credentials/tls/grpc_tls_credentials_options.cc",
-        "lib/security/credentials/tls/tls_credentials.cc",
-        "lib/security/security_connector/tls/tls_security_connector.cc",
+        "credentials/transport/tls/grpc_tls_certificate_distributor.cc",
+        "credentials/transport/tls/grpc_tls_certificate_match.cc",
+        "credentials/transport/tls/grpc_tls_certificate_provider.cc",
+        "credentials/transport/tls/grpc_tls_certificate_verifier.cc",
+        "credentials/transport/tls/grpc_tls_credentials_options.cc",
+        "credentials/transport/tls/tls_credentials.cc",
+        "credentials/transport/tls/tls_security_connector.cc",
     ],
     hdrs = [
-        "lib/security/credentials/tls/grpc_tls_certificate_distributor.h",
-        "lib/security/credentials/tls/grpc_tls_certificate_provider.h",
-        "lib/security/credentials/tls/grpc_tls_certificate_verifier.h",
-        "lib/security/credentials/tls/grpc_tls_credentials_options.h",
-        "lib/security/credentials/tls/tls_credentials.h",
-        "lib/security/security_connector/tls/tls_security_connector.h",
+        "credentials/transport/tls/grpc_tls_certificate_distributor.h",
+        "credentials/transport/tls/grpc_tls_certificate_provider.h",
+        "credentials/transport/tls/grpc_tls_certificate_verifier.h",
+        "credentials/transport/tls/grpc_tls_credentials_options.h",
+        "credentials/transport/tls/tls_credentials.h",
+        "credentials/transport/tls/tls_security_connector.h",
     ],
     external_deps = [
         "absl/base:core_headers",
@@ -4389,10 +4416,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_iam_credentials",
     srcs = [
-        "lib/security/credentials/iam/iam_credentials.cc",
+        "credentials/call/iam/iam_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/iam/iam_credentials.h",
+        "credentials/call/iam/iam_credentials.h",
     ],
     external_deps = [
         "absl/log:check",
@@ -4420,10 +4447,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "token_fetcher_credentials",
     srcs = [
-        "lib/security/credentials/token_fetcher/token_fetcher_credentials.cc",
+        "credentials/call/token_fetcher/token_fetcher_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/token_fetcher/token_fetcher_credentials.h",
+        "credentials/call/token_fetcher/token_fetcher_credentials.h",
     ],
     external_deps = [
         "absl/container:flat_hash_set",
@@ -4455,10 +4482,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "gcp_service_account_identity_credentials",
     srcs = [
-        "lib/security/credentials/gcp_service_account_identity/gcp_service_account_identity_credentials.cc",
+        "credentials/call/gcp_service_account_identity/gcp_service_account_identity_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/gcp_service_account_identity/gcp_service_account_identity_credentials.h",
+        "credentials/call/gcp_service_account_identity/gcp_service_account_identity_credentials.h",
     ],
     external_deps = [
         "absl/functional:any_invocable",
@@ -4495,10 +4522,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_oauth2_credentials",
     srcs = [
-        "lib/security/credentials/oauth2/oauth2_credentials.cc",
+        "credentials/call/oauth2/oauth2_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/oauth2/oauth2_credentials.h",
+        "credentials/call/oauth2/oauth2_credentials.h",
     ],
     external_deps = [
         "absl/log",
@@ -4548,18 +4575,18 @@ grpc_cc_library(
 grpc_cc_library(
     name = "grpc_external_account_credentials",
     srcs = [
-        "lib/security/credentials/external/aws_external_account_credentials.cc",
-        "lib/security/credentials/external/aws_request_signer.cc",
-        "lib/security/credentials/external/external_account_credentials.cc",
-        "lib/security/credentials/external/file_external_account_credentials.cc",
-        "lib/security/credentials/external/url_external_account_credentials.cc",
+        "credentials/call/external/aws_external_account_credentials.cc",
+        "credentials/call/external/aws_request_signer.cc",
+        "credentials/call/external/external_account_credentials.cc",
+        "credentials/call/external/file_external_account_credentials.cc",
+        "credentials/call/external/url_external_account_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/external/aws_external_account_credentials.h",
-        "lib/security/credentials/external/aws_request_signer.h",
-        "lib/security/credentials/external/external_account_credentials.h",
-        "lib/security/credentials/external/file_external_account_credentials.h",
-        "lib/security/credentials/external/url_external_account_credentials.h",
+        "credentials/call/external/aws_external_account_credentials.h",
+        "credentials/call/external/aws_request_signer.h",
+        "credentials/call/external/external_account_credentials.h",
+        "credentials/call/external/file_external_account_credentials.h",
+        "credentials/call/external/url_external_account_credentials.h",
     ],
     external_deps = [
         "absl/log",
@@ -5396,10 +5423,10 @@ grpc_cc_library(
 grpc_cc_library(
     name = "xds_credentials",
     srcs = [
-        "lib/security/credentials/xds/xds_credentials.cc",
+        "credentials/transport/xds/xds_credentials.cc",
     ],
     hdrs = [
-        "lib/security/credentials/xds/xds_credentials.h",
+        "credentials/transport/xds/xds_credentials.h",
     ],
     external_deps = [
         "absl/status",
@@ -5573,6 +5600,7 @@ grpc_cc_library(
         "xds/grpc/xds_server_grpc_interface.h",
     ],
     tags = ["nofixdeps"],
+    visibility = ["@grpc:xds_client_core"],
     deps = [
         "channel_creds_registry",
         "//:ref_counted_ptr",
@@ -5941,6 +5969,7 @@ grpc_cc_library(
         "absl/strings",
     ],
     tags = ["nofixdeps"],
+    visibility = ["@grpc:xds_client_core"],
     deps = [
         "channel_args",
         "channel_creds_registry",
@@ -6065,7 +6094,7 @@ grpc_cc_library(
 grpc_cc_library(
     name = "channel_creds_registry_init",
     srcs = [
-        "lib/security/credentials/channel_creds_registry_init.cc",
+        "credentials/transport/channel_creds_registry_init.cc",
     ],
     external_deps = ["absl/strings"],
     deps = [
@@ -6901,6 +6930,9 @@ grpc_cc_library(
         "opencensus-stats",
         "opencensus-tags",
     ],
+    tags = [
+        "grpc:broken-internally",
+    ],
     deps = [
         "arena_promise",
         "call_finalization",
@@ -7472,6 +7504,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/functional:function_ref",
+        "absl/log",
         "absl/strings",
     ],
     deps = [
@@ -7490,11 +7523,37 @@ grpc_cc_library(
     hdrs = [
         "ext/transport/chttp2/transport/http2_client_transport.h",
     ],
+    external_deps = [
+        "absl/container:flat_hash_map",
+        "absl/log",
+        "absl/log:check",
+        "absl/status",
+        "absl/status:statusor",
+    ],
     deps = [
+        "1999",
+        "arena",
+        "call_spine",
+        "channel_args",
         "grpc_promise_endpoint",
+        "http2_settings",
+        "loop",
+        "map",
+        "mpsc",
+        "sync",
+        ":match_promise",
+        ":poll",
+        ":slice",
+        ":slice_buffer",
+        ":try_seq",
+        "//:chttp2_frame",
+        "//:gpr_platform",
         "//:grpc_base",
+        "//:grpc_trace",
         "//:hpack_encoder",
         "//:hpack_parser",
+        "//:promise",
+        "//:ref_counted_ptr",
     ],
 )
 
@@ -7505,6 +7564,10 @@ grpc_cc_library(
     ],
     hdrs = [
         "ext/transport/chttp2/transport/http2_server_transport.h",
+    ],
+    external_deps = [
+        "absl/log",
+        "absl/log:check",
     ],
     deps = [
         "grpc_promise_endpoint",
@@ -8676,6 +8739,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/base:core_headers",
+        "absl/log",
         "absl/log:check",
         "absl/status",
         "absl/status:statusor",
@@ -8785,8 +8849,10 @@ grpc_cc_library(
     ],
     deps = [
         "call_filters",
+        "call_final_info",
         "metadata",
         "type_list",
+        "//:grpc_public_hdrs",
     ],
 )
 
@@ -8885,6 +8951,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/functional:any_invocable",
+        "absl/log",
         "absl/log:check",
     ],
     deps = [
@@ -8942,6 +9009,7 @@ grpc_cc_library(
         "absl/container:flat_hash_set",
         "absl/container:inlined_vector",
         "absl/functional:function_ref",
+        "absl/log",
         "absl/log:check",
         "absl/meta:type_traits",
         "absl/strings",

@@ -60,6 +60,7 @@
 #include "src/core/client_channel/subchannel.h"
 #include "src/core/client_channel/subchannel_interface_internal.h"
 #include "src/core/config/core_configuration.h"
+#include "src/core/credentials/transport/transport_credentials.h"
 #include "src/core/handshaker/proxy_mapper_registry.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/channel/channel_args.h"
@@ -79,7 +80,6 @@
 #include "src/core/lib/promise/poll.h"
 #include "src/core/lib/promise/promise.h"
 #include "src/core/lib/promise/try_seq.h"
-#include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/surface/call.h"
@@ -2379,12 +2379,14 @@ class ClientChannelFilter::LoadBalancedCall::BackendMetricAccessor final
 
 namespace {
 
-void CreateCallAttemptTracer(Arena* arena, bool is_transparent_retry) {
+ClientCallTracer::CallAttemptTracer* CreateCallAttemptTracer(
+    Arena* arena, bool is_transparent_retry) {
   auto* call_tracer = DownCast<ClientCallTracer*>(
       arena->GetContext<CallTracerAnnotationInterface>());
-  if (call_tracer == nullptr) return;
+  if (call_tracer == nullptr) return nullptr;
   auto* tracer = call_tracer->StartNewAttempt(is_transparent_retry);
   arena->SetContext<CallTracerInterface>(tracer);
+  return tracer;
 }
 
 }  // namespace
@@ -2396,9 +2398,10 @@ ClientChannelFilter::LoadBalancedCall::LoadBalancedCall(
                                ? "LoadBalancedCall"
                                : nullptr),
       chand_(chand),
+      call_attempt_tracer_(
+          CreateCallAttemptTracer(arena, is_transparent_retry)),
       on_commit_(std::move(on_commit)),
       arena_(arena) {
-  CreateCallAttemptTracer(arena, is_transparent_retry);
   GRPC_TRACE_LOG(client_channel_lb_call, INFO)
       << "chand=" << chand_ << " lb_call=" << this << ": created";
 }
