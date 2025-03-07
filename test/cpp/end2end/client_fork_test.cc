@@ -14,6 +14,8 @@
 
 #include <grpc/support/port_platform.h>
 
+#include "src/proto/grpc/testing/echo_messages.pb.h"
+
 #ifndef GRPC_ENABLE_FORK_SUPPORT
 // No-op for builds without fork support.
 int main(int /* argc */, char** /* argv */) { return 0; }
@@ -28,6 +30,7 @@ int main(int /* argc */, char** /* argv */) { return 0; }
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
+#include <gtest/gtest.h>
 #include <signal.h>
 
 #include "absl/debugging/stacktrace.h"
@@ -36,6 +39,7 @@ int main(int /* argc */, char** /* argv */) { return 0; }
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "src/core/util/fork.h"
+#include "src/core/util/sync.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
@@ -61,6 +65,52 @@ namespace grpc {
 namespace testing {
 namespace {
 
+class EchoClientBidiReactor
+    : public grpc::ClientBidiReactor<EchoRequest, EchoResponse> {
+ public:
+  void OnDone(const grpc::Status& /*s*/) override {
+    LOG(INFO) << "Everything done";
+    grpc_core::MutexLock lock(&mu_);
+    all_done_ = true;
+    cond_.SignalAll();
+  }
+
+  void OnReadDone(bool ok) override {
+    LOG(INFO) << "Read done: " << ok;
+    grpc_core::MutexLock lock(&mu_);
+    read_ = true;
+    cond_.SignalAll();
+  }
+
+  void OnWriteDone(bool ok) override {
+    LOG(INFO) << "Write done: " << ok;
+    grpc_core::MutexLock lock(&mu_);
+    write_ = true;
+    cond_.SignalAll();
+  }
+
+  void WaitReadWriteDone() {
+    grpc_core::MutexLock lock(&mu_);
+    while (!read_ || !write_) {
+      cond_.Wait(&mu_);
+    }
+  }
+
+  void WaitAllDone() {
+    grpc_core::MutexLock lock(&mu_);
+    while (!all_done_) {
+      cond_.Wait(&mu_);
+    }
+  }
+
+ private:
+  grpc_core::Mutex mu_;
+  grpc_core::CondVar cond_;
+  bool read_ ABSL_GUARDED_BY(&mu_) = false;
+  bool write_ ABSL_GUARDED_BY(&mu_) = false;
+  bool all_done_ ABSL_GUARDED_BY(&mu_) = false;
+};
+
 class ServiceImpl final : public EchoTestService::Service {
   Status BidiStream(
       ServerContext* /*context*/,
@@ -77,9 +127,31 @@ class ServiceImpl final : public EchoTestService::Service {
   }
 };
 
-std::unique_ptr<EchoTestService::Stub> MakeStub(const std::string& addr) {
-  return EchoTestService::NewStub(
+std::pair<std::string, std::string> DoExchange(absl::string_view label,
+                                               const std::string& addr) {
+  EchoRequest request;
+  EchoResponse response;
+  ClientContext context;
+  context.set_wait_for_ready(true);
+
+  std::unique_ptr<EchoTestService::Stub> stub = EchoTestService::NewStub(
       grpc::CreateChannel(addr, InsecureChannelCredentials()));
+  EchoClientBidiReactor reactor;
+  stub->async()->BidiStream(&context, &reactor);
+  request.set_message("Hello again from child");
+  reactor.StartWrite(&request);
+  reactor.StartRead(&response);
+  reactor.StartCall();
+  LOG(INFO) << label << " Doing the call";
+  reactor.WaitReadWriteDone();
+  reactor.StartWritesDone();
+  reactor.WaitAllDone();
+  LOG(INFO) << label << " #########";
+  LOG(INFO) << label << " #########";
+  LOG(INFO) << label << " #########";
+  LOG(INFO) << label << " #########";
+  LOG(INFO) << label << " #########";
+  return {response.message(), request.message()};
 }
 
 TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
@@ -113,62 +185,30 @@ TEST(ClientForkTest, ClientCallsBeforeAndAfterForkSucceed) {
   // Do a round trip before we fork.
   // NOTE: without this scope, test running with the epoll1 poller will fail.
   {
-    LOG(INFO) << "[" << getpid() << "] After first fork in client 1";
-    std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-    LOG(INFO) << "[" << getpid() << "] After first fork in client 2";
-    EchoRequest request;
-    EchoResponse response;
-    ClientContext context;
-    context.set_wait_for_ready(true);
-
-    LOG(INFO) << "[" << getpid() << "] After first fork in client 3";
-    auto stream = stub->BidiStream(&context);
-    LOG(INFO) << "[" << getpid() << "] After first fork in client 4";
-
-    request.set_message("Hello");
-    ASSERT_TRUE(stream->Write(request));
-    ASSERT_TRUE(stream->Read(&response));
-    ASSERT_EQ(response.message(), request.message());
+    auto [res, req] =
+        DoExchange(absl::StrCat("[", getpid(), "] In first-fork parent"), addr);
+    EXPECT_EQ(res, req);
   }
   // Fork and do round trips in the post-fork parent and child.
   LOG(INFO) << "[" << getpid() << "] Before fork 2";
   pid_t child_client_pid = fork();
-  LOG(INFO) << "[" << getpid() << "] After fork 2";
   switch (child_client_pid) {
     case -1:  // fork failed
       GTEST_FAIL() << "fork failed";
     case 0:  // post-fork child
     {
       VLOG(2) << "In post-fork child";
-      EchoRequest request;
-      EchoResponse response;
-      ClientContext context;
-      context.set_wait_for_ready(true);
-
-      std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-      auto stream = stub->BidiStream(&context);
-
-      request.set_message("Hello again from child");
-      ASSERT_TRUE(stream->Write(request));
-      ASSERT_TRUE(stream->Read(&response));
-      ASSERT_EQ(response.message(), request.message());
+      auto [res, req] =
+          DoExchange(absl::StrCat("[", getpid(), "] In post-fork child"), addr);
+      EXPECT_EQ(res, req);
       exit(0);
     }
     default:  // post-fork parent
     {
       VLOG(2) << "In post-fork parent";
-      EchoRequest request;
-      EchoResponse response;
-      ClientContext context;
-      context.set_wait_for_ready(true);
-
-      std::unique_ptr<EchoTestService::Stub> stub = MakeStub(addr);
-      auto stream = stub->BidiStream(&context);
-
-      request.set_message("Hello again from parent");
-      EXPECT_TRUE(stream->Write(request));
-      EXPECT_TRUE(stream->Read(&response));
-      EXPECT_EQ(response.message(), request.message());
+      auto [res, req] = DoExchange(
+          absl::StrCat("[", getpid(), "] In post-fork parent"), addr);
+      EXPECT_EQ(res, req);
 
       // Wait for the post-fork child to exit; ensure it exited cleanly.
       int child_status;

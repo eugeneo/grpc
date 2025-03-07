@@ -37,13 +37,17 @@
 #include <optional>
 #include <queue>
 #include <thread>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/cleanup/cleanup.h"
+#include "absl/debugging/stacktrace.h"
+#include "absl/debugging/symbolize.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/substitute.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller_posix_default.h"
@@ -53,6 +57,20 @@
 #include "test/core/test_util/port.h"
 
 namespace grpc_event_engine::experimental {
+
+std::string GetBacktrace() {
+  std::array<void*, 10> ptrs;
+  int frames = absl::GetStackTrace(ptrs.data(), ptrs.size(), 1);
+  std::vector<std::string> bt(frames);
+  for (int i = 0; i < frames; ++i) {
+    std::array<char, 150> frame{0};
+    std::string frame_str = absl::Symbolize(ptrs[i], frame.data(), frame.size())
+                                ? std::string(frame.data(), frame.size())
+                                : "<Boop>";
+    bt[i] = absl::Substitute("  $0 $1", i, frame_str);
+  }
+  return absl::StrJoin(bt, "\n");
+}
 
 namespace {
 
@@ -384,8 +402,10 @@ TEST_F(PollerForkTest, ListenerInChild) {
   LOG(INFO) << "After fork in child";
   EXPECT_THAT(read_status.AwaitStatus(),
               StatusIs(absl::StatusCode::kResourceExhausted));
+  LOG(INFO) << "Before write done";
   EXPECT_THAT(write_status.AwaitStatus(),
               StatusIs(absl::StatusCode::kResourceExhausted));
+  LOG(INFO) << "After write done";
   // Starting read and write post-fork will fail asynchronously and return the
   // status.
   ASSERT_FALSE(endpoint->Read(read_status.Setter(), &read_buffer, nullptr));
