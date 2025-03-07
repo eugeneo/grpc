@@ -36,8 +36,8 @@
 #include <memory>
 #include <optional>
 #include <queue>
-#include <thread>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
