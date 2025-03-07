@@ -18,7 +18,6 @@
 #include <grpc/event_engine/slice_buffer.h>
 #include <grpc/support/cpu.h>
 #include <grpc/support/port_platform.h>
-#include <pthread.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -56,6 +55,7 @@
 
 #ifdef GRPC_POSIX_SOCKET_TCP
 #include <errno.h>       // IWYU pragma: keep
+#include <pthread.h>     // IWYU pragma: keep
 #include <stdint.h>      // IWYU pragma: keep
 #include <sys/socket.h>  // IWYU pragma: keep
 
