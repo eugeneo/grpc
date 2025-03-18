@@ -54,6 +54,7 @@
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/util/wait_for_single_owner.h"
 #include "test/core/test_util/port.h"
+#include "test/core/test_util/test_config.h"
 
 namespace grpc_event_engine::experimental {
 
@@ -156,7 +157,7 @@ class RawPosixClient {
     }
     std::vector<std::byte> result;
     while (result.size() < bytes) {
-      std::array<std::byte, 128 * 1024> buffer;
+      std::vector<std::byte> buffer(1024 * 1024, static_cast<std::byte>(42));
       auto r = read(socket_, buffer.data(), buffer.size());
       if (r < 0) {
         return absl::ErrnoToStatus(errno, "Socket read");
@@ -343,6 +344,8 @@ TEST_F(PollerForkTest, ListenerInParent) {
   ASSERT_FALSE(endpoint->Write(write_status.Setter(), &write_buffer, nullptr))
       << "Need to send more data";
   LOG(INFO) << "Before fork in parent";
+  // Let the data reach the buffers
+  absl::SleepFor(absl::Milliseconds(50 * grpc_test_slowdown_factor()));
   ee()->fork_support_for_tests()->BeforeFork();
   ee()->fork_support_for_tests()->AfterFork(false);
   LOG(INFO) << "After fork in parent";
@@ -383,6 +386,8 @@ TEST_F(PollerForkTest, ListenerInChild) {
   ASSERT_FALSE(endpoint->Write(write_status.Setter(), &write_buffer, nullptr))
       << "Need to send more data";
   LOG(INFO) << "Before fork in child";
+  // Let the data reach the buffers
+  absl::SleepFor(absl::Milliseconds(50 * grpc_test_slowdown_factor()));
   ee()->fork_support_for_tests()->BeforeFork();
   ee()->fork_support_for_tests()->AfterFork(true);
   LOG(INFO) << "After fork in child";
