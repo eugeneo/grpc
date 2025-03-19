@@ -139,6 +139,9 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
     virtual void BeforeFork() = 0;
     virtual void AfterFork(bool advance_generation) = 0;
     virtual void SchedulePoller() = 0;
+    virtual PosixEventPoller* Poller() const = 0;
+    virtual ThreadPool* executor() const = 0;
+    virtual TimerManager* timer_manager() = 0;
   };
 
   class PosixDNSResolver : public EventEngine::DNSResolver {
@@ -260,13 +263,8 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   grpc_core::Mutex mu_;
   TaskHandleSet known_handles_ ABSL_GUARDED_BY(mu_);
   std::atomic<intptr_t> aba_token_{0};
-  std::shared_ptr<ThreadPool> executor_;
-  std::shared_ptr<TimerManager> timer_manager_;
-#ifdef GRPC_POSIX_SOCKET_TCP
-  std::shared_ptr<PosixEnginePollerManager> poller_manager_;
   // This will exist in event engine and in the global list for fork.
   std::shared_ptr<ForkSupport> fork_support_;
-#endif  // GRPC_POSIX_SOCKET_TCP
 };
 
 }  // namespace grpc_event_engine::experimental

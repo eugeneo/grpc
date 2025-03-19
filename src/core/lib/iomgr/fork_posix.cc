@@ -17,6 +17,7 @@
 //
 
 #include <grpc/support/port_platform.h>
+#include <unistd.h>
 
 #include "src/core/lib/iomgr/port.h"
 
@@ -72,7 +73,10 @@ void grpc_prefork() {
     return;
   }
   if (!grpc_core::Fork::BlockExecCtx()) {
-    LOG(INFO) << "Other threads are currently calling into gRPC, skipping "
+    // LOG(ERROR) << "[" << getpid() << "] Hanging, can't shutdown threads";
+    // absl::SleepFor(absl::Hours(2));
+    LOG(INFO) << "[" << getpid()
+              << "] Other threads are currently calling into gRPC, skipping "
                  "fork() handlers";
     return;
   }
