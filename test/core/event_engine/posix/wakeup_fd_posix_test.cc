@@ -28,7 +28,7 @@ TEST(WakeupFdPosixTest, PipeWakeupFdTest) {
   if (!PipeWakeupFd::IsSupported()) {
     return;
   }
-  FileDescriptors fds;
+  FileDescriptor fds;
   auto pipe_wakeup_fd = PipeWakeupFd::CreatePipeWakeupFd(&fds);
   EXPECT_TRUE(pipe_wakeup_fd.ok());
   EXPECT_TRUE((*pipe_wakeup_fd)->ReadFd().ready());
@@ -41,7 +41,7 @@ TEST(WakeupFdPosixTest, EventFdWakeupFdTest) {
   if (!EventFdWakeupFd::IsSupported()) {
     return;
   }
-  FileDescriptors fds;
+  FileDescriptor fds;
   auto eventfd_wakeup_fd = EventFdWakeupFd::CreateEventFdWakeupFd(&fds);
   EXPECT_TRUE(eventfd_wakeup_fd.ok());
   EXPECT_TRUE((*eventfd_wakeup_fd)->ReadFd().ready());
