@@ -72,7 +72,7 @@ class TestListenerSocketsContainer : public ListenerSocketsContainer {
 }  // namespace
 
 TEST(PosixEngineListenerUtils, ListenerContainerAddWildcardAddressesTest) {
-  FileDescriptors fds;
+  FileDescriptor fds;
   TestListenerSocketsContainer listener_sockets;
   int port = grpc_pick_unused_port_or_die();
   ChannelArgsEndpointConfig config;
@@ -187,7 +187,7 @@ TEST(PosixEngineListenerUtils, ListenerContainerIpv6LinkLocalTest) {
 
 #ifdef GRPC_HAVE_IFADDRS
 TEST(PosixEngineListenerUtils, ListenerContainerAddAllLocalAddressesTest) {
-  FileDescriptors fds;
+  FileDescriptor fds;
   TestListenerSocketsContainer listener_sockets;
   int port = grpc_pick_unused_port_or_die();
   ChannelArgsEndpointConfig config;

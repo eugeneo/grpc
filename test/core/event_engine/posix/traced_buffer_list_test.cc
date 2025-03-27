@@ -81,7 +81,7 @@ TEST(BufferListTest, TestShutdownFlushesList) {
   TcpSetWriteTimestampsCallback(TestShutdownFlushesListVerifier);
   TracedBufferList traced_buffers;
   int verifier_called[NUM_ELEM];
-  FileDescriptors fds;
+  FileDescriptor fds;
   for (auto i = 0; i < NUM_ELEM; i++) {
     verifier_called[i] = 0;
     traced_buffers.AddNewEntry(i, &fds, FileDescriptor(0, 0),
@@ -115,7 +115,7 @@ TEST(BufferListTest, TestVerifierCalledOnAck) {
       });
   TracedBufferList traced_buffers;
   int verifier_called = 0;
-  FileDescriptors fds;
+  FileDescriptor fds;
   traced_buffers.AddNewEntry(213, &fds, FileDescriptor(0, 0), &verifier_called);
   traced_buffers.ProcessTimestamp(&serr, nullptr, &tss);
   ASSERT_EQ(verifier_called, 1);
@@ -135,7 +135,7 @@ TEST(BufferListTest, TestProcessTimestampAfterShutdown) {
   TcpSetWriteTimestampsCallback(TestShutdownFlushesListVerifier);
   TracedBufferList traced_buffers;
   int verifier_called = 0;
-  FileDescriptors fds;
+  FileDescriptor fds;
   traced_buffers.AddNewEntry(213, &fds, FileDescriptor(0, 0), &verifier_called);
   ASSERT_TRUE(traced_buffers.Size() == 1);
   traced_buffers.Shutdown(nullptr, absl::OkStatus());
@@ -168,7 +168,7 @@ TEST(BufferListTest, TestLongPendingAckForOneTracedBuffer) {
   gpr_atm_rel_store(&verifier_called[1], static_cast<gpr_atm>(0));
   gpr_atm_rel_store(&verifier_called[2], static_cast<gpr_atm>(0));
 
-  FileDescriptors fds;
+  FileDescriptor fds;
 
   //  Add 3 traced buffers
   tb_list.AddNewEntry(1, &fds, FileDescriptor(0, 0), &verifier_called[0]);
@@ -258,7 +258,7 @@ TEST(BufferListTest, TestLongPendingAckForSomeTracedBuffers) {
         }
       });
   TracedBufferList tb_list;
-  FileDescriptors fds;
+  FileDescriptor fds;
   for (int i = 0; i < kNumTracedBuffers; i++) {
     serr[i].ee_data = i + 1;
     serr[i].ee_info = SCM_TSTAMP_ACK;
