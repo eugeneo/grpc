@@ -24,8 +24,10 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
+#include "absl/log/internal/check_op.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -415,6 +417,36 @@ TEST_F(EventEngineDNSTest, TestCancelActiveDNSQuery) {
   dns_resolver.reset();
   dns_resolver_signal_.WaitForNotification();
 }
+
+TEST_F(EventEngineDNSTest, QueryNXHostnameWithFork) {
+  SKIP_TEST_FOR_NATIVE_DNS_RESOLVER();
+  auto dns_resolver = CreateDefaultDNSResolver();
+  absl::StatusOr<std::vector<std::string>> lookup_result;
+  dns_resolver->LookupHostname(
+      [this, &lookup_result](auto result) {
+        if (result.ok()) {
+          lookup_result.emplace();
+          for (const auto& address : *result) {
+            auto resolved = ResolvedAddressToNormalizedString(address);
+            if (resolved.ok()) {
+              lookup_result->emplace_back(std::move(resolved).value());
+            } else {
+              lookup_result->emplace_back(
+                  std::move(resolved).status().message());
+            }
+          }
+        } else {
+          lookup_result = std::move(result).status();
+        }
+        dns_resolver_signal_.Notify();
+      },
+      "ipv4-only-multi-target.dns-test.event-engine.", "443");
+  dns_resolver_signal_.WaitForNotification();
+  ASSERT_TRUE(lookup_result.ok()) << lookup_result.status();
+  EXPECT_THAT(*lookup_result, ::testing::UnorderedElementsAre(
+                                  "1.2.3.4:443", "1.2.3.5:443", "1.2.3.6:443"));
+}
+
 #endif  // GRPC_IOS_EVENT_ENGINE_CLIENT
 
 #define EXPECT_SUCCESS()           \

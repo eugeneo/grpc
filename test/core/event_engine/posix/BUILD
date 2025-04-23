@@ -309,8 +309,8 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
-    name = "ares_resolver_test",
-    srcs = ["ares_resolver_test.cc"],
+    name = "dns_fork_test",
+    srcs = ["dns_fork_test.cc"],
     external_deps = [
         "gtest",
     ],
