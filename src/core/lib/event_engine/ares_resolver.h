@@ -14,12 +14,12 @@
 #ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_ARES_RESOLVER_H
 #define GRPC_SRC_CORE_LIB_EVENT_ENGINE_ARES_RESOLVER_H
 
-#include <absl/strings/string_view.h>
 #include <grpc/support/port_platform.h>
 
 #include <utility>
 
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 
 #if GRPC_ARES == 1
 
@@ -32,7 +32,6 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "src/core/lib/event_engine/grpc_polled_fd.h"
 #include "src/core/lib/event_engine/ref_counted_dns_resolver_interface.h"
 #include "src/core/util/orphanable.h"

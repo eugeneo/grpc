@@ -13,13 +13,13 @@
 // limitations under the License.
 #include "src/core/lib/event_engine/ares_resolver.h"
 
-#include <absl/strings/string_view.h>
 #include <grpc/support/port_platform.h>
 
 #include <cstddef>
 #include <string>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "src/core/lib/iomgr/port.h"
 
 // IWYU pragma: no_include <ares_version.h>
