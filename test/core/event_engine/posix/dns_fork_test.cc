@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <absl/container/inlined_vector.h>
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/grpc.h>
 #include <grpc/support/port_platform.h>
@@ -36,6 +35,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/inlined_vector.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "absl/types/span.h"
@@ -224,7 +224,7 @@ class DnsServer {
     }
 
     Packer& packQName(absl::string_view qname) {
-      for (absl::string_view segment : absl::StrSplit(qname, ".")) {
+      for (absl::string_view segment : absl::StrSplit(qname, '.')) {
         pack8(segment.size());
         std::copy(segment.begin(), segment.end(), std::back_inserter(data_));
       }
