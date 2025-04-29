@@ -313,6 +313,9 @@ grpc_cc_library(
     testonly = True,
     srcs = ["dns_server.cc"],
     hdrs = ["dns_server.h"],
+    external_deps = [
+        "absl/status:statusor",
+    ],
     tags = [
         "no_windows",
     ],

@@ -46,35 +46,35 @@ std::string ParseQName(absl::Span<const uint8_t> buffer, size_t& pos) {
 
 class BytePacker {
  public:
-  BytePacker& pack8(uint8_t v) {
+  BytePacker& Pack8(uint8_t v) {
     data_.emplace_back(v);
     return *this;
   }
 
-  BytePacker& pack16(uint16_t value) { return packMultiByte(htons(value)); }
+  BytePacker& Pack16(uint16_t value) { return PackMultiByte(htons(value)); }
 
-  BytePacker& pack32(uint32_t value) { return packMultiByte(htonl(value)); }
+  BytePacker& Pack32(uint32_t value) { return PackMultiByte(htonl(value)); }
 
   std::vector<uint8_t> data() const { return data_; }
 
-  BytePacker& packBytes(absl::Span<const uint8_t> data) {
-    pack16(data.size());
+  BytePacker& PackBytes(absl::Span<const uint8_t> data) {
+    Pack16(data.size());
     std::copy(data.begin(), data.end(), std::back_inserter(data_));
     return *this;
   }
 
-  BytePacker& packQName(absl::string_view qname) {
+  BytePacker& PackQName(absl::string_view qname) {
     for (absl::string_view segment : absl::StrSplit(qname, '.')) {
-      pack8(segment.size());
+      Pack8(segment.size());
       std::copy(segment.begin(), segment.end(), std::back_inserter(data_));
     }
-    pack8(0x00);
+    Pack8(0x00);
     return *this;
   }
 
  private:
   template <typename T>
-  BytePacker& packMultiByte(T v) {
+  BytePacker& PackMultiByte(T v) {
     const uint8_t* start = reinterpret_cast<const uint8_t*>(&v);
     std::copy(start, start + sizeof(T), std::back_inserter(data_));
     return *this;
@@ -87,8 +87,8 @@ class ByteUnpacker {
  public:
   explicit ByteUnpacker(absl::Span<const uint8_t> data) : data_(data) {}
 
-  ByteUnpacker& expect2(uint16_t expected, absl::string_view name) {
-    auto value = read2(name);
+  ByteUnpacker& Expect2(uint16_t expected, absl::string_view name) {
+    auto value = Read2(name);
     if (value.has_value() && *value != expected) {
       status_ = absl::InvalidArgumentError(absl::Substitute(
           "Filed $0: expected: $1, got: $2", name, expected, *value));
@@ -103,20 +103,20 @@ class ByteUnpacker {
     return query_;
   }
 
-  ByteUnpacker& skip2(absl::string_view name) {
-    read2(name);
+  ByteUnpacker& Skip2(absl::string_view name) {
+    Read2(name);
     return *this;
   }
 
-  ByteUnpacker& unpack(uint16_t DnsQuestion::* field, absl::string_view name) {
-    auto value = read2(name);
+  ByteUnpacker& Unpack(uint16_t DnsQuestion::* field, absl::string_view name) {
+    auto value = Read2(name);
     if (value.has_value()) {
       query_.*field = *value;
     }
     return *this;
   }
 
-  ByteUnpacker& unpack(std::string DnsQuestion::* field,
+  ByteUnpacker& Unpack(std::string DnsQuestion::* field,
                        absl::string_view name) {
     if (!status_.ok()) return *this;
     query_.*field = ParseQName(data_, pos_);
@@ -124,7 +124,7 @@ class ByteUnpacker {
   }
 
  private:
-  std::optional<uint16_t> read2(absl::string_view name) {
+  std::optional<uint16_t> Read2(absl::string_view name) {
     if (!status_.ok()) return std::nullopt;
     if (data_.size() < pos_ + 2) {
       status_ = absl::InvalidArgumentError(
@@ -147,36 +147,36 @@ class ByteUnpacker {
 
 absl::StatusOr<DnsQuestion> ParseQuestion(absl::Span<const uint8_t> buffer) {
   return ByteUnpacker(buffer)
-      .unpack(&DnsQuestion::id, "ID")
+      .Unpack(&DnsQuestion::id, "ID")
       // Fields below are ignored for now
-      .skip2("FLAGS")
-      .expect2(1, "QDCOUNT")
-      .expect2(0, "ANCOUNT")
-      .expect2(0, "NSCOUNT")
-      .expect2(0, "ARCOUNT")
-      .unpack(&DnsQuestion::qname, "QNAME")
-      .unpack(&DnsQuestion::qtype, "QTYPE")
-      .unpack(&DnsQuestion::qclass, "QCLASS")
+      .Skip2("FLAGS")
+      .Expect2(1, "QDCOUNT")
+      .Expect2(0, "ANCOUNT")
+      .Expect2(0, "NSCOUNT")
+      .Expect2(0, "ARCOUNT")
+      .Unpack(&DnsQuestion::qname, "QNAME")
+      .Unpack(&DnsQuestion::qtype, "QTYPE")
+      .Unpack(&DnsQuestion::qclass, "QCLASS")
       .query();
 }
 
 std::vector<unsigned char> FormatAnswer(const DnsQuestion& query,
                                         absl::Span<const uint8_t> address) {
   return BytePacker()
-      .pack16(query.id)        // ID
-      .pack16(0x8000)          // FLAGS
-      .pack16(1)               // QDCOUNT
-      .pack16(1)               // ANCOUNT
-      .pack16(0)               // NSCOUNT
-      .pack16(0)               // ARCOUNT
-      .packQName(query.qname)  // Query QNAME
-      .pack16(query.qtype)     // QTYPE
-      .pack16(query.qclass)    // QCLASS
-      .pack16(0xC00C)          // Answer QNAME - pointer
-      .pack16(query.qtype)     // QTYPE
-      .pack16(query.qclass)    // QCLASS
-      .pack32(2000)            // TTL
-      .packBytes(address)
+      .Pack16(query.id)        // ID
+      .Pack16(0x8000)          // FLAGS
+      .Pack16(1)               // QDCOUNT
+      .Pack16(1)               // ANCOUNT
+      .Pack16(0)               // NSCOUNT
+      .Pack16(0)               // ARCOUNT
+      .PackQName(query.qname)  // Query QNAME
+      .Pack16(query.qtype)     // QTYPE
+      .Pack16(query.qclass)    // QCLASS
+      .Pack16(0xC00C)          // Answer QNAME - pointer
+      .Pack16(query.qtype)     // QTYPE
+      .Pack16(query.qclass)    // QCLASS
+      .Pack32(2000)            // TTL
+      .PackBytes(address)
       .data();
 }
 
@@ -264,17 +264,14 @@ void DnsServer::ServerLoop(int sockfd) {
     query->client_addr = client_addr;
     {
       grpc_core::MutexLock lock(&mu_);
-      bool responded = false;
       if (autoresponder_) {
         auto result = autoresponder_(*query);
         if (!result.empty()) {
           auto response = Respond(*query, result);
           LOG_IF(FATAL, !response.ok()) << response;
-          responded = true;
           break;
         }
-      }
-      if (!responded) {
+      } else {
         questions_.push(std::move(query).value());
         cond_.SignalAll();
       }

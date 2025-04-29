@@ -252,10 +252,14 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
 
 #endif  // GRPC_POSIX_SOCKET_TCP
 
+#if GRPC_ENABLE_FORK_SUPPORT
+  void AfterForkInChild();
+#endif
+
   grpc_core::Mutex mu_;
   TaskHandleSet known_handles_ ABSL_GUARDED_BY(mu_);
   std::atomic<intptr_t> aba_token_{0};
-#if defined(GRPC_ENABLE_FORK_SUPPORT) && GRPC_ARES == 1 && \
+#if GRPC_ENABLE_FORK_SUPPORT && GRPC_ARES == 1 && \
     defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
   // A separate mutex to avoid deadlocks.
   grpc_core::Mutex resolver_handles_mu_;

@@ -80,6 +80,8 @@ class GrpcPolledFdFactory {
       ares_socket_t as) = 0;
   // Optionally configures the ares channel after creation
   virtual void ConfigureAresChannelLocked(ares_channel channel) = 0;
+  // Creates a new instance of the same class. This is used during the fork.
+  virtual std::unique_ptr<GrpcPolledFdFactory> NewEmptyInstance() = 0;
 };
 
 }  // namespace grpc_event_engine::experimental

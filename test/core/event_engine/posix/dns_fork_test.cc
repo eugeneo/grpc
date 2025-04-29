@@ -117,11 +117,9 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInParent) {
   // A or AAAA
   ASSERT_THAT(question.qtype, ::testing::AnyOf(1, 28));
   ASSERT_EQ(question.qclass, 1);
-
   // Do the fork
   event_engine_->BeforeFork();
   event_engine_->AfterFork(PosixEventEngine::OnForkRole::kParent);
-
   auto responded = dns_server->Respond(
       question, question.qtype == 1 ? absl::Span<const uint8_t>(kIPv4) : kIPv6);
   ASSERT_TRUE(responded.ok()) << responded;
@@ -140,8 +138,6 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInParent) {
 // Request sent before fork will fail because of Ares shutdown. Afterwards
 // it should still be possible to make new requests.
 TEST_F(DnsForkTest, DnsLookupAcrossForkInChild) {
-  std::vector<uint8_t> kIPv4 = {1, 1, 1, 1};
-  std::vector<uint8_t> kIPv6 = {1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
   auto dns_server = DnsServer::Start(grpc_pick_unused_port_or_die());
   auto resolver =
       event_engine_->GetDNSResolver({.dns_server = dns_server->address()});
@@ -149,17 +145,14 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInChild) {
   LookupCallback callback;
   resolver->get()->LookupHostname(
       [&](const auto& addresses) { callback(addresses); }, kHost, "443");
-
   DnsQuestion question = dns_server->NextQuery();
   ASSERT_THAT(question.qname, ::testing::StartsWith(kHost));
-  // A or AAAA
+  // Expected questions are A or AAAA
   ASSERT_THAT(question.qtype, ::testing::AnyOf(1, 28));
   ASSERT_EQ(question.qclass, 1);
-
   // Do the fork
   event_engine_->BeforeFork();
   event_engine_->AfterFork(PosixEventEngine::OnForkRole::kChild);
-
   auto responded = dns_server->Respond(
       question, question.qtype == 1 ? absl::Span<const uint8_t>(kIPv4) : kIPv6);
   ASSERT_TRUE(responded.ok()) << responded;
@@ -168,9 +161,11 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInChild) {
   ASSERT_TRUE(absl::IsUnknown(result.status())) << result.status();
   dns_server->SetResponder(GetAddressForQuestion);
   LookupCallback cb2;
+  LOG(INFO) << 6;
   resolver->get()->LookupHostname(
       [&](const auto& addresses) { cb2(addresses); }, kHost, "443");
   result = cb2.result();
+  LOG(INFO) << 7;
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_THAT(
       result.value(),

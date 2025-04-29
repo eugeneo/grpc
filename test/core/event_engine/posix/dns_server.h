@@ -60,9 +60,9 @@ class DnsServer {
   grpc_core::Notification running_;
   grpc_core::Mutex mu_;
   grpc_core::CondVar cond_;
-  std::thread background_thread_;
-  std::queue<DnsQuestion> questions_ ABSL_GUARDED_BY(&mu_);
   DnsServer::Autoresponder autoresponder_ ABSL_GUARDED_BY(mu_);
+  std::queue<DnsQuestion> questions_ ABSL_GUARDED_BY(mu_);
+  std::thread background_thread_;
 };
 
 }  // namespace grpc_event_engine::experimental

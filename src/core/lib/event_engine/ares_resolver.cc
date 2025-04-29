@@ -229,10 +229,17 @@ void AresResolver::ReinitHandle::OnResolverGone() {
   resolver_ = nullptr;
 }
 
-void AresResolver::ReinitHandle::Reinit() {
+void AresResolver::ReinitHandle::Reset() {
   grpc_core::MutexLock lock(&mutex_);
   if (resolver_ != nullptr) {
-    resolver_->Reinitialize();
+    resolver_->Reset();
+  }
+}
+
+void AresResolver::ReinitHandle::Restart() {
+  grpc_core::MutexLock lock(&mutex_);
+  if (resolver_ != nullptr) {
+    resolver_->Restart();
   }
 }
 
@@ -858,7 +865,7 @@ std::weak_ptr<AresResolver::ReinitHandle> AresResolver::GetReinitHandle() {
   return reinit_handle_;
 }
 
-void AresResolver::Reinitialize() {
+void AresResolver::Reset() {
   auto self = RefIfNonZero();
   if (self == nullptr) {
     return;
@@ -870,7 +877,11 @@ void AresResolver::Reinitialize() {
   ares_destroy(channel_);
   callback_map_.clear();
   channel_ = nullptr;
+}
 
+void AresResolver::Restart() {
+  polled_fd_factory_ = polled_fd_factory_->NewEmptyInstance();
+  polled_fd_factory_->Initialize(&mutex_, event_engine_.get());
   absl::Status status =
       InitAresChannel(dns_server_, *polled_fd_factory_, &channel_);
   CHECK_OK(status);
