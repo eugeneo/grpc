@@ -308,6 +308,21 @@ grpc_cc_test(
     ],
 )
 
+grpc_cc_library(
+    name = "dns_server",
+    testonly = True,
+    srcs = ["dns_server.cc"],
+    hdrs = ["dns_server.h"],
+    tags = [
+        "no_windows",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//:gpr_platform",
+        "//src/core:notification",
+    ],
+)
+
 grpc_cc_test(
     name = "dns_fork_test",
     srcs = ["dns_fork_test.cc"],
@@ -317,6 +332,7 @@ grpc_cc_test(
     uses_event_engine = True,
     uses_polling = True,
     deps = [
+        ":dns_server",
         "//:gpr_platform",
         "//test/core/test_util:grpc_test_util",
     ],

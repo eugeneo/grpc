@@ -257,8 +257,10 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport,
   std::atomic<intptr_t> aba_token_{0};
 #if defined(GRPC_ENABLE_FORK_SUPPORT) && GRPC_ARES == 1 && \
     defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
+  // A separate mutex to avoid deadlocks.
+  grpc_core::Mutex resolver_handles_mu_;
   std::vector<std::weak_ptr<AresResolver::ReinitHandle>> resolver_handles_
-      ABSL_GUARDED_BY(mu_);
+      ABSL_GUARDED_BY(resolver_handles_mu_);
 #endif  // defined(GRPC_ENABLE_FORK_SUPPORT) && GRPC_ARES == 1 &&
         // defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
   std::shared_ptr<ThreadPool> executor_;

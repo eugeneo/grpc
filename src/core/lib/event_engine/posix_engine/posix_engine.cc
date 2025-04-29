@@ -677,7 +677,7 @@ PosixEventEngine::GetDNSResolver(
     }
 #if GRPC_ENABLE_FORK_SUPPORT && GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
     {
-      grpc_core::MutexLock lock(&mu_);
+      grpc_core::MutexLock lock(&resolver_handles_mu_);
       RegisterResolver(&resolver_handles_,
                        ares_resolver->get()->GetReinitHandle());
     }
@@ -883,7 +883,7 @@ void PosixEventEngine::AfterFork(OnForkRole on_fork_role) {
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
 #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
   if (on_fork_role == OnForkRole::kChild) {
-    grpc_core::MutexLock lock(&mu_);
+    grpc_core::MutexLock lock(&resolver_handles_mu_);
     for (const auto& cb : resolver_handles_) {
       auto locked = cb.lock();
       if (locked != nullptr) {
