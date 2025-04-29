@@ -64,7 +64,7 @@ class BytePacker {
   }
 
   BytePacker& packQName(absl::string_view qname) {
-    for (absl::string_view segment : absl::StrSplit(qname, ".")) {
+    for (absl::string_view segment : absl::StrSplit(qname, '.')) {
       pack8(segment.size());
       std::copy(segment.begin(), segment.end(), std::back_inserter(data_));
     }

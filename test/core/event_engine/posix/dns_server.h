@@ -14,7 +14,6 @@
 #ifndef GRPC_TEST_CORE_EVENT_ENGINE_POSIX_DNS_SERVER_H
 #define GRPC_TEST_CORE_EVENT_ENGINE_POSIX_DNS_SERVER_H
 
-#include <absl/status/statusor.h>
 #include <netinet/in.h>
 
 #include <cstdint>
@@ -24,6 +23,7 @@
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/status/statusor.h"
 #include "src/core/util/notification.h"
 
 namespace grpc_event_engine::experimental {
