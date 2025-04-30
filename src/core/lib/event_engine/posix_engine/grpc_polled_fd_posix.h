@@ -53,7 +53,9 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
   GrpcPolledFdPosix(ares_socket_t as, EventHandle* handle)
       : name_(absl::StrCat("c-ares fd: ", static_cast<int>(as))),
         as_(as),
-        handle_(handle) {}
+        handle_(handle) {
+    LOG(INFO) << "fd: " << as << " handle: " << handle;
+  }
 
   ~GrpcPolledFdPosix() override {
     // c-ares library will close the fd. This fd may be picked up immediately by
@@ -77,7 +79,8 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
   bool IsFdStillReadableLocked() override {
     size_t bytes_available = 0;
-    return handle_->Poller()
+    return IsCurrentGeneration() &&
+           handle_->Poller()
                ->posix_interface()
                .Ioctl(handle_->WrappedFd(), FIONREAD, &bytes_available)
                .ok() &&
@@ -92,6 +95,11 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
   ares_socket_t GetWrappedAresSocketLocked() override { return as_; }
 
   const char* GetName() const override { return name_.c_str(); }
+
+  bool IsCurrentGeneration() const override {
+    int generation = handle_->Poller()->posix_interface().generation();
+    return handle_->WrappedFd().generation() == generation;
+  }
 
  private:
   const std::string name_;
@@ -117,6 +125,8 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
       ares_socket_t as) override {
     grpc_core::MutexLock lock(&mu_);
     owned_fds_.insert(as);
+    LOG(INFO) << "New fd: " << as
+              << " generation: " << poller_->posix_interface().generation();
     FileDescriptor fd(as, poller_->posix_interface().generation());
     return std::make_unique<GrpcPolledFdPosix>(
         as,
@@ -137,15 +147,8 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
   /// Overridden socket API for c-ares
   static ares_socket_t Socket(int af, int type, int protocol,
                               void* polled_fd_factory) {
-    auto& posix_interface =
-        static_cast<GrpcPolledFdFactoryPosix*>(polled_fd_factory)
-            ->poller_->posix_interface();
-    auto socket = posix_interface.Socket(af, type, protocol);
-    if (socket.ok()) {
-      auto fd = posix_interface.GetFd(socket.value());
-      return fd.value_or(-1);
-    }
-    return -1;
+    ares_socket_t s = socket(af, type, protocol);
+    return s;
   }
 
   /// Overridden connect API for c-ares

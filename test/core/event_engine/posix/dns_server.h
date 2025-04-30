@@ -48,7 +48,7 @@ class DnsServer {
   std::string address() const;
   absl::Status Respond(const DnsQuestion& query,
                        absl::Span<const uint8_t> answer);
-  DnsQuestion NextQuery();
+  DnsQuestion WaitForQuestion() const;
   void SetResponder(DnsServer::Autoresponder autoresponder);
 
  private:
@@ -58,8 +58,8 @@ class DnsServer {
   int sockfd_;
   grpc_core::Notification done_;
   grpc_core::Notification running_;
-  grpc_core::Mutex mu_;
-  grpc_core::CondVar cond_;
+  mutable grpc_core::Mutex mu_;
+  mutable grpc_core::CondVar cond_;
   DnsServer::Autoresponder autoresponder_ ABSL_GUARDED_BY(mu_);
   std::queue<DnsQuestion> questions_ ABSL_GUARDED_BY(mu_);
   std::thread background_thread_;

@@ -31,7 +31,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
-#include "absl/types/span.h"
 #include "gmock/gmock.h"
 #include "src/core/lib/event_engine/grpc_polled_fd.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
@@ -48,6 +47,15 @@ constexpr std::array<uint8_t, 4> kIPv4 = {1, 1, 1, 1};
 constexpr std::array<uint8_t, 16> kIPv6 = {1, 1, 1, 1, 2, 2, 2, 2,
                                            3, 3, 3, 3, 4, 4, 4, 4};
 
+MATCHER_P2(ResolvedTo, ipv4, ipv6, "") {
+  if (IsIpv6LoopbackAvailable()) {
+    return ::testing::ExplainMatchResult(
+        ::testing::UnorderedElementsAre(ipv4, ipv6), arg, result_listener);
+  }
+  return ::testing::ExplainMatchResult(::testing::ElementsAre(ipv4), arg,
+                                       result_listener);
+}
+
 std::vector<uint8_t> GetAddressForQuestion(const DnsQuestion& q) {
   if (absl::StartsWith(q.qname, kHost)) {
     if (q.qtype == 1) {
@@ -61,20 +69,26 @@ std::vector<uint8_t> GetAddressForQuestion(const DnsQuestion& q) {
 
 class LookupCallback {
  public:
-  void operator()(
-      const absl::StatusOr<std::vector<EventEngine::ResolvedAddress>>&
-          addresses) {
-    if (addresses.ok()) {
-      result_.emplace();
-      for (const auto& address : addresses.value()) {
-        auto resolved = ResolvedAddressToString(address);
-        result_->emplace_back(resolved.ok() ? resolved.value()
-                                            : resolved.status().ToString());
+  explicit LookupCallback(absl::string_view label) : label_(label) {}
+
+  EventEngine::DNSResolver::LookupHostnameCallback lookup_hostname_callback() {
+    return [self = this](const auto& addresses) {
+      if (addresses.ok()) {
+        self->result_.emplace();
+        for (const auto& address : addresses.value()) {
+          auto resolved = ResolvedAddressToString(address);
+          self->result_->emplace_back(
+              resolved.ok() ? resolved.value() : resolved.status().ToString());
+        }
+        LOG(INFO) << "[" << self->label_ << "] Hostname resolved to "
+                  << absl::StrJoin(self->result_.value(), ", ");
+      } else {
+        self->result_ = addresses.status();
+        LOG(INFO) << "[" << self->label_ << "] Failed with "
+                  << self->result_.status();
       }
-    } else {
-      result_ = addresses.status();
-    }
-    notification_.Notify();
+      self->notification_.Notify();
+    };
   }
 
   absl::StatusOr<std::vector<std::string>> result() {
@@ -83,6 +97,7 @@ class LookupCallback {
   }
 
  private:
+  std::string label_;
   absl::StatusOr<std::vector<std::string>> result_;
   grpc_core::Notification notification_;
 };
@@ -109,10 +124,10 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInParent) {
   auto resolver =
       event_engine_->GetDNSResolver({.dns_server = dns_server->address()});
   ASSERT_TRUE(resolver.ok()) << resolver.status();
-  LookupCallback callback;
-  resolver->get()->LookupHostname(
-      [&](const auto& addresses) { callback(addresses); }, kHost, "443");
-  DnsQuestion question = dns_server->NextQuery();
+  LookupCallback callback("DnsLookupAcrossForkInParent");
+  resolver->get()->LookupHostname(callback.lookup_hostname_callback(), kHost,
+                                  "443");
+  DnsQuestion question = dns_server->WaitForQuestion();
   ASSERT_THAT(question.qname, ::testing::StartsWith(kHost));
   // A or AAAA
   ASSERT_THAT(question.qtype, ::testing::AnyOf(1, 28));
@@ -120,19 +135,12 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInParent) {
   // Do the fork
   event_engine_->BeforeFork();
   event_engine_->AfterFork(PosixEventEngine::OnForkRole::kParent);
-  auto responded = dns_server->Respond(
-      question, question.qtype == 1 ? absl::Span<const uint8_t>(kIPv4) : kIPv6);
-  ASSERT_TRUE(responded.ok()) << responded;
   dns_server->SetResponder(GetAddressForQuestion);
   auto result = callback.result();
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_THAT(
       result.value(),
-      ::testing::AnyOf(
-          ::testing::UnorderedElementsAre(
-              "1.1.1.1:443", "[101:101:202:202:303:303:404:404]:443"),
-          ::testing::ElementsAre("1.1.1.1:443"),
-          ::testing::ElementsAre("[101:101:202:202:303:303:404:404]:443")));
+      ResolvedTo("1.1.1.1:443", "[101:101:202:202:303:303:404:404]:443"));
 }
 
 // Request sent before fork will fail because of Ares shutdown. Afterwards
@@ -142,38 +150,34 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInChild) {
   auto resolver =
       event_engine_->GetDNSResolver({.dns_server = dns_server->address()});
   ASSERT_TRUE(resolver.ok()) << resolver.status();
-  LookupCallback callback;
-  resolver->get()->LookupHostname(
-      [&](const auto& addresses) { callback(addresses); }, kHost, "443");
-  DnsQuestion question = dns_server->NextQuery();
+  LookupCallback callback("DnsLookupAcrossForkInChild pre-fork");
+  resolver->get()->LookupHostname(callback.lookup_hostname_callback(), kHost,
+                                  "443");
+  DnsQuestion question = dns_server->WaitForQuestion();
+  LOG(INFO) << "Pre fork question " << question.id;
   ASSERT_THAT(question.qname, ::testing::StartsWith(kHost));
   // Expected questions are A or AAAA
   ASSERT_THAT(question.qtype, ::testing::AnyOf(1, 28));
   ASSERT_EQ(question.qclass, 1);
   // Do the fork
   event_engine_->BeforeFork();
+  LOG(INFO) << "------------------------";
+  LOG(INFO) << "         Forking        ";
+  LOG(INFO) << "------------------------";
   event_engine_->AfterFork(PosixEventEngine::OnForkRole::kChild);
-  auto responded = dns_server->Respond(
-      question, question.qtype == 1 ? absl::Span<const uint8_t>(kIPv4) : kIPv6);
-  ASSERT_TRUE(responded.ok()) << responded;
   auto result = callback.result();
   // Request is cancelled on fork
   ASSERT_TRUE(absl::IsUnknown(result.status())) << result.status();
   dns_server->SetResponder(GetAddressForQuestion);
-  LookupCallback cb2;
-  LOG(INFO) << 6;
-  resolver->get()->LookupHostname(
-      [&](const auto& addresses) { cb2(addresses); }, kHost, "443");
+  LookupCallback cb2("DnsLookupAcrossForkInChild post-fork");
+  LOG(INFO) << "Lookup post-fork";
+  resolver->get()->LookupHostname(cb2.lookup_hostname_callback(), kHost, "443");
   result = cb2.result();
-  LOG(INFO) << 7;
+  LOG(INFO) << "Post-fork lookup done";
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_THAT(
       result.value(),
-      ::testing::AnyOf(
-          ::testing::UnorderedElementsAre(
-              "1.1.1.1:443", "[101:101:202:202:303:303:404:404]:443"),
-          ::testing::ElementsAre("1.1.1.1:443"),
-          ::testing::ElementsAre("[101:101:202:202:303:303:404:404]:443")));
+      ResolvedTo("1.1.1.1:443", "[101:101:202:202:303:303:404:404]:443"));
 }
 
 #else  // GRPC_ENABLE_FORK_SUPPORT

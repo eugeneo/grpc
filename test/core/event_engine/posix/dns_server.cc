@@ -17,6 +17,7 @@
 #include <queue>
 #include <thread>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -57,7 +58,7 @@ class BytePacker {
 
   std::vector<uint8_t> data() const { return data_; }
 
-  BytePacker& PackBytes(absl::Span<const uint8_t> data) {
+  BytePacker& PackArray(absl::Span<const uint8_t> data) {
     Pack16(data.size());
     std::copy(data.begin(), data.end(), std::back_inserter(data_));
     return *this;
@@ -87,7 +88,7 @@ class ByteUnpacker {
  public:
   explicit ByteUnpacker(absl::Span<const uint8_t> data) : data_(data) {}
 
-  ByteUnpacker& Expect2(uint16_t expected, absl::string_view name) {
+  ByteUnpacker& Expect16(uint16_t expected, absl::string_view name) {
     auto value = Read2(name);
     if (value.has_value() && *value != expected) {
       status_ = absl::InvalidArgumentError(absl::Substitute(
@@ -103,7 +104,7 @@ class ByteUnpacker {
     return query_;
   }
 
-  ByteUnpacker& Skip2(absl::string_view name) {
+  ByteUnpacker& Skip16(absl::string_view name) {
     Read2(name);
     return *this;
   }
@@ -149,11 +150,11 @@ absl::StatusOr<DnsQuestion> ParseQuestion(absl::Span<const uint8_t> buffer) {
   return ByteUnpacker(buffer)
       .Unpack(&DnsQuestion::id, "ID")
       // Fields below are ignored for now
-      .Skip2("FLAGS")
-      .Expect2(1, "QDCOUNT")
-      .Expect2(0, "ANCOUNT")
-      .Expect2(0, "NSCOUNT")
-      .Expect2(0, "ARCOUNT")
+      .Skip16("FLAGS")
+      .Expect16(1, "QDCOUNT")
+      .Expect16(0, "ANCOUNT")
+      .Expect16(0, "NSCOUNT")
+      .Expect16(0, "ARCOUNT")
       .Unpack(&DnsQuestion::qname, "QNAME")
       .Unpack(&DnsQuestion::qtype, "QTYPE")
       .Unpack(&DnsQuestion::qclass, "QCLASS")
@@ -176,7 +177,7 @@ std::vector<unsigned char> FormatAnswer(const DnsQuestion& query,
       .Pack16(query.qtype)     // QTYPE
       .Pack16(query.qclass)    // QCLASS
       .Pack32(2000)            // TTL
-      .PackBytes(address)
+      .PackArray(address)
       .data();
 }
 
@@ -198,18 +199,18 @@ std::string DnsServer::address() const {
   return absl::StrCat("127.0.0.1:", port_);
 }
 
-DnsQuestion DnsServer::NextQuery() {
+DnsQuestion DnsServer::WaitForQuestion() const {
   grpc_core::MutexLock lock(&mu_);
   while (questions_.empty()) {
     cond_.WaitWithTimeout(&mu_, absl::Milliseconds(50));
   }
-  DnsQuestion q = std::move(questions_.front());
-  questions_.pop();
-  return q;
+  return questions_.front();
 }
 
 absl::Status DnsServer::Respond(const DnsQuestion& query,
                                 absl::Span<const uint8_t> answer) {
+  LOG(INFO) << "Answering question " << query.id << " for domain "
+            << query.qname;
   auto packet = FormatAnswer(query, answer);
   ssize_t sent = sendto(sockfd_, packet.data(), packet.size(), 0,
                         reinterpret_cast<const sockaddr*>(&query.client_addr),
@@ -242,6 +243,10 @@ void DnsServer::ServerLoop(int sockfd) {
   std::array<uint8_t, 2048> buffer;
   sockaddr_in client_addr;
   socklen_t client_len = sizeof(client_addr);
+  absl::Cleanup server_cleanup = [&, sockfd]() {
+    LOG(INFO) << "DNS server shutdown: " << done_.HasBeenNotified();
+    close(sockfd);
+  };
 
   while (!done_.HasBeenNotified()) {
     ssize_t received_bytes =
@@ -256,11 +261,14 @@ void DnsServer::ServerLoop(int sockfd) {
       LOG(FATAL) << absl::ErrnoToStatus(errno, "Reading from socket");
       return;
     }
+    LOG(INFO) << "Received " << received_bytes << " bytes";
     auto query =
         ParseQuestion(absl::Span<const uint8_t>(buffer).first(received_bytes));
     if (!query.ok()) {
       LOG(FATAL) << query.status();
     }
+    LOG(INFO) << "Received question " << query->id << " for domain "
+              << query->qname;
     query->client_addr = client_addr;
     {
       grpc_core::MutexLock lock(&mu_);
@@ -269,7 +277,6 @@ void DnsServer::ServerLoop(int sockfd) {
         if (!result.empty()) {
           auto response = Respond(*query, result);
           LOG_IF(FATAL, !response.ok()) << response;
-          break;
         }
       } else {
         questions_.push(std::move(query).value());
@@ -277,7 +284,6 @@ void DnsServer::ServerLoop(int sockfd) {
       }
     }
   }
-  close(sockfd);
 }
 
 absl::StatusOr<DnsServer> DnsServer::Start(int port) {
@@ -294,6 +300,7 @@ absl::StatusOr<DnsServer> DnsServer::Start(int port) {
     close(sockfd);
     return status;
   }
+  LOG(INFO) << "DNS server port " << port;
   return absl::StatusOr<DnsServer>(absl::in_place, port, sockfd);
 }
 
