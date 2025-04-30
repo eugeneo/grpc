@@ -134,6 +134,9 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInParent) {
   ASSERT_EQ(question.qclass, 1);
   // Do the fork
   event_engine_->BeforeFork();
+  LOG(INFO) << "------------------------";
+  LOG(INFO) << "         Forking        ";
+  LOG(INFO) << "------------------------";
   event_engine_->AfterFork(PosixEventEngine::OnForkRole::kParent);
   dns_server->SetResponder(GetAddressForQuestion);
   auto result = callback.result();
@@ -170,7 +173,6 @@ TEST_F(DnsForkTest, DnsLookupAcrossForkInChild) {
   ASSERT_TRUE(absl::IsUnknown(result.status())) << result.status();
   dns_server->SetResponder(GetAddressForQuestion);
   LookupCallback cb2("DnsLookupAcrossForkInChild post-fork");
-  LOG(INFO) << "Lookup post-fork";
   resolver->get()->LookupHostname(cb2.lookup_hostname_callback(), kHost, "443");
   result = cb2.result();
   LOG(INFO) << "Post-fork lookup done";

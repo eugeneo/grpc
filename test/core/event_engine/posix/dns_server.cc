@@ -261,7 +261,6 @@ void DnsServer::ServerLoop(int sockfd) {
       LOG(FATAL) << absl::ErrnoToStatus(errno, "Reading from socket");
       return;
     }
-    LOG(INFO) << "Received " << received_bytes << " bytes";
     auto query =
         ParseQuestion(absl::Span<const uint8_t>(buffer).first(received_bytes));
     if (!query.ok()) {
@@ -300,7 +299,7 @@ absl::StatusOr<DnsServer> DnsServer::Start(int port) {
     close(sockfd);
     return status;
   }
-  LOG(INFO) << "DNS server port " << port;
+  LOG(INFO) << "DNS server listening on port " << port;
   return absl::StatusOr<DnsServer>(absl::in_place, port, sockfd);
 }
 

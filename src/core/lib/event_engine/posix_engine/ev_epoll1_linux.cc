@@ -345,8 +345,6 @@ bool Epoll1Poller::ProcessEpollEvents(int max_epoll_events_to_handle,
       if (handle->SetPendingActions(read_ev || cancel || err_fallback,
                                     write_ev || cancel || err_fallback,
                                     error && !err_fallback)) {
-        LOG(INFO) << handle->WrappedFd().fd() << " "
-                  << handle->WrappedFd().generation();
         pending_events.push_back(handle);
       }
     }

@@ -53,9 +53,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
   GrpcPolledFdPosix(ares_socket_t as, EventHandle* handle)
       : name_(absl::StrCat("c-ares fd: ", static_cast<int>(as))),
         as_(as),
-        handle_(handle) {
-    LOG(INFO) << "fd: " << as << " handle: " << handle;
-  }
+        handle_(handle) {}
 
   ~GrpcPolledFdPosix() override {
     // c-ares library will close the fd. This fd may be picked up immediately by
@@ -125,8 +123,6 @@ class GrpcPolledFdFactoryPosix : public GrpcPolledFdFactory {
       ares_socket_t as) override {
     grpc_core::MutexLock lock(&mu_);
     owned_fds_.insert(as);
-    LOG(INFO) << "New fd: " << as
-              << " generation: " << poller_->posix_interface().generation();
     FileDescriptor fd(as, poller_->posix_interface().generation());
     return std::make_unique<GrpcPolledFdPosix>(
         as,

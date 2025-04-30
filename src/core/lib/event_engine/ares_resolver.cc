@@ -589,6 +589,9 @@ void AresResolver::OnReadable(FdNode* fd_node, absl::Status status) {
     // on this request will be cancelled by the following ares_cancel(). The
     // remaining file descriptors in this request will be cleaned up in the
     // following Work() method.
+    //
+    // Nothing is done if the handle is from the old generation. It belongs
+    // to the old channel.
     ares_cancel(channel_);
   }
   CheckSocketsLocked();
