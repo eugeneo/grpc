@@ -121,6 +121,8 @@ bool AresIsIpv6LoopbackAvailable() {
 
 absl::Status SetRequestDNSServer(absl::string_view dns_server,
                                  ares_channel* channel) {
+  GRPC_TRACE_LOG(cares_resolver, INFO)
+      << "(EventEngine c-ares resolver) Using DNS server " << dns_server;
   grpc_resolved_address addr;
   struct ares_addr_port_node dns_server_addr = {};
   if (grpc_parse_ipv4_hostport(dns_server, &addr, /*log_errors=*/false)) {
@@ -274,6 +276,7 @@ AresResolver::AresResolver(
       dns_server_(dns_server) {
 #else   // GRPC_ENABLE_FORK_SUPPORT
       event_engine_(std::move(event_engine)) {
+  (void)dns_server;  // Used
 #endif  // GRPC_ENABLE_FORK_SUPPORT
   polled_fd_factory_->Initialize(&mutex_, event_engine_.get());
 }
@@ -461,13 +464,11 @@ void AresResolver::CheckSocketsLocked() {
     for (size_t i = 0; i < ARES_GETSOCK_MAXNUM; i++) {
       if (ARES_GETSOCK_READABLE(socks_bitmask, i) ||
           ARES_GETSOCK_WRITABLE(socks_bitmask, i)) {
-        auto iter = std::find_if(
-            fd_node_list_.begin(), fd_node_list_.end(),
-            [sock = socks[i]](const auto& node) {
-              LOG_IF(INFO, !node->polled_fd->IsCurrentGeneration())
-                  << "Fd from old gen: " << node->as;
-              return node->as == sock && node->polled_fd->IsCurrentGeneration();
-            });
+        auto iter = std::find_if(fd_node_list_.begin(), fd_node_list_.end(),
+                                 [sock = socks[i]](const auto& node) {
+                                   return node->as == sock &&
+                                          node->polled_fd->IsCurrent();
+                                 });
         if (iter == fd_node_list_.end()) {
           GRPC_TRACE_LOG(cares_resolver, INFO)
               << "(EventEngine c-ares resolver) resolver:" << this
@@ -500,10 +501,7 @@ void AresResolver::CheckSocketsLocked() {
             // Otherwise register with the poller for readable event.
             GRPC_TRACE_LOG(cares_resolver, INFO)
                 << "(EventEngine c-ares resolver) resolver:" << this
-                << " notify read on: " << fd_node->as
-                << " generation: " << fd_node->polled_fd->IsCurrentGeneration()
-                << " is shutdown "
-                << fd_node->polled_fd->IsFdStillReadableLocked();
+                << " notify read on: " << fd_node->as;
             fd_node->polled_fd->RegisterForOnReadableLocked(
                 [self = Ref(DEBUG_LOCATION, "CheckSocketsLocked"),
                  fd_node](absl::Status status) mutable {
@@ -583,15 +581,14 @@ void AresResolver::OnReadable(FdNode* fd_node, absl::Status status) {
       << "; request: " << this << "; status: " << status;
   if (status.ok() && !shutting_down_) {
     ares_process_fd(channel_, fd_node->as, ARES_SOCKET_BAD);
-  } else if (fd_node->polled_fd->IsCurrentGeneration()) {
+  } else if (fd_node->polled_fd->IsCurrent()) {
     // If error is not absl::OkStatus() or the resolution was cancelled, it
     // means the fd has been shutdown or timed out. The pending lookups made
     // on this request will be cancelled by the following ares_cancel(). The
     // remaining file descriptors in this request will be cleaned up in the
     // following Work() method.
     //
-    // Nothing is done if the handle is from the old generation. It belongs
-    // to the old channel.
+    // Nothing is done if the handle is not current.
     ares_cancel(channel_);
   }
   CheckSocketsLocked();
@@ -893,8 +890,6 @@ void AresResolver::Restart() {
   absl::Status status =
       InitAresChannel(dns_server_, *polled_fd_factory_, &channel_);
   CHECK_OK(status);
-  // grpc_core::MutexLock lock(&mutex_);
-  // CheckSocketsLocked();
 }
 
 #endif  // GRPC_ENABLE_FORK_SUPPORT

@@ -62,8 +62,9 @@ class GrpcPolledFd {
   virtual ares_socket_t GetWrappedAresSocketLocked() = 0;
   // A unique name, for logging
   virtual const char* GetName() const = 0;
-  // Checks if this FD is of the current Posix fork generation
-  virtual bool IsCurrentGeneration() const = 0;
+  // Return if the FD is "current" - particularly, if it is of the same fork
+  // generation in case of Posix
+  virtual bool IsCurrent() const = 0;
 };
 
 // A GrpcPolledFdFactory is 1-to-1 with and owned by a GrpcAresRequest. It knows

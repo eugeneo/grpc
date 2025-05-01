@@ -77,8 +77,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
   bool IsFdStillReadableLocked() override {
     size_t bytes_available = 0;
-    return IsCurrentGeneration() &&
-           handle_->Poller()
+    return handle_->Poller()
                ->posix_interface()
                .Ioctl(handle_->WrappedFd(), FIONREAD, &bytes_available)
                .ok() &&
@@ -94,9 +93,9 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
 
   const char* GetName() const override { return name_.c_str(); }
 
-  bool IsCurrentGeneration() const override {
-    int generation = handle_->Poller()->posix_interface().generation();
-    return handle_->WrappedFd().generation() == generation;
+  bool IsCurrent() const override {
+    return handle_->Poller()->posix_interface().generation() ==
+           handle_->WrappedFd().generation();
   }
 
  private:
