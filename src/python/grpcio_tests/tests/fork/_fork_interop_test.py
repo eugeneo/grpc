@@ -67,8 +67,8 @@ _GDB_TIMEOUT_S = 60
 
 
 @unittest.skipUnless(
-    sys.platform.startswith("linux"),
-    "not supported on windows, and fork+exec networking blocked on mac",
+    sys.platform in ["linux", "darwin"],
+    "not supported on windows",
 )
 @unittest.skipUnless(
     os.getenv("GRPC_ENABLE_FORK_SUPPORT") is not None,
