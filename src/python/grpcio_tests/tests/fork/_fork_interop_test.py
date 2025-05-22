@@ -32,7 +32,7 @@ def _dump_streams(name, streams):
         stream.seek(0)
         sys.stderr.write(
             "{} {}:\n{}\n".format(
-                name, stream_name, stream.read().decode("ascii")
+                name, stream_name, stream.read().decode("UTF-8")
             )
         )
         stream.close()
