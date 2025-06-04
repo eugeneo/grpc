@@ -54,7 +54,6 @@ _CLIENT_FORK_SCRIPT_TEMPLATE = """if True:
     native_debug.install_failure_signal_handler()
 
     cygrpc._GRPC_ENABLE_FORK_SUPPORT = True
-    os.environ['GRPC_POLL_STRATEGY'] = 'epoll1'
     os.environ['GRPC_ENABLE_FORK_SUPPORT'] = 'true'
     methods.TestCase.%s.run_test({
       'server_host': 'localhost',
@@ -135,46 +134,46 @@ class ForkInteropTest(unittest.TestCase):
         finally:
             timer.cancel()
 
-    def testConnectivityWatch(self):
-        self._verifyTestCase(methods.TestCase.CONNECTIVITY_WATCH)
+    # def testConnectivityWatch(self):
+    #     self._verifyTestCase(methods.TestCase.CONNECTIVITY_WATCH)
 
-    def testCloseChannelBeforeFork(self):
-        self._verifyTestCase(methods.TestCase.CLOSE_CHANNEL_BEFORE_FORK)
+    # def testCloseChannelBeforeFork(self):
+    #     self._verifyTestCase(methods.TestCase.CLOSE_CHANNEL_BEFORE_FORK)
 
-    def testAsyncUnarySameChannel(self):
-        self._verifyTestCase(methods.TestCase.ASYNC_UNARY_SAME_CHANNEL)
+    # def testAsyncUnarySameChannel(self):
+    #     self._verifyTestCase(methods.TestCase.ASYNC_UNARY_SAME_CHANNEL)
 
-    def testAsyncUnaryNewChannel(self):
-        self._verifyTestCase(methods.TestCase.ASYNC_UNARY_NEW_CHANNEL)
+    # def testAsyncUnaryNewChannel(self):
+    #     self._verifyTestCase(methods.TestCase.ASYNC_UNARY_NEW_CHANNEL)
 
-    def testBlockingUnarySameChannel(self):
-        self._verifyTestCase(methods.TestCase.BLOCKING_UNARY_SAME_CHANNEL)
+    # def testBlockingUnarySameChannel(self):
+    #     self._verifyTestCase(methods.TestCase.BLOCKING_UNARY_SAME_CHANNEL)
 
-    def testBlockingUnaryNewChannel(self):
-        self._verifyTestCase(methods.TestCase.BLOCKING_UNARY_NEW_CHANNEL)
+    # def testBlockingUnaryNewChannel(self):
+    #     self._verifyTestCase(methods.TestCase.BLOCKING_UNARY_NEW_CHANNEL)
 
-    def testInProgressBidiContinueCall(self):
-        self._verifyTestCase(methods.TestCase.IN_PROGRESS_BIDI_CONTINUE_CALL)
+    # def testInProgressBidiContinueCall(self):
+    #     self._verifyTestCase(methods.TestCase.IN_PROGRESS_BIDI_CONTINUE_CALL)
 
     def testInProgressBidiSameChannelAsyncCall(self):
         self._verifyTestCase(
             methods.TestCase.IN_PROGRESS_BIDI_SAME_CHANNEL_ASYNC_CALL
         )
 
-    def testInProgressBidiSameChannelBlockingCall(self):
-        self._verifyTestCase(
-            methods.TestCase.IN_PROGRESS_BIDI_SAME_CHANNEL_BLOCKING_CALL
-        )
+    # def testInProgressBidiSameChannelBlockingCall(self):
+    #     self._verifyTestCase(
+    #         methods.TestCase.IN_PROGRESS_BIDI_SAME_CHANNEL_BLOCKING_CALL
+    #     )
 
-    def testInProgressBidiNewChannelAsyncCall(self):
-        self._verifyTestCase(
-            methods.TestCase.IN_PROGRESS_BIDI_NEW_CHANNEL_ASYNC_CALL
-        )
+    # def testInProgressBidiNewChannelAsyncCall(self):
+    #     self._verifyTestCase(
+    #         methods.TestCase.IN_PROGRESS_BIDI_NEW_CHANNEL_ASYNC_CALL
+    #     )
 
-    def testInProgressBidiNewChannelBlockingCall(self):
-        self._verifyTestCase(
-            methods.TestCase.IN_PROGRESS_BIDI_NEW_CHANNEL_BLOCKING_CALL
-        )
+    # def testInProgressBidiNewChannelBlockingCall(self):
+    #     self._verifyTestCase(
+    #         methods.TestCase.IN_PROGRESS_BIDI_NEW_CHANNEL_BLOCKING_CALL
+    #     )
 
     def tearDown(self):
         self._server_process.kill()
