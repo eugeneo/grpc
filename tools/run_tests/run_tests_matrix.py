@@ -131,7 +131,9 @@ def _workspace_jobspec(
     env = {"WORKSPACE_NAME": workspace_name}
     env.update(runtests_envs)
     # if report base dir is set, we don't need to ".." to come out of the workspace dir
-    report_dir_prefix = "" if os.getenv("GRPC_TEST_REPORT_BASE_DIR", None) else "../"
+    report_dir_prefix = (
+        "" if os.getenv("GRPC_TEST_REPORT_BASE_DIR", None) else "../"
+    )
     test_job = jobset.JobSpec(
         cmdline=[
             "bash",
@@ -344,7 +346,9 @@ def _create_test_jobs(extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS):
     return test_jobs
 
 
-def _create_portability_test_jobs(extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS):
+def _create_portability_test_jobs(
+    extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS
+):
     test_jobs = []
     # portability C x86
     test_jobs += _generate_jobs(
@@ -457,7 +461,9 @@ def _runs_per_test_type(arg_str):
 
 
 if __name__ == "__main__":
-    argp = argparse.ArgumentParser(description="Run a matrix of run_tests.py tests.")
+    argp = argparse.ArgumentParser(
+        description="Run a matrix of run_tests.py tests."
+    )
     argp.add_argument(
         "-j",
         "--jobs",
@@ -571,12 +577,18 @@ if __name__ == "__main__":
 
     all_jobs = _create_test_jobs(
         extra_args=extra_args, inner_jobs=args.inner_jobs
-    ) + _create_portability_test_jobs(extra_args=extra_args, inner_jobs=args.inner_jobs)
+    ) + _create_portability_test_jobs(
+        extra_args=extra_args, inner_jobs=args.inner_jobs
+    )
 
     jobs = []
     for job in all_jobs:
-        if not args.filter or all(filter in job.labels for filter in args.filter):
-            if not any(exclude_label in job.labels for exclude_label in args.exclude):
+        if not args.filter or all(
+            filter in job.labels for filter in args.filter
+        ):
+            if not any(
+                exclude_label in job.labels for exclude_label in args.exclude
+            ):
                 jobs.append(job)
 
     if not jobs:
