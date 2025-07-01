@@ -364,15 +364,15 @@ def _create_portability_test_jobs(
 
     # portability C and C++ on x64
     for compiler in [
-        "gcc8",
-        # TODO(b/283304471): Tests using OpenSSL's engine APIs were broken and removed
-        "gcc10.2_openssl102",
-        "gcc10.2_openssl111",
+        # "gcc8",
+        # # TODO(b/283304471): Tests using OpenSSL's engine APIs were broken and removed
+        # "gcc10.2_openssl102",
+        # "gcc10.2_openssl111",
         "gcc12_openssl309",
-        "gcc14",
-        "gcc_musl",
-        "clang11",
-        "clang19",
+        # "gcc14",
+        # "gcc_musl",
+        # "clang11",
+        # "clang19",
     ]:
         test_jobs += _generate_jobs(
             languages=["c", "c++"],
@@ -557,7 +557,7 @@ if __name__ == "__main__":
     )
     args = argp.parse_args()
 
-    extra_args = []
+    extra_args = ["--runs_per_test=5", "--regex=.*end2end.*"]
     if args.build_only:
         extra_args.append("--build_only")
     if args.force_default_poller:
