@@ -18,6 +18,7 @@
 
 #include <grpc/support/port_platform.h>
 
+#include "error.h"
 #include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_POSIX_WAKEUP_FD
@@ -54,6 +55,18 @@ static grpc_error_handle pipe_init(grpc_wakeup_fd* fd_info) {
     close(pipefd[1]);
     return err;
   }
+  err = grpc_set_socket_cloexec(pipefd[0], 1);
+  if (!err.ok()) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return err;
+  }
+  err = grpc_set_socket_cloexec(pipefd[1], 1);
+  if (!err.ok()) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return err;
+  }
   fd_info->read_fd = pipefd[0];
   fd_info->write_fd = pipefd[1];
   return absl::OkStatus();
@@ -80,9 +93,12 @@ static grpc_error_handle pipe_consume(grpc_wakeup_fd* fd_info) {
 
 static grpc_error_handle pipe_wakeup(grpc_wakeup_fd* fd_info) {
   char c = 0;
-  while (write(fd_info->write_fd, &c, 1) != 1 && errno == EINTR) {
-  }
-  return absl::OkStatus();
+  do {
+    if (write(fd_info->write_fd, &c, 1) == 1) {
+      return absl::OkStatus();
+    }
+  } while (errno == EINTR);
+  return GRPC_OS_ERROR(errno, "write");
 }
 
 static void pipe_destroy(grpc_wakeup_fd* fd_info) {

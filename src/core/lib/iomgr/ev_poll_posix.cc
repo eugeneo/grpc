@@ -843,6 +843,8 @@ static grpc_error_handle pollset_kick_ext(grpc_pollset* p,
       }
       if (specific_worker != nullptr) {
         push_back_worker(p, specific_worker);
+        LOG(ERROR).WithThreadID(getpid())
+            << "Kicking " << specific_worker->wakeup_fd->fd.read_fd;
         kick_append_error(
             &error, grpc_wakeup_fd_wakeup(&specific_worker->wakeup_fd->fd));
       }

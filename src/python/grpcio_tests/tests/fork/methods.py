@@ -77,13 +77,20 @@ def _async_unary(stub):
 
 def _blocking_unary(stub):
     size = 314159
+    sys.stderr.write(f"{os.getpid()} _blocking_unary 1\n")
     request = messages_pb2.SimpleRequest(
         response_type=messages_pb2.COMPRESSABLE,
         response_size=size,
         payload=messages_pb2.Payload(body=b"\x00" * 271828),
     )
+    sys.stderr.write(f"{os.getpid()} _blocking_unary 2\n")
+    sys.stderr.flush()
     response = stub.UnaryCall(request, timeout=_RPC_TIMEOUT_S)
+    sys.stderr.write(f"{os.getpid()} _blocking_unary 3\n")
+    sys.stderr.flush()
     _validate_payload_type_and_length(response, messages_pb2.COMPRESSABLE, size)
+    sys.stderr.write(f"{os.getpid()} _blocking_unary 4\n")
+    sys.stderr.flush()
 
 
 class _Pipe(object):
@@ -151,29 +158,9 @@ class _ChildProcess(object):
             self._exceptions.put(e)
         sys.exit(0)
 
-    def _orchestrate_child_gdb(self):
-        cmd = [
-            "gdb",
-            "-ex",
-            "set confirm off",
-            "-ex",
-            "attach {}".format(os.getpid()),
-            "-ex",
-            "set follow-fork-mode child",
-            "-ex",
-            "continue",
-            "-ex",
-            "bt",
-        ]
-        streams = tuple(tempfile.TemporaryFile() for _ in range(2))
-        sys.stderr.write("Invoking gdb\n")
-        sys.stderr.flush()
-        process = subprocess.Popen(cmd, stdout=sys.stderr, stderr=sys.stderr)
-        time.sleep(5)
-
     def start(self):
-        # NOTE: Try uncommenting the following line if the child is segfaulting.
-        # self._orchestrate_child_gdb()
+        if bool(os.environ.get("GRPC_MONITOR_CRASH")):
+            debugger.monitor_for_crash(os.getpid())
         ret = os.fork()
         if ret == 0:
             self._child_main()
@@ -410,12 +397,18 @@ def _in_progress_bidi_continue_call(channel):
     def child_target(parent_bidi_call, parent_channel, args):
         stub = test_pb2_grpc.TestServiceStub(parent_channel)
         try:
+            sys.stderr.write(f"{os.getpid()} _blocking_unary 1\n")
+            sys.stderr.flush()
+            sys.stderr.write(f"{os.getpid()} _blocking_unary 2\n")
+            sys.stderr.flush()
             _async_unary(stub)
             raise Exception(
                 "Child should not be able to re-use channel after fork"
             )
         except ValueError as expected_value_error:
             pass
+        sys.stderr.write(f"{os.getpid()} _blocking_unary 3\n")
+        sys.stderr.flush()
         inherited_code = parent_bidi_call.code()
         if inherited_code != grpc.StatusCode.CANCELLED:
             raise ValueError(

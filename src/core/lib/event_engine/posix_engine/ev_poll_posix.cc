@@ -589,8 +589,8 @@ Poller::WorkResult PollPoller::Work(
             pfds[pfd_count].events = head->BeginPollLocked(POLLIN, POLLOUT);
             pfd_count++;
           } else {
-            LOG(ERROR) << "Polling FD from a wrong generation: "
-                       << head->WrappedFd();
+            LOG(ERROR).WithThreadID(getpid())
+                << "Polling FD from a wrong generation: " << head->WrappedFd();
           }
         }
       }
