@@ -13,7 +13,6 @@
 // limitations under the License.
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
 
-#include <absl/log/check.h>
 #include <grpc/event_engine/event_engine.h>
 #include <grpc/event_engine/memory_allocator.h>
 #include <grpc/event_engine/slice_buffer.h>
