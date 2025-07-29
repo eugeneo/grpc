@@ -242,7 +242,7 @@ class PosixEventEngine final : public PosixEventEngineWithFdSupport {
 #if defined(GRPC_POSIX_SOCKET_TCP) && \
     !defined(GRPC_DO_NOT_INSTANTIATE_POSIX_POLLER)
 
-  // A helper class to manager lifetime of the poller associated with the
+  // A helper class to manage lifetime of the poller associated with the
   // posix EventEngine.
   class ThreadPoolSchedulerAdapter
       : public grpc_event_engine::experimental::Scheduler {
