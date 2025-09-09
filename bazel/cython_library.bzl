@@ -66,6 +66,7 @@ def pyx_library(name, deps = [], py_deps = [], srcs = [], **kwargs):
 
     shared_objects = []
     defines = kwargs.pop("defines", [])
+
     # python3-config --ldflags --embed
     linkopts = [
         "-L/opt/homebrew/opt/python@3.11/Frameworks/Python.framework/Versions/3.11/lib/python3.11/config-3.11-darwin",
